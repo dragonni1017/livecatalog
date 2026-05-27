@@ -22,6 +22,7 @@ export default function SearchInput() {
       } else {
         params.delete('q')
       }
+      params.delete('page') // reset to page 1 on new search
       router.push(`/?${params.toString()}`)
     }, 300),
     [searchParams, router]

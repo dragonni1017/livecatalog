@@ -5,12 +5,14 @@ import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import SearchInput from '@/components/catalog/SearchInput'
 
+const PAGE_SIZE = 48
+
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; category?: string }>
+  searchParams: Promise<{ q?: string; category?: string; page?: string }>
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { q, category } = await searchParams
+  const { q, category, page: pageParam } = await searchParams
 
   let products = MOCK_PRODUCTS_WITH_CATEGORY.filter((p) => p.is_active)
 
@@ -25,6 +27,22 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         p.name.toLowerCase().includes(query) ||
         (p.description ?? '').toLowerCase().includes(query)
     )
+  }
+
+  const totalProducts = products.length
+  const totalPages = Math.ceil(totalProducts / PAGE_SIZE)
+  const currentPage = Math.min(Math.max(1, parseInt(pageParam ?? '1') || 1), totalPages || 1)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const pagedProducts = products.slice(pageStart, pageStart + PAGE_SIZE)
+
+  // Build URL helper preserving existing params
+  function pageUrl(p: number) {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (category) params.set('category', category)
+    if (p > 1) params.set('page', String(p))
+    const qs = params.toString()
+    return qs ? `/?${qs}` : '/'
   }
 
   const activeCategory = category ?? undefined
@@ -92,15 +110,82 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           <div className="flex-1 min-w-0">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm text-gray-500">
-                {products.length} {products.length === 1 ? 'product' : 'products'}
+                {totalProducts} {totalProducts === 1 ? 'product' : 'products'}
                 {q && (
                   <span>
                     {' '}for &ldquo;<span className="font-medium text-gray-900">{q}</span>&rdquo;
                   </span>
                 )}
+                {totalPages > 1 && (
+                  <span className="ml-2 text-gray-400">
+                    · page {currentPage} of {totalPages}
+                  </span>
+                )}
               </p>
             </div>
-            <ProductGrid products={products} />
+
+            <ProductGrid products={pagedProducts} />
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-2">
+                {/* Prev */}
+                {currentPage > 1 ? (
+                  <Link
+                    href={pageUrl(currentPage - 1)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    ← Prev
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-300 cursor-not-allowed">
+                    ← Prev
+                  </span>
+                )}
+
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                    .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                      if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis')
+                      acc.push(p)
+                      return acc
+                    }, [])
+                    .map((item, idx) =>
+                      item === 'ellipsis' ? (
+                        <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">…</span>
+                      ) : (
+                        <Link
+                          key={item}
+                          href={pageUrl(item as number)}
+                          className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                            item === currentPage
+                              ? 'bg-red-600 text-white'
+                              : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {item}
+                        </Link>
+                      )
+                    )}
+                </div>
+
+                {/* Next */}
+                {currentPage < totalPages ? (
+                  <Link
+                    href={pageUrl(currentPage + 1)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Next →
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-300 cursor-not-allowed">
+                    Next →
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </main>

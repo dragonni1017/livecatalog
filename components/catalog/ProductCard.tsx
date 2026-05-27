@@ -21,6 +21,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             src={product.image_url}
             alt={product.name}
             className="h-full w-full object-contain p-2"
+            loading="lazy"
           />
         ) : (
           <div className="flex flex-col items-center gap-1 text-gray-400">

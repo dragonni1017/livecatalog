@@ -19,7 +19,7 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
     } else {
       params.delete('category')
     }
-    // Reset to page root when changing category
+    params.delete('page') // reset to page 1 on category change
     router.push(`/?${params.toString()}`)
   }
 
