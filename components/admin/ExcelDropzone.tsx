@@ -221,14 +221,14 @@ export default function ExcelDropzone() {
             relative flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed
             cursor-pointer transition-colors select-none
             ${isDragging
-              ? 'border-indigo-400 bg-indigo-50'
-              : 'border-gray-300 bg-white hover:border-indigo-300 hover:bg-gray-50'
+              ? 'border-red-400 bg-red-50'
+              : 'border-gray-300 bg-white hover:border-red-300 hover:bg-gray-50'
             }
           `}
           style={{ minHeight: '200px' }}
         >
           <svg
-            className={`w-10 h-10 mb-3 ${isDragging ? 'text-indigo-400' : 'text-gray-300'}`}
+            className={`w-10 h-10 mb-3 ${isDragging ? 'text-red-400' : 'text-gray-300'}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -240,7 +240,7 @@ export default function ExcelDropzone() {
               d="M9 17v-2m3 2v-4m3 4v-6M4 20h16a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0015.586 2H4a1 1 0 00-1 1v16a1 1 0 001 1z"
             />
           </svg>
-          <p className={`text-base font-medium ${isDragging ? 'text-indigo-600' : 'text-gray-600'}`}>
+          <p className={`text-base font-medium ${isDragging ? 'text-red-600' : 'text-gray-600'}`}>
             Drag &amp; drop your Excel file here
           </p>
           <p className="text-sm text-gray-400 mt-1">or click to browse</p>
@@ -292,7 +292,7 @@ export default function ExcelDropzone() {
               <button
                 onClick={handleImport}
                 disabled={importableCount === 0}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Confirm Import ({importableCount} rows)
               </button>
@@ -370,7 +370,7 @@ export default function ExcelDropzone() {
     return (
       <div className="rounded-xl bg-white border border-gray-200 px-6 py-12 flex flex-col items-center gap-5">
         <div className="w-full max-w-sm rounded-full overflow-hidden bg-gray-100 h-2">
-          <div className="h-2 bg-indigo-500 rounded-full animate-pulse w-2/3" />
+          <div className="h-2 bg-red-500 rounded-full animate-pulse w-2/3" />
         </div>
         <p className="text-sm text-gray-500 animate-pulse">Importing products…</p>
       </div>
@@ -441,7 +441,7 @@ export default function ExcelDropzone() {
 
       <button
         onClick={reset}
-        className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+        className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
       >
         Import Another File
       </button>

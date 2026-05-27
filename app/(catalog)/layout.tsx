@@ -11,7 +11,7 @@ export default function CatalogLayout({ children }: { children: React.ReactNode 
           {/* Site name */}
           <Link
             href="/"
-            className="shrink-0 text-lg font-bold tracking-tight text-indigo-600 hover:text-indigo-700"
+            className="shrink-0 text-lg font-bold tracking-tight text-red-600 hover:text-red-700"
           >
             LiveCatalog
           </Link>

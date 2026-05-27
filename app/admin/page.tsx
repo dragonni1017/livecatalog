@@ -24,10 +24,10 @@ export default function AdminDashboard() {
         <div className="grid gap-4">
           <Link
             href="/admin/import"
-            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
           >
             <div>
-              <h2 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
                 Import Products from Excel
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
@@ -35,7 +35,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <svg
-              className="w-5 h-5 text-gray-400 group-hover:text-indigo-500 transition-colors flex-shrink-0 ml-4"
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

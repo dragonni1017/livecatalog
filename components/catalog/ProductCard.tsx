@@ -20,7 +20,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           <img
             src={product.image_url}
             alt={product.name}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain p-2"
           />
         ) : (
           <div className="flex flex-col items-center gap-1 text-gray-400">
@@ -46,11 +46,11 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* Card body */}
       <div className="flex flex-1 flex-col gap-2 p-4">
         {product.category && (
-          <span className="text-xs font-medium uppercase tracking-wide text-indigo-600">
+          <span className="text-xs font-medium uppercase tracking-wide text-red-600">
             {product.category.name}
           </span>
         )}
-        <h3 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-indigo-600 transition-colors">
+        <h3 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-red-600 transition-colors">
           {product.name}
         </h3>
         <div className="mt-auto flex items-center justify-between pt-2">

@@ -22,7 +22,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       <div className="mb-6">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700"
         >
           <svg
             className="h-4 w-4"
@@ -79,13 +79,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
             {/* Breadcrumb */}
             {product.category && (
               <nav className="flex items-center gap-1.5 text-xs text-gray-500">
-                <Link href="/" className="hover:text-indigo-600">
+                <Link href="/" className="hover:text-red-600">
                   All Products
                 </Link>
                 <span>/</span>
                 <Link
                   href={`/?category=${product.category.slug}`}
-                  className="font-medium text-indigo-600 hover:text-indigo-700"
+                  className="font-medium text-red-600 hover:text-red-700"
                 >
                   {product.category.name}
                 </Link>
