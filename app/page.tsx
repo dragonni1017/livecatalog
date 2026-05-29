@@ -1,9 +1,10 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS_WITH_CATEGORY } from '@/lib/mock-data'
+import { supabase } from '@/lib/supabase'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import SearchInput from '@/components/catalog/SearchInput'
+import { Category, Product } from '@/lib/types'
 
 const PAGE_SIZE = 48
 
@@ -14,26 +15,37 @@ interface CatalogPageProps {
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const { q, category, page: pageParam } = await searchParams
 
-  let products = MOCK_PRODUCTS_WITH_CATEGORY.filter((p) => p.is_active)
+  const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+
+  // Fetch categories
+  const { data: categoriesData } = await supabase
+    .from('categories')
+    .select('*')
+    .order('name')
+  const categories = (categoriesData ?? []) as Category[]
+
+  // Build product query
+  let query = supabase
+    .from('products')
+    .select('*, category:categories(*)', { count: 'exact' })
+    .eq('is_active', true)
+    .order('name')
+    .range(pageStart, pageStart + PAGE_SIZE - 1)
 
   if (category) {
-    products = products.filter((p) => p.category?.slug === category)
+    const cat = categories.find(c => c.slug === category)
+    if (cat) query = query.eq('category_id', cat.id)
   }
 
   if (q) {
-    const query = q.toLowerCase()
-    products = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        (p.description ?? '').toLowerCase().includes(query)
-    )
+    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`)
   }
 
-  const totalProducts = products.length
+  const { data: productsData, count } = await query
+  const pagedProducts = (productsData ?? []) as Product[]
+  const totalProducts = count ?? 0
   const totalPages = Math.ceil(totalProducts / PAGE_SIZE)
-  const currentPage = Math.min(Math.max(1, parseInt(pageParam ?? '1') || 1), totalPages || 1)
-  const pageStart = (currentPage - 1) * PAGE_SIZE
-  const pagedProducts = products.slice(pageStart, pageStart + PAGE_SIZE)
 
   // Build URL helper preserving existing params
   function pageUrl(p: number) {
@@ -102,7 +114,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
                 Categories
               </p>
               <Suspense fallback={null}>
-                <CategoryNav categories={MOCK_CATEGORIES} activeSlug={activeCategory} />
+                <CategoryNav categories={categories} activeSlug={activeCategory} />
               </Suspense>
             </div>
           </aside>
