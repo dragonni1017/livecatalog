@@ -1602,7 +1602,7 @@
       "price_cents": 300,
       "category_id": "cat-001",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327442/T641920_elyiuo.webp",
       "is_active": true
     },
     {
@@ -1657,7 +1657,7 @@
       "price_cents": 150,
       "category_id": "cat-001",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327442/T642071_okp1ct.webp",
       "is_active": true
     },
     {
@@ -1690,7 +1690,7 @@
       "price_cents": 200,
       "category_id": "cat-001",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327442/T642081_hwh8mw.webp",
       "is_active": true
     },
     {
@@ -7828,7 +7828,7 @@
       "price_cents": 900,
       "category_id": "cat-023",
       "stock_qty": 999,
-      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1774033229/F286501-PK_gaijns.png",
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327509/F286501-PK_trpm8n.webp",
       "is_active": true
     },
     {
@@ -17002,7 +17002,7 @@
       "price_cents": 200,
       "category_id": "cat-038",
       "stock_qty": 999,
-      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1774032898/D701104_White_Blue_tqvguw.png",
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327430/D701104_-3_muaddl.jpg",
       "is_active": true
     },
     {
@@ -24746,7 +24746,7 @@
       "price_cents": 350,
       "category_id": "cat-047",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327420/P273676-M_pe8ky5.webp",
       "is_active": true
     },
     {
@@ -25582,7 +25582,7 @@
       "price_cents": 950,
       "category_id": "cat-047",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327477/P273806-60cm_owfgfu.webp",
       "is_active": true
     },
     {
@@ -29773,7 +29773,7 @@
       "price_cents": 200,
       "category_id": "cat-054",
       "stock_qty": 999,
-      "image_url": null,
+      "image_url": "https://res.cloudinary.com/dohwdv0ys/image/upload/v1780327414/S162743_jn4ak5.jpg",
       "is_active": true
     },
     {

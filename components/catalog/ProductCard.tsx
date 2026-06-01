@@ -54,6 +54,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         <h3 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-red-600 transition-colors">
           {product.name}
         </h3>
+        <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
         <div className="mt-auto flex items-center justify-between pt-2">
           <span className="text-base font-bold text-gray-900">
             {formatPrice(product.price_cents)}

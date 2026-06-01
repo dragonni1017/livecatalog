@@ -39,7 +39,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   }
 
   if (q) {
-    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`)
+    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%,sku.ilike.%${q}%`)
   }
 
   const { data: productsData, count } = await query
