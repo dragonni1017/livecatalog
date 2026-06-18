@@ -30,6 +30,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     .from('products')
     .select('*, category:categories(*)', { count: 'exact' })
     .eq('is_active', true)
+    .eq('manually_hidden', false)
     .order('name')
     .range(pageStart, pageStart + PAGE_SIZE - 1)
 
