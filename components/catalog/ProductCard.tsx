@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
-import { formatPrice } from '@/lib/mock-data'
 import StockBadge from './StockBadge'
+
+function formatPrice(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`
+}
 
 interface ProductCardProps {
   product: Product
@@ -55,6 +58,9 @@ export default function ProductCard({ product }: ProductCardProps) {
           {product.name}
         </h3>
         <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
+        {product.barcode && (
+          <p className="text-xs text-gray-400 font-mono">{product.barcode}</p>
+        )}
         <div className="mt-auto flex items-center justify-between pt-2">
           <span className="text-base font-bold text-gray-900">
             {formatPrice(product.price_cents)}

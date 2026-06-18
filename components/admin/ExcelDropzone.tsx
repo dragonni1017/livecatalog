@@ -2,60 +2,11 @@
 
 import { useRef, useState, DragEvent, ChangeEvent } from 'react'
 import * as XLSX from 'xlsx'
-import type { ExcelRow, ImportResult } from '@/lib/types'
+import type { ExcelRow, ImportResult, DiffResult, ClassifiedRow } from '@/lib/types'
 
-// ────────────────────────────────────────────────────────────
-// Types & helpers
-// ────────────────────────────────────────────────────────────
-
-type RowStatus = 'valid' | 'warning' | 'error'
-
-interface ValidatedRow {
-  index: number
-  row: ExcelRow
-  status: RowStatus
-  issues: string[]
-}
-
-type Stage = 'idle' | 'preview' | 'importing' | 'done'
+type Stage = 'idle' | 'diffing' | 'preview' | 'importing' | 'done'
 
 const REQUIRED_COLUMNS = ['SKU', 'Name', 'Category', 'Price'] as const
-
-function validateRows(rows: ExcelRow[]): ValidatedRow[] {
-  return rows.map((row, i) => {
-    const issues: string[] = []
-    let status: RowStatus = 'valid'
-
-    // Required field checks → error
-    if (!row.SKU || row.SKU.toString().trim() === '') {
-      issues.push('SKU is empty')
-      status = 'error'
-    }
-    if (!row.Name || row.Name.toString().trim() === '') {
-      issues.push('Name is empty')
-      status = 'error'
-    }
-    const price = parseFloat(row.Price?.toString() ?? '')
-    if (isNaN(price)) {
-      issues.push('Price is not a valid number')
-      status = 'error'
-    }
-
-    // Optional field checks → warning (only if not already an error)
-    if (status !== 'error') {
-      if (!row.Category || row.Category.toString().trim() === '') {
-        issues.push('Category is empty')
-        status = 'warning'
-      }
-      if (!row.Description || row.Description.toString().trim() === '') {
-        issues.push('Description missing')
-        if (status === 'valid') status = 'warning'
-      }
-    }
-
-    return { index: i + 2, row, status, issues } // index +2 because row 1 is the header
-  })
-}
 
 function hasRequiredColumns(rows: ExcelRow[]): { ok: boolean; missing: string[] } {
   if (rows.length === 0) return { ok: false, missing: REQUIRED_COLUMNS.slice() }
@@ -64,41 +15,40 @@ function hasRequiredColumns(rows: ExcelRow[]): { ok: boolean; missing: string[] 
   return { ok: missing.length === 0, missing }
 }
 
-// ────────────────────────────────────────────────────────────
-// Status badge
-// ────────────────────────────────────────────────────────────
+const DIFF_STYLES: Record<ClassifiedRow['status'], { row: string; badge: string; label: string }> = {
+  new:       { row: 'bg-green-50',    badge: 'text-green-700 bg-green-100',  label: 'New' },
+  changed:   { row: 'bg-amber-50/60', badge: 'text-amber-700 bg-amber-100',  label: 'Changed' },
+  unchanged: { row: '',               badge: 'text-gray-400 bg-gray-100',    label: 'Unchanged' },
+}
 
-function StatusBadge({ status, issues }: { status: RowStatus; issues: string[] }) {
-  if (status === 'valid') return <span className="text-green-600 font-medium">✅ Valid</span>
-  if (status === 'warning')
-    return (
-      <span className="text-amber-600 font-medium" title={issues.join('; ')}>
-        ⚠️ Warning
-      </span>
-    )
+function DiffBadge({ status }: { status: ClassifiedRow['status'] }) {
+  const s = DIFF_STYLES[status]
+  return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${s.badge}`}>{s.label}</span>
+}
+
+function ValidationNote({ status, issues }: { status: ClassifiedRow['validStatus']; issues: string[] }) {
+  if (status === 'valid') return <span className="text-gray-300 text-xs">—</span>
+  const color = status === 'error' ? 'text-red-500' : 'text-amber-500'
   return (
-    <span className="text-red-600 font-medium" title={issues.join('; ')}>
-      ❌ Error
+    <span className={`text-xs ${color}`} title={issues.join('; ')}>
+      {status === 'error' ? '✗' : '⚠'} {issues[0]}
     </span>
   )
 }
-
-// ────────────────────────────────────────────────────────────
-// Main component
-// ────────────────────────────────────────────────────────────
 
 export default function ExcelDropzone() {
   const [stage, setStage] = useState<Stage>('idle')
   const [isDragging, setIsDragging] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
-  const [validatedRows, setValidatedRows] = useState<ValidatedRow[]>([])
+  const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
+  const [diffError, setDiffError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [showUnchanged, setShowUnchanged] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // ── Parse helpers ───────────────────────────────────────
 
   async function processFile(file: File) {
     setParseError(null)
+    setDiffError(null)
 
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       setParseError('Please upload an .xlsx or .xls file.')
@@ -122,63 +72,54 @@ export default function ExcelDropzone() {
         return
       }
 
-      setValidatedRows(validateRows(rows))
+      setStage('diffing')
+
+      const res = await fetch('/api/import/diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      })
+
+      if (!res.ok) throw new Error('Server error computing diff')
+
+      const result: DiffResult = await res.json()
+      setDiffResult(result)
       setStage('preview')
-    } catch {
-      setParseError('Could not parse the file. Make sure it is a valid Excel workbook.')
+    } catch (err) {
+      setDiffError(err instanceof Error ? err.message : 'Could not compare against catalog. Please try again.')
+      setStage('idle')
     }
   }
 
-  // ── Drag handlers ───────────────────────────────────────
-
-  function onDragOver(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  function onDragLeave(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault()
-    setIsDragging(false)
-  }
-
+  function onDragOver(e: DragEvent<HTMLDivElement>) { e.preventDefault(); setIsDragging(true) }
+  function onDragLeave(e: DragEvent<HTMLDivElement>) { e.preventDefault(); setIsDragging(false) }
   function onDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
     if (file) processFile(file)
   }
-
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) processFile(file)
-    // Reset input so re-selecting same file fires onChange again
     e.target.value = ''
   }
 
-  // ── Import ───────────────────────────────────────────────
-
   async function handleImport() {
-    const validRows = validatedRows
-      .filter((vr) => vr.status !== 'error')
-      .map((vr) => vr.row)
-
+    if (!diffResult) return
+    const validRows = diffResult.rows.filter((r) => r.validStatus !== 'error').map((r) => r.row)
     setStage('importing')
-
     try {
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: validRows }),
       })
-      const result: ImportResult = await res.json()
-      setImportResult(result)
+      setImportResult(await res.json())
       setStage('done')
     } catch {
       setImportResult({
-        inserted: 0,
-        updated: 0,
-        deactivated: 0,
-        skipped: 0,
+        inserted: 0, updated: 0, deactivated: 0, skipped: 0,
         errors: [{ row: 0, sku: '', message: 'Network error — could not reach the server.' }],
       })
       setStage('done')
@@ -187,58 +128,44 @@ export default function ExcelDropzone() {
 
   function reset() {
     setStage('idle')
-    setValidatedRows([])
+    setDiffResult(null)
     setImportResult(null)
     setParseError(null)
+    setDiffError(null)
+    setShowUnchanged(false)
   }
 
   // ── Derived counts ───────────────────────────────────────
 
-  const validCount = validatedRows.filter((r) => r.status === 'valid').length
-  const warningCount = validatedRows.filter((r) => r.status === 'warning').length
-  const errorCount = validatedRows.filter((r) => r.status === 'error').length
-  const importableCount = validCount + warningCount
+  const newCount       = diffResult?.rows.filter((r) => r.status === 'new').length ?? 0
+  const changedCount   = diffResult?.rows.filter((r) => r.status === 'changed').length ?? 0
+  const unchangedCount = diffResult?.rows.filter((r) => r.status === 'unchanged').length ?? 0
+  const errorCount     = diffResult?.rows.filter((r) => r.validStatus === 'error').length ?? 0
+  const importableCount = (diffResult?.rows.length ?? 0) - errorCount
+  const visibleRows = diffResult?.rows.filter((r) => showUnchanged || r.status !== 'unchanged') ?? []
 
-  // ────────────────────────────────────────────────────────
-  // Render: idle
-  // ────────────────────────────────────────────────────────
+  // ── Idle ─────────────────────────────────────────────────
 
   if (stage === 'idle') {
     return (
       <div className="space-y-3">
-        {parseError && (
+        {(parseError || diffError) && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {parseError}
+            {parseError || diffError}
           </div>
         )}
-
         <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`
-            relative flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed
-            cursor-pointer transition-colors select-none
-            ${isDragging
-              ? 'border-red-400 bg-red-50'
-              : 'border-gray-300 bg-white hover:border-red-300 hover:bg-gray-50'
-            }
-          `}
+          className={`relative flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors select-none ${
+            isDragging ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white hover:border-red-300 hover:bg-gray-50'
+          }`}
           style={{ minHeight: '200px' }}
         >
-          <svg
-            className={`w-10 h-10 mb-3 ${isDragging ? 'text-red-400' : 'text-gray-300'}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 17v-2m3 2v-4m3 4v-6M4 20h16a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0015.586 2H4a1 1 0 00-1 1v16a1 1 0 001 1z"
-            />
+          <svg className={`w-10 h-10 mb-3 ${isDragging ? 'text-red-400' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6M4 20h16a1 1 0 001-1V7.414a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0015.586 2H4a1 1 0 00-1 1v16a1 1 0 001 1z" />
           </svg>
           <p className={`text-base font-medium ${isDragging ? 'text-red-600' : 'text-gray-600'}`}>
             Drag &amp; drop your Excel file here
@@ -246,47 +173,60 @@ export default function ExcelDropzone() {
           <p className="text-sm text-gray-400 mt-1">or click to browse</p>
           <p className="text-xs text-gray-300 mt-2">.xlsx and .xls files only</p>
         </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls"
-          className="hidden"
-          onChange={onFileChange}
-        />
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onFileChange} />
       </div>
     )
   }
 
-  // ────────────────────────────────────────────────────────
-  // Render: preview
-  // ────────────────────────────────────────────────────────
+  // ── Diffing (loading) ─────────────────────────────────────
+
+  if (stage === 'diffing') {
+    return (
+      <div className="rounded-xl bg-white border border-gray-200 px-6 py-12 flex flex-col items-center gap-4">
+        <div className="w-full max-w-sm rounded-full overflow-hidden bg-gray-100 h-2">
+          <div className="h-2 bg-red-500 rounded-full animate-pulse w-2/3" />
+        </div>
+        <p className="text-sm text-gray-500 animate-pulse">Comparing against current catalog…</p>
+      </div>
+    )
+  }
+
+  // ── Preview ───────────────────────────────────────────────
 
   if (stage === 'preview') {
+    const diff = diffResult!
     return (
       <div className="space-y-4">
-        {/* Summary bar */}
+        {/* Summary + actions */}
         <div className="rounded-lg bg-white border border-gray-200 px-5 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
               <p className="text-sm font-semibold text-gray-800">
-                {validatedRows.length} rows parsed — ready to import
+                {diff.rows.length.toLocaleString()} rows parsed
               </p>
-              <div className="flex gap-4 mt-1 text-xs">
-                <span className="text-green-600 font-medium">{validCount} valid</span>
-                {warningCount > 0 && (
-                  <span className="text-amber-600 font-medium">{warningCount} warnings</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
+                <span className="text-green-600 font-medium">🟢 {newCount} new</span>
+                <span className="text-amber-600 font-medium">🟡 {changedCount} changed</span>
+                <span className="text-gray-400 font-medium">⚪ {unchangedCount} unchanged</span>
+                {diff.deactivateCount > 0 && (
+                  <span className="text-red-600 font-medium">🔴 {diff.deactivateCount} will deactivate</span>
                 )}
                 {errorCount > 0 && (
-                  <span className="text-red-600 font-medium">{errorCount} errors</span>
+                  <span className="text-red-500 font-medium">✗ {errorCount} errors (will skip)</span>
                 )}
               </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={reset}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-              >
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showUnchanged}
+                  onChange={(e) => setShowUnchanged(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Show unchanged
+              </label>
+              <button onClick={reset} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
               <button
@@ -294,19 +234,32 @@ export default function ExcelDropzone() {
                 disabled={importableCount === 0}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Confirm Import ({importableCount} rows)
+                Confirm Import ({importableCount.toLocaleString()} rows)
               </button>
             </div>
           </div>
-
-          {errorCount > 0 && (
-            <p className="mt-3 text-xs text-red-600 border-t border-gray-100 pt-3">
-              {errorCount} row{errorCount !== 1 ? 's' : ''} have errors and will be skipped.
-            </p>
-          )}
         </div>
 
-        {/* Table */}
+        {/* Deactivation warning */}
+        {diff.deactivateCount > 0 && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+            <p className="text-sm font-semibold text-red-700">
+              🔴 {diff.deactivateCount} product{diff.deactivateCount !== 1 ? 's' : ''} will be deactivated (not in this file)
+            </p>
+            {diff.deactivateSample.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs text-red-600 font-mono">
+                {diff.deactivateSample.map((p) => (
+                  <li key={p.sku}>{p.sku} — {p.name}</li>
+                ))}
+                {diff.deactivateCount > diff.deactivateSample.length && (
+                  <li className="text-red-400 font-sans">…and {diff.deactivateCount - diff.deactivateSample.length} more</li>
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Rows table */}
         <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
           <div className="overflow-auto max-h-[480px]">
             <table className="w-full text-sm text-left">
@@ -316,44 +269,34 @@ export default function ExcelDropzone() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Price</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock Qty</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Diff</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Issues</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {validatedRows.map((vr) => (
-                  <tr
-                    key={vr.index}
-                    className={
-                      vr.status === 'error'
-                        ? 'bg-red-50'
-                        : vr.status === 'warning'
-                        ? 'bg-amber-50/50'
-                        : ''
-                    }
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                      {vr.row.SKU?.toString() || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-800 max-w-[220px] truncate">
-                      {vr.row.Name?.toString() || '—'}
-                    </td>
+                {visibleRows.map((vr) => (
+                  <tr key={vr.rowIndex} className={DIFF_STYLES[vr.status].row}>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{vr.row.SKU?.toString() || '—'}</td>
+                    <td className="px-4 py-3 text-gray-800 max-w-[220px] truncate">{vr.row.Name?.toString() || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{vr.row.Category?.toString() || '—'}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {vr.row.Category?.toString() || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {vr.row.Price != null
-                        ? `$${parseFloat(vr.row.Price.toString()).toFixed(2)}`
-                        : '—'}
+                      {vr.row.Price != null ? `$${parseFloat(vr.row.Price.toString()).toFixed(2)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {vr.row['Stock Qty'] != null ? vr.row['Stock Qty'].toString() : '0'}
                     </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={vr.status} issues={vr.issues} />
-                    </td>
+                    <td className="px-4 py-3"><DiffBadge status={vr.status} /></td>
+                    <td className="px-4 py-3"><ValidationNote status={vr.validStatus} issues={vr.issues} /></td>
                   </tr>
                 ))}
+                {visibleRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
+                      All rows are unchanged — toggle &ldquo;Show unchanged&rdquo; to see them.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -362,9 +305,7 @@ export default function ExcelDropzone() {
     )
   }
 
-  // ────────────────────────────────────────────────────────
-  // Render: importing
-  // ────────────────────────────────────────────────────────
+  // ── Importing ─────────────────────────────────────────────
 
   if (stage === 'importing') {
     return (
@@ -377,23 +318,14 @@ export default function ExcelDropzone() {
     )
   }
 
-  // ────────────────────────────────────────────────────────
-  // Render: done
-  // ────────────────────────────────────────────────────────
+  // ── Done ─────────────────────────────────────────────────
 
   const result = importResult!
   const hasImportErrors = result.errors.length > 0
 
   return (
     <div className="space-y-4">
-      {/* Success banner */}
-      <div
-        className={`rounded-lg border px-5 py-4 ${
-          hasImportErrors
-            ? 'bg-amber-50 border-amber-200'
-            : 'bg-green-50 border-green-200'
-        }`}
-      >
+      <div className={`rounded-lg border px-5 py-4 ${hasImportErrors ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
         <p className={`text-base font-semibold ${hasImportErrors ? 'text-amber-800' : 'text-green-800'}`}>
           ✓ Import complete
         </p>
@@ -408,7 +340,6 @@ export default function ExcelDropzone() {
         </p>
       </div>
 
-      {/* Error list */}
       {hasImportErrors && (
         <div className="rounded-xl bg-white border border-red-200 overflow-hidden">
           <div className="px-4 py-3 bg-red-50 border-b border-red-200">
@@ -439,10 +370,7 @@ export default function ExcelDropzone() {
         </div>
       )}
 
-      <button
-        onClick={reset}
-        className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
-      >
+      <button onClick={reset} className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors">
         Import Another File
       </button>
     </div>

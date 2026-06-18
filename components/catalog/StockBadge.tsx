@@ -1,7 +1,11 @@
-import { getStockStatus } from '@/lib/mock-data'
-
 interface StockBadgeProps {
   qty: number
+}
+
+function getStockStatus(qty: number): 'in-stock' | 'low-stock' | 'out-of-stock' {
+  if (qty === 0) return 'out-of-stock'
+  if (qty <= 5) return 'low-stock'
+  return 'in-stock'
 }
 
 export default function StockBadge({ qty }: StockBadgeProps) {
