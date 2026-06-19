@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import StockBadge from '@/components/catalog/StockBadge'
+import Barcode from '@/components/catalog/Barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,9 +79,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             <p className="text-xs text-gray-400 font-mono">SKU: {product.sku}</p>
 
-            {product.barcode && (
-              <p className="text-xs text-gray-400 font-mono">Barcode: {product.barcode}</p>
-            )}
+            {product.barcode && <Barcode value={product.barcode} />}
 
             <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
 
