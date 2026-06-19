@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getErplyProducts } from '@/lib/erply'
+import { getErplyProducts, isConfigured } from '@/lib/erply'
 import { syncToSupabase, type SyncProduct } from '@/lib/product-sync'
 import type { ImportResult } from '@/lib/types'
 
@@ -30,10 +30,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Guard: never run the sync in stub mode. getErplyProducts() returns only a
+  // handful of demo products when Erply isn't configured, and syncToSupabase
+  // deactivates every product NOT in the incoming batch — which would wipe the
+  // entire live catalog. Skip entirely until real Erply credentials are set.
+  if (!isConfigured()) {
+    console.warn('[sync] Erply not configured — skipping sync to avoid deactivating the catalog')
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: 'Erply not configured; sync skipped to protect the catalog',
+      syncedAt: new Date().toISOString(),
+    })
+  }
+
   const startedAt = Date.now()
 
   try {
-    // 1. Pull products from Erply (or stub data if not configured)
+    // 1. Pull products from Erply
     const erplyProducts = await getErplyProducts()
 
     // 2. Map Erply fields → our DB schema

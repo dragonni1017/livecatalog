@@ -66,7 +66,7 @@ export interface ErplySyncProduct {
 
 // ── Config helpers ────────────────────────────────────────────────────────────
 
-function isConfigured(): boolean {
+export function isConfigured(): boolean {
   return Boolean(
     process.env.ERPLY_CLIENT_CODE &&
     process.env.ERPLY_USERNAME &&
