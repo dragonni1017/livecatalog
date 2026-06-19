@@ -103,4 +103,12 @@ In `lib/product-sync.ts`, at the end of `syncToSupabase()` (after the deactivate
 
 *(Claude Code: append entries here as you work — what you did, any decisions made with the user that weren't already captured above, anything left unfinished.)*
 
-- _(empty — not started)_
+- **2026-06-19 — Built & deployed (code complete; dormant pending env + SQL).**
+  - Installed `nodemailer` + `@types/nodemailer`.
+  - Added `lib/email.ts` (Titan SMTP wrapper, per-call transporter, timeouts, `isEmailConfigured()` guard) and `lib/low-stock-alert.ts` (`checkLowStockAndNotify` with reset → find → one-email → mark dedupe; `getThreshold()` reads `REORDER_THRESHOLD`, default 5).
+  - Wired into `syncToSupabase()` step 7 (covers manual Excel import + real Erply sync), try/catch so a mail failure never fails the sync.
+  - **Deviation from plan (approved by user):** also call `checkLowStockAndNotify` in the `app/api/sync` stub-skip branch. Reason: after the 2026-06-19 stub-mode catalog-wipe incident, `/api/sync` now skips the destructive product sync when Erply is unconfigured — so piggybacking only on `syncToSupabase()` would mean the daily cron never alerts. The skip branch now runs the (non-destructive) stock check daily regardless of Erply. User chose "Daily cron + on import."
+  - `.env.example` documents the 7 new vars. Deployed to prod; `/api/sync` verified returning `lowStock: {skipped: "email not configured"}` (safe no-op).
+  - **Still needed to activate:** (1) run `alter table products add column low_stock_alerted boolean not null default false;` in the Supabase SQL editor; (2) set `TITAN_SMTP_*`, `REORDER_ALERT_FROM/TO`, `REORDER_THRESHOLD` in `.env.local` AND Vercel prod env; (3) set `CRON_SECRET` in Vercel so the now-emailing cron isn't publicly triggerable.
+  - **Known reality:** all products currently have placeholder `stock_qty = 999`, so no alert will fire until real stock data flows in (manual import "Stock Qty" column, or Erply). Test by manually setting one product's `stock_qty` below the threshold and hitting `/api/sync`.
+  - **Not done (out of scope, unchanged):** Erply/Woo webhooks don't trigger the check; per-product thresholds; admin UI for threshold/recipient.
