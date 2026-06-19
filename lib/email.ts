@@ -9,12 +9,12 @@
 import nodemailer from 'nodemailer'
 
 export function isEmailConfigured(): boolean {
+  // REORDER_ALERT_FROM is optional — defaults to the authenticated mailbox.
   return Boolean(
     process.env.TITAN_SMTP_HOST &&
     process.env.TITAN_SMTP_PORT &&
     process.env.TITAN_SMTP_USER &&
     process.env.TITAN_SMTP_PASS &&
-    process.env.REORDER_ALERT_FROM &&
     process.env.REORDER_ALERT_TO
   )
 }
@@ -45,7 +45,8 @@ export async function sendMail({ to, subject, text }: MailArgs): Promise<void> {
   })
 
   await transporter.sendMail({
-    from: process.env.REORDER_ALERT_FROM,
+    // Default the "from" to the authenticated mailbox if not explicitly set.
+    from: process.env.REORDER_ALERT_FROM || process.env.TITAN_SMTP_USER,
     to,
     subject,
     text,
