@@ -35,11 +35,22 @@ export async function GET(request: NextRequest) {
   // deactivates every product NOT in the incoming batch — which would wipe the
   // entire live catalog. Skip entirely until real Erply credentials are set.
   if (!isConfigured()) {
-    console.warn('[sync] Erply not configured — skipping sync to avoid deactivating the catalog')
+    console.warn('[sync] Erply not configured — skipping product sync to avoid deactivating the catalog')
+    // Still run the daily low-stock check against current DB stock — it's
+    // decoupled from the (destructive, disabled) product sync.
+    let lowStock: unknown = { skipped: 'not run' }
+    try {
+      const { getAdminClient } = await import('@/lib/supabase')
+      const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
+      lowStock = await checkLowStockAndNotify(getAdminClient())
+    } catch (err) {
+      console.error('[sync] low-stock check failed (non-fatal):', err)
+    }
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: 'Erply not configured; sync skipped to protect the catalog',
+      reason: 'Erply not configured; product sync skipped to protect the catalog',
+      lowStock,
       syncedAt: new Date().toISOString(),
     })
   }

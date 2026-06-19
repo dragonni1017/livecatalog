@@ -125,5 +125,13 @@ export async function syncToSupabase(products: SyncProduct[], db: DB): Promise<I
     if (!error && deactivatedRows) deactivated = deactivatedRows.length
   }
 
+  // 7. Low-stock reorder alerts — never let a notification failure fail the sync.
+  try {
+    const { checkLowStockAndNotify } = await import('./low-stock-alert')
+    await checkLowStockAndNotify(db)
+  } catch (err) {
+    console.error('[low-stock] notify failed (non-fatal):', err)
+  }
+
   return { inserted, updated, deactivated, skipped: errors.length, errors }
 }
