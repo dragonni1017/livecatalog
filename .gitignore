@@ -15,8 +15,13 @@
 
 # next.js
 /.next/
+/.next-*/
 /out/
 /.build-final/
+
+# build/scratch output (never commit — may inline secrets)
+/tmp/
+*.fuse_hidden*
 
 # production
 /build
