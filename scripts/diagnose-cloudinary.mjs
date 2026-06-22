@@ -9,9 +9,13 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const CLOUD_NAME = 'dohwdv0ys'
-const API_KEY = '768287939643921'
-const API_SECRET = '4GfJwmB4mYqQPg1Y61pJiFD0Cjk'
+const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME
+const API_KEY = process.env.CLOUDINARY_API_KEY
+const API_SECRET = process.env.CLOUDINARY_API_SECRET
+if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
+  console.error('Missing Cloudinary credentials. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in the environment (e.g. .env.local).')
+  process.exit(1)
+}
 const AUTH = Buffer.from(`${API_KEY}:${API_SECRET}`).toString('base64')
 
 function fetchPage(nextCursor) {
