@@ -2,17 +2,72 @@
 
 import { useRef, useState, DragEvent, ChangeEvent } from 'react'
 import * as XLSX from 'xlsx'
-import type { ExcelRow, ImportResult, DiffResult, ClassifiedRow } from '@/lib/types'
+import type { ExcelRow, ImportResult, DiffResult, ClassifiedRow, BarcodeCorrection } from '@/lib/types'
 
 type Stage = 'idle' | 'diffing' | 'preview' | 'importing' | 'done'
 
 const REQUIRED_COLUMNS = ['SKU', 'Name', 'Category', 'Price'] as const
+const BARCODE_COLUMNS = ['Barcode', 'GTIN, UPC, EAN, or ISBN'] as const
 
 function hasRequiredColumns(rows: ExcelRow[]): { ok: boolean; missing: string[] } {
   if (rows.length === 0) return { ok: false, missing: REQUIRED_COLUMNS.slice() }
   const keys = Object.keys(rows[0])
   const missing = REQUIRED_COLUMNS.filter((col) => !keys.includes(col))
   return { ok: missing.length === 0, missing }
+}
+
+/**
+ * SheetJS reads a Barcode/GTIN cell that *looks* numeric as a JS number
+ * (default `raw: true`), so a code like "012345678905" loses its leading
+ * zero the moment it's turned back into a string — a different, shorter
+ * number than what's printed/scanned anywhere else (Excel, TBarcode,
+ * the physical product). That single missing digit is enough for a
+ * barcode to decode to the wrong item.
+ *
+ * Re-parsing with `raw: false` returns each cell's *formatted* text
+ * instead of its bare value — the same text Excel itself displays. If the
+ * Barcode column has a digit-padding number format (a common pattern for
+ * GTIN/UPC/EAN template columns, which is very likely what TBarcode is
+ * also reading), that formatted text still has the leading zero(s) even
+ * though the underlying number doesn't. We only swap in the formatted
+ * version when it's purely digits and strictly longer than the raw
+ * value — i.e. it actually recovered a stripped zero — so this can't
+ * corrupt a value that was already correct.
+ *
+ * Only the Barcode-ish columns are touched; Price/Stock Qty etc. keep
+ * using the original raw numeric parse so currency/number formatting
+ * elsewhere in the sheet doesn't break.
+ *
+ * Every value that actually gets swapped is also returned as a
+ * `BarcodeCorrection` (original + corrected, keyed by SKU) so the caller can
+ * log it to the `barcode_corrections` table before import — that's the
+ * paper trail for retracing/reverting a correction if one is ever wrong.
+ */
+function recoverLeadingZeros(
+  rows: ExcelRow[],
+  sheet: XLSX.WorkSheet,
+): { rows: ExcelRow[]; corrections: BarcodeCorrection[] } {
+  const formattedRows: ExcelRow[] = XLSX.utils.sheet_to_json(sheet, { raw: false })
+  const corrections: BarcodeCorrection[] = []
+
+  const fixedRows = rows.map((row, i) => {
+    const formatted = formattedRows[i]
+    const fixed = { ...row }
+    const sku = (row.SKU ?? '').toString().trim()
+    for (const col of BARCODE_COLUMNS) {
+      const raw = row[col]
+      if (raw == null) continue
+      const rawDigits = raw.toString()
+      const formattedDigits = formatted?.[col]?.toString().replace(/[^\d]/g, '') ?? ''
+      if (/^\d+$/.test(formattedDigits) && formattedDigits.length > rawDigits.length) {
+        fixed[col] = formattedDigits
+        corrections.push({ sku, column: col, original: rawDigits, corrected: formattedDigits })
+      }
+    }
+    return fixed
+  })
+
+  return { rows: fixedRows, corrections }
 }
 
 const DIFF_STYLES: Record<ClassifiedRow['status'], { row: string; badge: string; label: string }> = {
@@ -44,6 +99,7 @@ export default function ExcelDropzone() {
   const [diffError, setDiffError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [showUnchanged, setShowUnchanged] = useState(false)
+  const [barcodeCorrections, setBarcodeCorrections] = useState<BarcodeCorrection[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function processFile(file: File) {
@@ -59,7 +115,9 @@ export default function ExcelDropzone() {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows: ExcelRow[] = XLSX.utils.sheet_to_json(sheet)
+      const recovered = recoverLeadingZeros(XLSX.utils.sheet_to_json(sheet), sheet)
+      const rows: ExcelRow[] = recovered.rows
+      setBarcodeCorrections(recovered.corrections)
 
       if (rows.length === 0) {
         setParseError('The file appears to be empty.')
@@ -110,10 +168,16 @@ export default function ExcelDropzone() {
     const validRows = diffResult.rows.filter((r) => r.validStatus !== 'error').map((r) => r.row)
     setStage('importing')
     try {
+      // SKUs that got skipped/excluded as invalid don't get imported, so
+      // their corrections (if any) shouldn't be logged either — keeps the
+      // audit trail limited to values that actually reached the DB.
+      const validSkus = new Set(validRows.map((r) => (r.SKU ?? '').toString().trim()))
+      const corrections = barcodeCorrections.filter((c) => validSkus.has(c.sku))
+
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: validRows }),
+        body: JSON.stringify({ rows: validRows, barcodeCorrections: corrections }),
       })
       setImportResult(await res.json())
       setStage('done')
@@ -133,6 +197,7 @@ export default function ExcelDropzone() {
     setParseError(null)
     setDiffError(null)
     setShowUnchanged(false)
+    setBarcodeCorrections([])
   }
 
   // ── Derived counts ───────────────────────────────────────

@@ -22,6 +22,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+// IMPORTANT: run this SQL once in Supabase SQL Editor before seeding barcodes:
+//   alter table products add column if not exists barcode text;
+
 const dataPath = resolve(__dirname, '..', 'lib', 'products-data.json')
 const { categories, products } = JSON.parse(readFileSync(dataPath, 'utf8'))
 

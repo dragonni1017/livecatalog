@@ -74,6 +74,7 @@ console.log(`Found ${dataRows.length} products`)
 const COL = {
   sku:       headers.indexOf('Code'),
   name:      headers.indexOf('Standardized Name'),
+  barcode:   headers.indexOf('UPC/Barcode'),
   category:  headers.indexOf('Suggested Product Group'),
   price:     headers.indexOf('Net Sales Price'),
   uom:       headers.indexOf('UOM'),
@@ -135,9 +136,14 @@ const products = dataRows.map((row, idx) => {
     description = String(purchUnit)
   }
 
+  // Barcode may come in as a number (Excel strips leading zeros) — keep as string
+  const barcodeRaw = row[COL.barcode]
+  const barcode = barcodeRaw ? String(barcodeRaw).trim() : null
+
   return {
     id: `prod-${(idx + 1).toString().padStart(5, '0')}`,
     sku,
+    barcode,
     name,
     description: description || null,
     price_cents: priceCents,

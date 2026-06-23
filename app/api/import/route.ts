@@ -1,16 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { ExcelRow, ImportResult } from '@/lib/types'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { BarcodeCorrection, ExcelRow, ImportResult } from '@/lib/types'
 import { syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DB = SupabaseClient<any, 'public', any>
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   return !url || url === 'your-supabase-url' || url.includes('placeholder')
 }
 
+// Best-effort audit log: every barcode/GTIN value the leading-zero recovery
+// logic changed before import, so a bad correction can be traced back and
+// reverted. Never throws — a logging failure (e.g. the barcode_corrections
+// table not existing yet, see BARCODE-LEADING-ZERO-FIX-HANDOFF.md) must
+// never fail the import itself.
+async function logBarcodeCorrections(db: DB, corrections: BarcodeCorrection[]) {
+  if (corrections.length === 0) return
+  try {
+    const { error } = await db.from('barcode_corrections').insert(
+      corrections.map((c) => ({
+        sku: c.sku,
+        column_name: c.column,
+        original_value: c.original,
+        corrected_value: c.corrected,
+        source: 'import',
+      })),
+    )
+    if (error) console.error('[import] barcode_corrections insert failed:', error.message)
+  } catch (err) {
+    console.error('[import] barcode_corrections insert threw:', err)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const rows: ExcelRow[] = body.rows ?? []
+    const barcodeCorrections: BarcodeCorrection[] = body.barcodeCorrections ?? []
 
     if (isMockMode()) {
       return NextResponse.json(
@@ -60,6 +88,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await syncToSupabase(validProducts, db)
+
+    await logBarcodeCorrections(db, barcodeCorrections)
 
     // Merge per-row validation errors with any DB-level errors from syncToSupabase
     return NextResponse.json({
