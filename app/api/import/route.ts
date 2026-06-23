@@ -34,6 +34,26 @@ async function logBarcodeCorrections(db: DB, corrections: BarcodeCorrection[]) {
   }
 }
 
+// Best-effort import-history log: one row per import run. Never throws — a
+// logging failure (e.g. the import_runs table not existing yet, see
+// supabase/migrations/0002_import_runs.sql) must not fail the import itself.
+async function logImportRun(db: DB, rowsReceived: number, result: ImportResult) {
+  try {
+    const { error } = await db.from('import_runs').insert({
+      source: 'excel',
+      rows_received: rowsReceived,
+      inserted: result.inserted,
+      updated: result.updated,
+      deactivated: result.deactivated,
+      skipped: result.skipped,
+      error_count: result.errors.length,
+    })
+    if (error) console.error('[import] import_runs insert failed:', error.message)
+  } catch (err) {
+    console.error('[import] import_runs insert threw:', err)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -92,11 +112,15 @@ export async function POST(request: NextRequest) {
     await logBarcodeCorrections(db, barcodeCorrections)
 
     // Merge per-row validation errors with any DB-level errors from syncToSupabase
-    return NextResponse.json({
+    const merged: ImportResult = {
       ...result,
       skipped: result.skipped + errors.length,
       errors: [...errors, ...result.errors],
-    } satisfies ImportResult)
+    }
+
+    await logImportRun(db, rows.length, merged)
+
+    return NextResponse.json(merged satisfies ImportResult)
   } catch (err) {
     console.error('[import] Unexpected error:', err)
     return NextResponse.json(
