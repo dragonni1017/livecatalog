@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import ProductVisibilityToggle from '@/components/admin/ProductVisibilityToggle'
+import ProductEditButton from '@/components/admin/ProductEditButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,7 @@ interface AdminProduct {
   id: string
   sku: string | null
   name: string
+  description: string | null
   image_url: string | null
   is_active: boolean
   manually_hidden: boolean
@@ -17,7 +19,7 @@ export default async function AdminProductsPage() {
   const db = getAdminClient()
   const { data } = await db
     .from('products')
-    .select('id, sku, name, image_url, is_active, manually_hidden')
+    .select('id, sku, name, description, image_url, is_active, manually_hidden')
     .order('name')
 
   const products = (data ?? []) as AdminProduct[]
@@ -62,6 +64,7 @@ export default async function AdminProductsPage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Active</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Visibility</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -95,12 +98,20 @@ export default async function AdminProductsPage() {
                       <td className="px-4 py-3">
                         <ProductVisibilityToggle id={p.id} initialHidden={p.manually_hidden} />
                       </td>
+                      <td className="px-4 py-3">
+                        <ProductEditButton
+                          id={p.id}
+                          name={p.name}
+                          description={p.description}
+                          imageUrl={p.image_url}
+                        />
+                      </td>
                     </tr>
                   )
                 })}
                 {products.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
                       No products found.
                     </td>
                   </tr>

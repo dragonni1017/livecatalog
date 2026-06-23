@@ -35,12 +35,33 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH /admin/api/products — toggle a single product's visibility
+// PATCH /admin/api/products — update a single product.
+// Accepts any subset of: manually_hidden (visibility toggle), name, description,
+// image_url (inline edit). Only the provided fields are written.
+// NOTE: these write directly to products, so a later Excel/Erply re-import (which
+// upserts by SKU) will overwrite them — this is a between-imports override.
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const id: string = body.id
-    const manually_hidden: boolean = body.manually_hidden
+    if (!id) {
+      return NextResponse.json({ error: 'Missing product id' }, { status: 400 })
+    }
+
+    // Build the update from only the fields actually provided.
+    const updates: Record<string, unknown> = {}
+    if (typeof body.manually_hidden === 'boolean') updates.manually_hidden = body.manually_hidden
+    if (typeof body.name === 'string') {
+      const name = body.name.trim()
+      if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
+      updates.name = name
+    }
+    if (typeof body.description === 'string') updates.description = body.description.trim() || null
+    if (typeof body.image_url === 'string') updates.image_url = body.image_url.trim() || null
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
 
     if (isMockMode()) {
       return NextResponse.json({ ok: true, mock: true })
@@ -49,10 +70,8 @@ export async function PATCH(request: NextRequest) {
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
 
-    const { error } = await db
-      .from('products')
-      .update({ manually_hidden, updated_at: new Date().toISOString() })
-      .eq('id', id)
+    updates.updated_at = new Date().toISOString()
+    const { error } = await db.from('products').update(updates).eq('id', id)
     if (error) throw error
 
     return NextResponse.json({ ok: true })
