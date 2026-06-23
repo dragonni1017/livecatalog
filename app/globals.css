@@ -14,12 +14,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* No dark-mode override: the UI is hard-coded light (white cards, gray bg), so
+   flipping --foreground to near-white made form inputs render white-on-white.
+   Keep text dark regardless of the OS color-scheme preference. */
 
 body {
   background: var(--background);
