@@ -1,12 +1,10 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import SearchInput from '@/components/catalog/SearchInput'
-import { CartProvider } from '@/lib/cart-context'
 import CartIndicator from '@/components/catalog/CartIndicator'
 
 export default function CatalogLayout({ children }: { children: React.ReactNode }) {
   return (
-    <CartProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Sticky top nav */}
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
@@ -47,6 +45,5 @@ export default function CatalogLayout({ children }: { children: React.ReactNode 
         {children}
       </main>
     </div>
-    </CartProvider>
   )
 }

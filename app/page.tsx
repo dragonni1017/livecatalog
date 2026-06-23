@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import SearchInput from '@/components/catalog/SearchInput'
+import CartIndicator from '@/components/catalog/CartIndicator'
 import { Category, Product } from '@/lib/types'
 
 const PAGE_SIZE = 48
@@ -102,6 +103,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           <div className="shrink-0 hidden lg:block text-right">
             <p className="text-xs font-medium text-gray-900">626-552-4120</p>
             <p className="text-xs text-gray-400">www.ly-usa.com</p>
+          </div>
+
+          {/* Cart */}
+          <div className="shrink-0">
+            <CartIndicator />
           </div>
         </div>
       </header>
