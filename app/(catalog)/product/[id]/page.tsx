@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
+import AddToCartButton from '@/components/catalog/AddToCartButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,18 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <span className="ml-2 text-xs text-gray-500">{product.stock_qty} units available</span>
               )}
             </div>
+
+            <AddToCartButton
+              variant="detail"
+              product={{
+                productId: product.id,
+                sku: product.sku,
+                name: product.name,
+                priceCents: product.price_cents,
+                imageUrl: product.image_url,
+                stockQty: product.stock_qty,
+              }}
+            />
 
             <div className="border-t border-gray-100" />
 

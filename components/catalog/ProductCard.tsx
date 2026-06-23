@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
 import StockBadge from './StockBadge'
+import AddToCartButton from './AddToCartButton'
 
 function formatPrice(cents: number) {
   return `$${(cents / 100).toFixed(2)}`
@@ -66,6 +67,18 @@ export default function ProductCard({ product }: ProductCardProps) {
             {formatPrice(product.price_cents)}
           </span>
           <StockBadge qty={product.stock_qty} />
+        </div>
+        <div className="flex items-center justify-end pt-1">
+          <AddToCartButton
+            product={{
+              productId: product.id,
+              sku: product.sku,
+              name: product.name,
+              priceCents: product.price_cents,
+              imageUrl: product.image_url,
+              stockQty: product.stock_qty,
+            }}
+          />
         </div>
       </div>
     </Link>
