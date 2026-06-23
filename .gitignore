@@ -30,6 +30,11 @@
 .DS_Store
 *.pem
 
+# local Claude Code workspace + scratch scripts + one-off data exports
+/.claude/
+scripts/_tmp_*.mjs
+/livecatalog-category-breakdown.xlsx
+
 # debug
 npm-debug.log*
 yarn-debug.log*
