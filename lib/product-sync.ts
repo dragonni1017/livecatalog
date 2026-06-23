@@ -11,6 +11,25 @@ import type { ImportResult } from './types'
 type DB = SupabaseClient<any, 'public', any>
 
 const CHUNK_SIZE = 500
+const PAGE_SIZE = 1000
+
+/**
+ * Fetch every row from a select, paginating past Supabase/PostgREST's default
+ * 1000-row response cap. `makeQuery` must return a fresh range-limited query
+ * each call (a query builder is single-use).
+ */
+async function selectAll<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
+): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data } = await makeQuery(from, from + PAGE_SIZE - 1)
+    const batch = data ?? []
+    all.push(...batch)
+    if (batch.length < PAGE_SIZE) break
+  }
+  return all
+}
 
 /** Normalized product shape that both sources (Excel + Erply) map into */
 export interface SyncProduct {
@@ -55,6 +74,58 @@ export async function resolveCategories(
   return map
 }
 
+export interface SyncPreview {
+  incoming: number
+  wouldInsert: number
+  wouldUpdate: number
+  wouldDeactivate: number
+  deactivateSample: { sku: string; name: string }[]
+  newCategories: string[]
+}
+
+/**
+ * Read-only dry run of syncToSupabase: reports what a real sync of `products`
+ * WOULD change without writing anything. Use this to validate an Erply sync
+ * before letting it run — a large wouldDeactivate means the incoming SKUs don't
+ * line up with the catalog and a real sync would wipe it.
+ */
+export async function previewSync(products: SyncProduct[], db: DB): Promise<SyncPreview> {
+  const incomingSkus = products.map((p) => p.sku)
+  const incomingSet = new Set(incomingSkus)
+
+  const existingRows = await selectAll<{ sku: string }>((from, to) =>
+    db.from('products').select('sku').range(from, to),
+  )
+  const existingSkus = new Set(existingRows.map((r) => r.sku))
+
+  const wouldInsert = incomingSkus.filter((s) => !existingSkus.has(s)).length
+  const wouldUpdate = incomingSkus.filter((s) => existingSkus.has(s)).length
+
+  // Currently-active products whose SKU isn't in the incoming batch → would be deactivated.
+  const activeRows = await selectAll<{ sku: string; name: string }>((from, to) =>
+    db.from('products').select('sku, name').eq('is_active', true).range(from, to),
+  )
+  const toDeactivate = activeRows.filter((r) => !incomingSet.has(r.sku))
+
+  // Category names not already present (by slug).
+  const { data: catRows } = await db.from('categories').select('slug')
+  const existingSlugs = new Set((catRows ?? []).map((c) => c.slug))
+  const incomingCats = [...new Set(products.map((p) => p.category_name).filter(Boolean))]
+  const newCategories = incomingCats.filter((name) => {
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    return !existingSlugs.has(slug)
+  })
+
+  return {
+    incoming: products.length,
+    wouldInsert,
+    wouldUpdate,
+    wouldDeactivate: toDeactivate.length,
+    deactivateSample: toDeactivate.slice(0, 20).map((r) => ({ sku: r.sku, name: r.name })),
+    newCategories,
+  }
+}
+
 /**
  * Bulk-upsert products into Supabase and deactivate any that are no longer
  * in the incoming list.  Returns insert / update / deactivate counts.
@@ -66,9 +137,13 @@ export async function syncToSupabase(products: SyncProduct[], db: DB): Promise<I
   const categoryNames = products.map((p) => p.category_name)
   const categoryMap = await resolveCategories(categoryNames, db)
 
-  // 2. Snapshot existing SKUs for insert vs update counting
-  const { data: existingRows } = await db.from('products').select('sku').limit(100000)
-  const existingSkus = new Set(existingRows?.map((r) => r.sku) ?? [])
+  // 2. Snapshot existing SKUs for insert vs update counting.
+  //    Paginate: a plain select is capped at 1000 rows by PostgREST, which would
+  //    misclassify updates as inserts once the catalog exceeds 1000 products.
+  const existingRows = await selectAll<{ sku: string }>((from, to) =>
+    db.from('products').select('sku').range(from, to),
+  )
+  const existingSkus = new Set(existingRows.map((r) => r.sku))
 
   // 3. Build DB records
   const now = new Date().toISOString()
