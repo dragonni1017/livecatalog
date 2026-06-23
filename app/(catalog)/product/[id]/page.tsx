@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
+import TrackView from '@/components/catalog/TrackView'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <TrackView productId={product.id} />
       <div className="mb-6">
         <Link
           href="/"

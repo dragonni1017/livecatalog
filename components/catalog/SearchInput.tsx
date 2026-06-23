@@ -24,6 +24,16 @@ export default function SearchInput() {
       }
       params.delete('page') // reset to page 1 on new search
       router.push(`/?${params.toString()}`)
+
+      // Best-effort search analytics — fires when the query settles (not per keystroke).
+      if (query.trim().length >= 2) {
+        fetch('/api/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'search', term: query }),
+          keepalive: true,
+        }).catch(() => {})
+      }
     }, 300),
     [searchParams, router]
   )
