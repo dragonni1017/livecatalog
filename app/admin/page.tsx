@@ -1,22 +1,19 @@
 import Link from 'next/link'
 import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
-import SignOutButton from '@/components/admin/SignOutButton'
-import { getServerSupabaseClient } from '@/lib/supabase-server'
 
-export default async function AdminDashboard() {
-  const supabase = await getServerSupabaseClient()
-  const { data } = await supabase.auth.getUser()
-
+export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <div className="flex items-center gap-3">
-            {data.user?.email && <span className="text-sm text-gray-400">{data.user.email}</span>}
-            <SignOutButton />
-          </div>
+          <a
+            href="/api/admin/auth?action=logout"
+            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            Sign out
+          </a>
         </div>
 
         {/* Workflow note */}

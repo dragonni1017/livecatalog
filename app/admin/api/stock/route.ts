@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSupabaseClient } from '@/lib/supabase-server'
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -37,9 +36,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /admin/api/stock — apply a manual +/- adjustment to a product's stock_qty.
-// Requires a signed-in staff session (enforced by middleware on every /admin/*
-// route, re-checked here so the change can be attributed) and logs every change
-// to stock_adjustments for an audit trail.
+// Access is gated by the shared-password admin cookie (enforced by middleware on
+// every /admin/* route); every change is logged to stock_adjustments for an
+// audit trail, attributed to the generic "admin" since there are no per-user
+// logins.
 //
 // NOTE: like other manual product edits in this app, this is a between-imports
 // override — the next Excel/Erply sync sets stock_qty from the source of truth
@@ -60,13 +60,6 @@ export async function POST(request: NextRequest) {
 
     if (isMockMode()) {
       return NextResponse.json({ ok: true, mock: true, new_qty: 0 })
-    }
-
-    const supabase = await getServerSupabaseClient()
-    const { data: authData } = await supabase.auth.getUser()
-    const user = authData.user
-    if (!user?.email) {
-      return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
     }
 
     const { getAdminClient } = await import('@/lib/supabase')
@@ -104,8 +97,8 @@ export async function POST(request: NextRequest) {
       previous_qty: previousQty,
       new_qty: newQty,
       reason,
-      changed_by_user_id: user.id,
-      changed_by_email: user.email,
+      changed_by_user_id: null,
+      changed_by_email: 'admin',
     })
     if (logError) {
       // The stock change already succeeded — don't fail the request over a
