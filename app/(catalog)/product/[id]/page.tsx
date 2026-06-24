@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -9,24 +11,55 @@ import AddToCartButton from '@/components/catalog/AddToCartButton'
 import ProductCard from '@/components/catalog/ProductCard'
 import TrackView from '@/components/catalog/TrackView'
 
-export const dynamic = 'force-dynamic'
+// Cache the rendered page for 10 minutes (ISR). Product pages don't depend on
+// per-request state, so this serves them from cache and only re-queries Supabase
+// every 10 min — faster pages, lower DB load. Stock can be up to 10 min stale,
+// which is fine for a quote-request catalog.
+export const revalidate = 600
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
-interface ProductPageProps {
-  params: Promise<{ id: string }>
-}
-
-export default async function ProductPage({ params }: ProductPageProps) {
-  const { id } = await params
-  const { data: product } = await supabase
+// React.cache dedupes the lookup so generateMetadata and the page share one query.
+const getProduct = cache(async (id: string) => {
+  const { data } = await supabase
     .from('products')
     .select('*, category:categories(*)')
     .eq('id', id)
     .eq('manually_hidden', false)
     .single()
+  return (data as Product) ?? null
+})
+
+interface ProductPageProps {
+  params: Promise<{ id: string }>
+}
+
+export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
+  const { id } = await params
+  const product = await getProduct(id)
+  if (!product) return { title: 'Product not found' }
+
+  const price = formatPrice(product.price_cents)
+  const description = (product.description?.trim() || `${product.name} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
+  const img = cdnImage(product.image_url, 1200)
+
+  return {
+    title: product.name,
+    description,
+    openGraph: {
+      title: product.name,
+      description,
+      type: 'website',
+      images: img ? [{ url: img, alt: product.name }] : undefined,
+    },
+  }
+}
+
+export default async function ProductPage({ params }: ProductPageProps) {
+  const { id } = await params
+  const product = await getProduct(id)
 
   if (!product) notFound()
 
@@ -123,6 +156,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 stockQty: product.stock_qty,
               }}
             />
+
+            <p className="text-xs text-gray-500">
+              Wholesale pricing. Adding to cart submits a quote request — no payment is taken online.
+              A rep confirms availability and final pricing.
+            </p>
 
             <div className="border-t border-gray-100" />
 

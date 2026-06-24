@@ -3,8 +3,19 @@ import './globals.css'
 import { CartProvider } from '@/lib/cart-context'
 
 export const metadata: Metadata = {
-  title: 'Product Catalog',
-  description: 'Browse our full product catalog',
+  metadataBase: new URL('https://livecatalog.vercel.app'),
+  title: {
+    default: 'L & Y USA — Wholesale Product Catalog',
+    template: '%s · L & Y USA',
+  },
+  description:
+    'Browse the L & Y USA wholesale product catalog — party supplies, gift items, and more. Search by name or SKU, check live availability, and request a quote.',
+  openGraph: {
+    title: 'L & Y USA — Wholesale Product Catalog',
+    description: 'Browse our wholesale catalog, check availability, and request a quote.',
+    siteName: 'L & Y USA',
+    type: 'website',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

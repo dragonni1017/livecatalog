@@ -135,6 +135,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             <p className="text-xs text-gray-400">www.ly-usa.com</p>
           </div>
 
+          {/* Quick order */}
+          <Link
+            href="/quick-order"
+            className="shrink-0 hidden text-xs font-medium text-gray-600 hover:text-red-600 sm:block"
+          >
+            Quick&nbsp;Order
+          </Link>
+
           {/* Cart */}
           <div className="shrink-0">
             <CartIndicator />
