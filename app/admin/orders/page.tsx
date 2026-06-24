@@ -73,6 +73,7 @@ export default async function AdminOrdersPage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Submitted</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Sales order</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -94,11 +95,20 @@ export default async function AdminOrdersPage() {
                     <td className="px-4 py-3 font-semibold text-gray-900">{formatPrice(o.subtotal_cents)}</td>
                     <td className="px-4 py-3"><OrderStatusBadge status={o.status} /></td>
                     <td className="px-4 py-3 text-xs text-gray-500">{formatDate(o.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/orders/${o.id}/print`}
+                        target="_blank"
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Print ↗
+                      </Link>
+                    </td>
                   </tr>
                 ))}
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
                       No order requests yet.
                     </td>
                   </tr>
