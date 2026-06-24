@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 interface Props {
   sort: string
   inStock: boolean
+  perPage: number
 }
 
 const SORT_OPTIONS = [
@@ -14,10 +15,13 @@ const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
 ]
 
+const PER_PAGE_OPTIONS = [20, 50, 100]
+const DEFAULT_PER_PAGE = 20
+
 // Sort dropdown + "in stock only" toggle for the catalog. Writes the choice to
 // the URL (?sort= / ?instock=) and resets to page 1, mirroring SearchInput so
 // the server component can read it back and re-query.
-export default function CatalogControls({ sort, inStock }: Props) {
+export default function CatalogControls({ sort, inStock, perPage }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -55,6 +59,25 @@ export default function CatalogControls({ sort, inStock }: Props) {
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex items-center gap-1.5 text-sm text-gray-600">
+        <span className="hidden sm:inline">Show</span>
+        <select
+          value={perPage}
+          onChange={(e) =>
+            update((p) =>
+              Number(e.target.value) === DEFAULT_PER_PAGE ? p.delete('per') : p.set('per', e.target.value),
+            )
+          }
+          className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+        >
+          {PER_PAGE_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
             </option>
           ))}
         </select>

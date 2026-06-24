@@ -8,19 +8,22 @@ import CatalogControls from '@/components/catalog/CatalogControls'
 import CartIndicator from '@/components/catalog/CartIndicator'
 import { Category, Product } from '@/lib/types'
 
-const PAGE_SIZE = 48
+const PER_PAGE_OPTIONS = [20, 50, 100]
+const DEFAULT_PER_PAGE = 20
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string }>
+  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string }>
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { q, category, page: pageParam, sort: sortParam, instock } = await searchParams
+  const { q, category, page: pageParam, sort: sortParam, instock, per: perParam } = await searchParams
 
   const sort = sortParam ?? 'name'
   const inStock = instock === '1'
+  const perRaw = parseInt(perParam ?? '', 10)
+  const pageSize = PER_PAGE_OPTIONS.includes(perRaw) ? perRaw : DEFAULT_PER_PAGE
   const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
-  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const pageStart = (currentPage - 1) * pageSize
 
   // Fetch categories
   const { data: categoriesData } = await supabase
@@ -68,10 +71,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       query = query.order('name', { ascending: true })
   }
 
-  const { data: productsData, count } = await query.range(pageStart, pageStart + PAGE_SIZE - 1)
+  const { data: productsData, count } = await query.range(pageStart, pageStart + pageSize - 1)
   const pagedProducts = (productsData ?? []) as Product[]
   const totalProducts = count ?? 0
-  const totalPages = Math.ceil(totalProducts / PAGE_SIZE)
+  const totalPages = Math.ceil(totalProducts / pageSize)
 
   // Build URL helper preserving existing params
   function pageUrl(p: number) {
@@ -80,6 +83,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     if (category) params.set('category', category)
     if (sort !== 'name') params.set('sort', sort)
     if (inStock) params.set('instock', '1')
+    if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
     if (p > 1) params.set('page', String(p))
     const qs = params.toString()
     return qs ? `/?${qs}` : '/'
@@ -168,7 +172,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
                 )}
               </p>
               <Suspense fallback={null}>
-                <CatalogControls sort={sort} inStock={inStock} />
+                <CatalogControls sort={sort} inStock={inStock} perPage={pageSize} />
               </Suspense>
             </div>
 
