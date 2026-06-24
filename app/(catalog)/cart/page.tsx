@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useCart, formatPrice } from '@/lib/cart-context'
+import { cdnImage } from '@/lib/image'
 import type { CheckoutContact } from '@/lib/types'
 
 export default function CartPage() {
@@ -96,7 +97,7 @@ export default function CartPage() {
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100">
                   {item.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain" />
+                    <img src={cdnImage(item.imageUrl, 150) ?? undefined} alt={item.name} className="h-full w-full object-contain" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">

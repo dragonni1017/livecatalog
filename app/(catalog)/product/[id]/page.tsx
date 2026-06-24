@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Product } from '@/lib/types'
+import { cdnImage } from '@/lib/image'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
@@ -67,7 +68,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             {product.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={product.image_url}
+                src={cdnImage(product.image_url, 800) ?? undefined}
                 alt={product.name}
                 className="h-full w-full object-contain p-4"
               />

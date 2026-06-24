@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
+import { cdnImage } from '@/lib/image'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
 
@@ -22,7 +23,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.image_url}
+            src={cdnImage(product.image_url, 400) ?? undefined}
             alt={product.name}
             className="h-full w-full object-contain p-2"
             loading="lazy"
