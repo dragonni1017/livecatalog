@@ -4,18 +4,21 @@ import { supabase } from '@/lib/supabase'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import SearchInput from '@/components/catalog/SearchInput'
+import CatalogControls from '@/components/catalog/CatalogControls'
 import CartIndicator from '@/components/catalog/CartIndicator'
 import { Category, Product } from '@/lib/types'
 
 const PAGE_SIZE = 48
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; category?: string; page?: string }>
+  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string }>
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { q, category, page: pageParam } = await searchParams
+  const { q, category, page: pageParam, sort: sortParam, instock } = await searchParams
 
+  const sort = sortParam ?? 'name'
+  const inStock = instock === '1'
   const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
   const pageStart = (currentPage - 1) * PAGE_SIZE
 
@@ -32,19 +35,40 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     .select('*, category:categories(*)', { count: 'exact' })
     .eq('is_active', true)
     .eq('manually_hidden', false)
-    .order('name')
-    .range(pageStart, pageStart + PAGE_SIZE - 1)
 
   if (category) {
     const cat = categories.find(c => c.slug === category)
     if (cat) query = query.eq('category_id', cat.id)
   }
 
-  if (q) {
-    query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%,sku.ilike.%${q}%`)
+  if (inStock) query = query.gt('stock_qty', 0)
+
+  // Multi-word search: each word must appear in name, description, or SKU, so
+  // "blue widget" matches "Widget, Blue" regardless of word order. Strip chars
+  // that would break PostgREST's filter syntax.
+  if (q?.trim()) {
+    for (const word of q.trim().split(/\s+/)) {
+      const w = word.replace(/[%,()]/g, '')
+      if (w) query = query.or(`name.ilike.%${w}%,description.ilike.%${w}%,sku.ilike.%${w}%`)
+    }
   }
 
-  const { data: productsData, count } = await query
+  // Sorting
+  switch (sort) {
+    case 'price_asc':
+      query = query.order('price_cents', { ascending: true })
+      break
+    case 'price_desc':
+      query = query.order('price_cents', { ascending: false })
+      break
+    case 'newest':
+      query = query.order('created_at', { ascending: false })
+      break
+    default:
+      query = query.order('name', { ascending: true })
+  }
+
+  const { data: productsData, count } = await query.range(pageStart, pageStart + PAGE_SIZE - 1)
   const pagedProducts = (productsData ?? []) as Product[]
   const totalProducts = count ?? 0
   const totalPages = Math.ceil(totalProducts / PAGE_SIZE)
@@ -54,6 +78,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (category) params.set('category', category)
+    if (sort !== 'name') params.set('sort', sort)
+    if (inStock) params.set('instock', '1')
     if (p > 1) params.set('page', String(p))
     const qs = params.toString()
     return qs ? `/?${qs}` : '/'
@@ -127,7 +153,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-gray-500">
                 {totalProducts} {totalProducts === 1 ? 'product' : 'products'}
                 {q && (
@@ -141,6 +167,9 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
                   </span>
                 )}
               </p>
+              <Suspense fallback={null}>
+                <CatalogControls sort={sort} inStock={inStock} />
+              </Suspense>
             </div>
 
             <ProductGrid products={pagedProducts} />

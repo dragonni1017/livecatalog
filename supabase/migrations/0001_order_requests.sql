@@ -29,6 +29,7 @@ create table if not exists order_requests (
   updated_at         timestamptz not null default now()
 );
 
+
 create table if not exists order_items (
   id               uuid primary key default gen_random_uuid(),
   order_id         uuid not null references order_requests(id) on delete cascade,

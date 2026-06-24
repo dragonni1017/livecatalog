@@ -68,7 +68,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           </span>
           <StockBadge qty={product.stock_qty} />
         </div>
-        <div className="flex items-center justify-end pt-1">
+        <div className="pt-1">
           <AddToCartButton
             product={{
               productId: product.id,

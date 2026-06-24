@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { Product } from '@/lib/types'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
+import ProductCard from '@/components/catalog/ProductCard'
 import TrackView from '@/components/catalog/TrackView'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +28,22 @@ export default async function ProductPage({ params }: ProductPageProps) {
     .single()
 
   if (!product) notFound()
+
+  // "More in this category" — a few other in-catalog products from the same
+  // category, so a product page isn't a dead end.
+  let related: Product[] = []
+  if (product.category_id) {
+    const { data } = await supabase
+      .from('products')
+      .select('*, category:categories(*)')
+      .eq('is_active', true)
+      .eq('manually_hidden', false)
+      .eq('category_id', product.category_id)
+      .neq('id', product.id)
+      .order('name')
+      .limit(6)
+    related = (data ?? []) as Product[]
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -51,7 +69,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <img
                 src={product.image_url}
                 alt={product.name}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain p-4"
               />
             ) : (
               <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -118,6 +136,29 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
         </div>
       </div>
+
+      {related.length > 0 && (
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">
+              More in {product.category?.name ?? 'this category'}
+            </h2>
+            {product.category && (
+              <Link
+                href={`/?category=${product.category.slug}`}
+                className="text-sm font-medium text-red-600 hover:text-red-700"
+              >
+                View all →
+              </Link>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {related.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
