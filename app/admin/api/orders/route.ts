@@ -11,15 +11,20 @@ function isMockMode(): boolean {
   return !url || url === 'your-supabase-url' || url.includes('placeholder')
 }
 
-// PATCH /admin/api/orders — change an order's status
+// PATCH /admin/api/orders — change an order's status and/or its
+// "entered in QuickBooks" flag. Accepts { id, status? } and/or { id, enteredInQb? }.
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const id: string = body.id
-    const status: OrderStatus = body.status
+    const hasStatus = body.status !== undefined
+    const hasEntered = body.enteredInQb !== undefined
 
-    if (!id || !VALID.includes(status)) {
-      return NextResponse.json({ error: 'Invalid id or status' }, { status: 400 })
+    if (!id || (!hasStatus && !hasEntered)) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
+    if (hasStatus && !VALID.includes(body.status)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
     }
 
     if (isMockMode()) {
@@ -30,16 +35,19 @@ export async function PATCH(request: NextRequest) {
     const db = getAdminClient()
     const now = new Date().toISOString()
 
-    const { error } = await db
-      .from('order_requests')
-      .update({
-        status,
-        // Single shared admin login — no per-user identity to record.
-        status_changed_by: 'admin',
-        status_changed_at: now,
-        updated_at: now,
-      })
-      .eq('id', id)
+    const patch: Record<string, unknown> = { updated_at: now }
+    if (hasStatus) {
+      patch.status = body.status as OrderStatus
+      // Single shared admin login — no per-user identity to record.
+      patch.status_changed_by = 'admin'
+      patch.status_changed_at = now
+    }
+    if (hasEntered) {
+      patch.entered_in_qb = Boolean(body.enteredInQb)
+      patch.entered_in_qb_at = body.enteredInQb ? now : null
+    }
+
+    const { error } = await db.from('order_requests').update(patch).eq('id', id)
     if (error) throw error
 
     return NextResponse.json({ ok: true })

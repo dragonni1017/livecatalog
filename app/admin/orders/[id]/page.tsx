@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAdminClient } from '@/lib/supabase'
 import OrderStatusControls from '@/components/admin/OrderStatusControls'
+import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -75,6 +76,14 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
               {order.status_changed_by ? ` by ${order.status_changed_by}` : ''}
             </p>
           )}
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">QuickBooks</h3>
+            <EnteredInQbToggle id={order.id} initial={order.entered_in_qb} />
+            {order.entered_in_qb && order.entered_in_qb_at && (
+              <p className="mt-2 text-xs text-gray-400">Entered {formatDate(order.entered_in_qb_at)}</p>
+            )}
+          </div>
         </section>
 
         {/* Customer */}

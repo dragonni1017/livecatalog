@@ -74,6 +74,10 @@ export interface OrderRequest {
   assigned_rep_email: string | null
   status_changed_by: string | null
   status_changed_at: string | null
+  // True once a worker has keyed this order into QuickBooks Desktop. Orthogonal
+  // to status — see migration 0005_entered_in_qb.sql.
+  entered_in_qb: boolean
+  entered_in_qb_at: string | null
   created_at: string
   updated_at: string
 }
