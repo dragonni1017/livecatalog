@@ -51,8 +51,18 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
           <Link href="/admin/orders" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
             ← Back to Orders
           </Link>
-          <h1 className="mt-2 font-mono text-2xl font-bold text-gray-900">{order.reference_code}</h1>
-          <p className="text-sm text-gray-500">Submitted {formatDate(order.created_at)}</p>
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <div>
+              <h1 className="font-mono text-2xl font-bold text-gray-900">{order.reference_code}</h1>
+              <p className="text-sm text-gray-500">Submitted {formatDate(order.created_at)}</p>
+            </div>
+            <Link
+              href={`/admin/orders/${order.id}/print`}
+              className="shrink-0 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Sales order ↗
+            </Link>
+          </div>
         </div>
 
         {/* Status controls */}
