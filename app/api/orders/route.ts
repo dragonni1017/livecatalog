@@ -147,10 +147,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Could not submit your request. Please try again.' }, { status: 500 })
     }
 
-    // ── Notify sales reps — best-effort, never fails the order ────────────────
-    await notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock }).catch((e) =>
-      console.error('[orders] rep notification failed (order still saved):', e),
-    )
+    // ── Notify sales reps + confirm to customer — best-effort, never fails the order ──
+    await Promise.allSettled([
+      notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock }),
+      notifyCustomer({ referenceCode, contact, lineItems, subtotalCents }),
+    ]).then((results) => {
+      const labels = ['rep notification', 'customer confirmation']
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') console.error(`[orders] ${labels[i]} failed (order still saved):`, r.reason)
+      })
+    })
 
     return NextResponse.json({ referenceCode, orderId })
   } catch (err) {
@@ -200,6 +206,48 @@ async function notifyReps(args: {
     subject,
     text,
     replyTo: contact.email.trim(),
+    from: process.env.SALES_ALERT_FROM || undefined,
+  })
+}
+
+// Confirmation to the customer who placed the request. Best-effort — guarded the
+// same way as the rep notification, so a missing SMTP config just skips it. Sent
+// FROM the sales mailbox with Reply-To pointed at SALES_ALERT_TO, so if the
+// customer replies they reach the team rather than the no-reply automation.
+async function notifyCustomer(args: {
+  referenceCode: string
+  contact: CheckoutContact
+  lineItems: { sku: string; name: string; unit_price_cents: number; qty: number; line_total_cents: number }[]
+  subtotalCents: number
+}): Promise<void> {
+  if (!isSmtpConfigured()) {
+    console.log('[orders] SMTP not set — skipping customer confirmation')
+    return
+  }
+
+  const { referenceCode, contact, lineItems, subtotalCents } = args
+  const to = contact.email.trim()
+  const subject = `We received your order request — ${referenceCode}`
+
+  const itemLines = lineItems
+    .map((li) => `  ${li.qty} × ${li.name} (${li.sku}) @ ${formatPrice(li.unit_price_cents)} = ${formatPrice(li.line_total_cents)}`)
+    .join('\n')
+
+  const text =
+    `Hi ${contact.name.trim()},\n\n` +
+    `Thanks for your request — we've received it and a member of our team will be in touch shortly to confirm availability and next steps.\n\n` +
+    `Your reference: ${referenceCode}\n\n` +
+    `Items requested\n${itemLines}\n\n` +
+    `Subtotal: ${formatPrice(subtotalCents)}\n\n` +
+    `This is a request, not a finalized order — pricing and availability are confirmed by our team before anything is charged.\n\n` +
+    `If you have any questions, just reply to this email.\n\n` +
+    `— L & Y USA\n`
+
+  await sendMail({
+    to,
+    subject,
+    text,
+    replyTo: process.env.SALES_ALERT_TO || undefined,
     from: process.env.SALES_ALERT_FROM || undefined,
   })
 }

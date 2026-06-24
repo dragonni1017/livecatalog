@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import ProductVisibilityToggle from '@/components/admin/ProductVisibilityToggle'
 import ProductEditButton from '@/components/admin/ProductEditButton'
+import StockAdjuster from '@/components/admin/StockAdjuster'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,13 +14,14 @@ interface AdminProduct {
   image_url: string | null
   is_active: boolean
   manually_hidden: boolean
+  stock_qty: number
 }
 
 export default async function AdminProductsPage() {
   const db = getAdminClient()
   const { data } = await db
     .from('products')
-    .select('id, sku, name, description, image_url, is_active, manually_hidden')
+    .select('id, sku, name, description, image_url, is_active, manually_hidden, stock_qty')
     .order('name')
 
   const products = (data ?? []) as AdminProduct[]
@@ -36,7 +38,7 @@ export default async function AdminProductsPage() {
             <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
               ← Back to Dashboard
             </Link>
-            <h1 className="mt-2 text-2xl font-bold text-gray-900">Manage Product Visibility</h1>
+            <h1 className="mt-2 text-2xl font-bold text-gray-900">Products &amp; Stock</h1>
           </div>
         </div>
 
@@ -63,6 +65,7 @@ export default async function AdminProductsPage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Active</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Visibility</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit</th>
                 </tr>
@@ -96,6 +99,9 @@ export default async function AdminProductsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        <StockAdjuster id={p.id} name={p.name} stockQty={p.stock_qty} />
+                      </td>
+                      <td className="px-4 py-3">
                         <ProductVisibilityToggle id={p.id} initialHidden={p.manually_hidden} />
                       </td>
                       <td className="px-4 py-3">
@@ -111,7 +117,7 @@ export default async function AdminProductsPage() {
                 })}
                 {products.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
                       No products found.
                     </td>
                   </tr>

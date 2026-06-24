@@ -1,19 +1,22 @@
 import Link from 'next/link'
 import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
+import SignOutButton from '@/components/admin/SignOutButton'
+import { getServerSupabaseClient } from '@/lib/supabase-server'
 
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+  const supabase = await getServerSupabaseClient()
+  const { data } = await supabase.auth.getUser()
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <a
-            href="/api/admin/auth?action=logout"
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Sign out
-          </a>
+          <div className="flex items-center gap-3">
+            {data.user?.email && <span className="text-sm text-gray-400">{data.user.email}</span>}
+            <SignOutButton />
+          </div>
         </div>
 
         {/* Workflow note */}
@@ -73,10 +76,10 @@ export default function AdminDashboard() {
           >
             <div>
               <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
-                Manage Product Visibility
+                Products &amp; Stock
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Show or hide individual products without deleting them
+                Show/hide products, edit details, and adjust stock quantities manually
               </p>
             </div>
             <svg

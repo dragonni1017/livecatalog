@@ -25,6 +25,18 @@ export interface Product {
   updated_at: string
 }
 
+// ── Manual stock adjustments (see STAFF-LOGIN-AND-STOCK-ADJUSTMENTS-HANDOFF.md) ──
+
+export interface StockAdjustment {
+  id: string
+  delta: number
+  previous_qty: number
+  new_qty: number
+  reason: string | null
+  changed_by_email: string
+  created_at: string
+}
+
 // ── Cart + Sales Order Request (see CART-AND-SALES-ORDER-PLAN.md) ───────────
 
 export type OrderStatus = 'new' | 'contacted' | 'converted' | 'lost'
