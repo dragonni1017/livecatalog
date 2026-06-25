@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
+import { extractPackSpec } from '@/lib/pack'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
 
@@ -13,6 +14,7 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const packSpec = extractPackSpec(product.name)
   return (
     <Link
       href={`/product/${product.id}`}
@@ -62,6 +64,9 @@ export default function ProductCard({ product }: ProductCardProps) {
         <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
         {product.barcode && (
           <p className="text-xs text-gray-400 font-mono">{product.barcode}</p>
+        )}
+        {packSpec && (
+          <p className="text-xs font-medium text-gray-600">{packSpec}</p>
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
           <span className="text-base font-bold text-gray-900">

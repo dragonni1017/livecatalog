@@ -208,3 +208,35 @@ Searched the full catalog by keyword for products that belong in the 8 new categ
 ### Net effect (this section)
 - Products: **3,016** unchanged / **0** orphaned, verified after every move.
 - Still empty / deferred: Pencils, Signs/Animals, New Arrivals (see reasons above).
+
+---
+
+## EXECUTED — 2026-06-25 — High-confidence category consolidation
+
+Merged the 4 "High confidence" groups from `livecatalog-category-breakdown.xlsx` (Merge Suggestions sheet). Each group's survivor category was the largest member by product count, kept on its existing `id`/`slug` (zero URL/SEO breakage), renamed to the broader group name, then the other members' products were repointed and the now-empty member rows deleted. Ran inside a single `BEGIN…COMMIT` transaction.
+
+**Full pre-merge snapshot (all 20 source categories + the exact `product_id → old_category_id` mapping for all 792 affected products) saved to** `docs/category-merge-backups/2026-06-25-merge-backup.json` — use it to revert exactly if needed (see Revert section below).
+
+| New category | Survivor row (id / slug) | Absorbed (deleted) | Final count |
+|---|---|---|---|
+| **Drinkware & Cups** | cat-059 / `tumbler` | Ceramic Cups (12), Drinkware (3), Plastic Cups (1), Speaker Cups (10) | 191 |
+| **Stationery & Office** | cat-043 / `pens` | Notebooks (37), Erasers (30), Sharpeners (8), Stationary Supplies (7), Pencils (0) | 164 |
+| **Toys & Novelties** | cat-047 / `plush-toys` | Toys (79), Squishy/Slime (109), Sticks Toys (19), Fidgets (22), Bubbles (22) | 411 |
+| **Seasonal & Holiday** | cat-064 / `christmas` | Wreaths (3), Seasonal Items (9) | 26 |
+
+Verified after running:
+- Categories: 66 → **50** (16 rows deleted: 4+5+5+2 across the four groups).
+- Products: **3,016** unchanged / **0** orphaned (every product still has a valid `category_id`).
+- All four survivor categories' final counts matched the plan exactly (table above).
+- Confirmed no other table has a foreign key into `categories` besides `products.category_id`, so the deletes were safe.
+
+**Not touched this pass** (left exactly as-is, per the breakdown's own caveats — review before merging):
+- *Floral & Flower Decor*, *Gift Packaging & Wrap* (Ribbons sample SKUs look mis-tagged as gift boxes, not ribbon — audit first), *Lighting & Electronics* (Dome mixes LED decor with flower-in-dome products — needs splitting first), *Accessories & Apparel*, *Beauty & Personal Care* — all "Medium confidence" in the breakdown.
+- *Signs/Animals*, *New Arrivals* — still 0 products, still flagged as delete/remove candidates rather than merge candidates; no action taken.
+
+### Revert instructions
+To undo this pass exactly, using `docs/category-merge-backups/2026-06-25-merge-backup.json`:
+1. Re-insert the 16 deleted rows from `categories_before` (only the ones not equal to a surviving id: all except cat-059, cat-043, cat-047, cat-064).
+2. For every entry in `products_before`, run `UPDATE products SET category_id = '<old_category_id>' WHERE id = '<id>'`.
+3. Rename the 4 survivor categories back: cat-059 → "Tumbler", cat-043 → "Pens", cat-047 → "Plush Toys", cat-064 → "Christmas".
+4. Re-verify: total products 3,016, 0 orphaned, categories back to 66.
