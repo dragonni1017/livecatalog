@@ -38,6 +38,7 @@ declare module 'xlsx' {
 
   export interface WritingOptions {
     bookSST?: boolean
+    bookType?: 'xlsx' | 'xlsm' | 'xlsb' | 'xls' | 'csv' | 'txt' | 'html' | 'ods'
     type?: 'base64' | 'binary' | 'buffer' | 'file' | 'array' | 'string'
     cellDates?: boolean
     bookVBA?: boolean

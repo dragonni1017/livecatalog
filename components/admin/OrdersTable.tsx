@@ -131,13 +131,21 @@ export default function OrdersTable({ orders }: { orders: OrderRow[] }) {
                     <EnteredInQbToggle id={o.id} initial={o.entered_in_qb} variant="cell" />
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/orders/${o.id}/print`}
-                      target="_blank"
-                      className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      Print ↗
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/admin/orders/${o.id}/print`}
+                        target="_blank"
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Print ↗
+                      </Link>
+                      <a
+                        href={`/admin/api/orders/${o.id}/excel`}
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Excel
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))}
