@@ -33,6 +33,7 @@
 # local Claude Code workspace + scratch scripts + one-off data exports
 /.claude/
 scripts/_tmp_*.mjs
+/_tmp_*
 /livecatalog-category-breakdown.xlsx
 
 # debug

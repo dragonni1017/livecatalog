@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# L & Y USA — Live Wholesale Catalog
 
-## Getting Started
+A public-facing wholesale product catalog with live inventory, search, and a
+quote-request ordering flow. Customers and sales reps browse the catalog and
+submit order requests; the team reviews them in an admin dashboard and keys
+them into QuickBooks Desktop.
 
-First, run the development server:
+**Stack:** Next.js (App Router) · Supabase (Postgres) · Vercel · Cloudinary (images)
+**Production:** https://livecatalog.vercel.app
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## How it works
+
+```
+Customer / rep browses the catalog
+   → adds in-stock items, submits an order request
+   → request is saved to Supabase + emailed to sale@ly-usa.com (customer gets a confirmation)
+   → team reviews in /admin/orders (filter, status, "entered in QuickBooks")
+   → prints the Sales Order (PDF) and keys it into QuickBooks Desktop
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Product data is loaded via the admin Excel import (drag-and-drop). An Erply
+auto-sync exists but is not yet enabled. There is no online payment — checkout
+submits a quote request, not a charge.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Getting started
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # production build
+npm run lint
+```
 
-## Learn More
+Copy `.env.example` to `.env.local` and fill in the values (Supabase keys,
+admin password, Titan SMTP for email, etc.).
 
-To learn more about Next.js, take a look at the following resources:
+## Project structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+app/                     Next.js routes (App Router)
+  page.tsx               Public catalog homepage (the live one)
+  (catalog)/             Cart, product detail, quick-order, category, gate
+  admin/                 Password-protected admin (orders, products, import, sync…)
+  api/                   Public API routes (orders, track, products/lookup…)
+components/
+  catalog/               Customer-facing UI (ProductCard, cart, search…)
+  admin/                 Admin UI (orders table, status controls, dropzone…)
+lib/                     Supabase client, email, image/CDN, order rules, types…
+supabase/migrations/     SQL migrations (applied by hand in the Supabase SQL editor)
+scripts/                 One-off maintenance scripts (import, sync, backfill)
+public/                  Static assets + Excel import template
+docs/                    Project docs — roadmap, feature plans, handoffs
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Conventions
 
-## Deploy on Vercel
+- **Migrations are applied manually** in the Supabase SQL editor (no migration
+  runner). Each file in `supabase/migrations/` has a header explaining it.
+- **Admin auth** is a single shared password (`ADMIN_PASSWORD`); the public
+  catalog can optionally be gated with `CATALOG_ACCESS_CODE`.
+- **Deploy** with `vercel --prod` (see `docs/` for details).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Docs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`docs/`](./docs) — the roadmap, the cart/order plan, and feature handoffs.

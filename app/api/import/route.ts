@@ -14,7 +14,7 @@ function isMockMode(): boolean {
 // Best-effort audit log: every barcode/GTIN value the leading-zero recovery
 // logic changed before import, so a bad correction can be traced back and
 // reverted. Never throws — a logging failure (e.g. the barcode_corrections
-// table not existing yet, see BARCODE-LEADING-ZERO-FIX-HANDOFF.md) must
+// table not existing yet, see docs/BARCODE-LEADING-ZERO-FIX-HANDOFF.md) must
 // never fail the import itself.
 async function logBarcodeCorrections(db: DB, corrections: BarcodeCorrection[]) {
   if (corrections.length === 0) return

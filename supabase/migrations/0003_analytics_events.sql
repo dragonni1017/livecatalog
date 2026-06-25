@@ -1,4 +1,4 @@
--- Catalog analytics (admin dashboard 4c) — see ROADMAP.md Agent 5c.
+-- Catalog analytics (admin dashboard 4c) — see docs/ROADMAP.md Agent 5c.
 --
 -- HOW TO APPLY: paste into the Supabase SQL editor (project aguorduaxfqrvvywgrdi)
 -- and run once. No migration runner in this project.

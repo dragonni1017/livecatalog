@@ -45,7 +45,7 @@ function readBarcodeMap(path) {
   // Also read the bare (default) values, purely so we can tell *when* the
   // raw:false re-read above actually recovered a stripped leading zero —
   // that diff is what gets logged to barcode_corrections for traceability
-  // (see BARCODE-LEADING-ZERO-FIX-HANDOFF.md).
+  // (see docs/BARCODE-LEADING-ZERO-FIX-HANDOFF.md).
   const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1 })
 
   const headers = rows[0] || []
@@ -98,7 +98,7 @@ async function logCorrections(corrections) {
   )
   if (error) {
     console.error(`\n⚠️  Could not log ${corrections.length} correction(s) to barcode_corrections: ${error.message}`)
-    console.error('   (Run the table-creation SQL in BARCODE-LEADING-ZERO-FIX-HANDOFF.md if it doesn\'t exist yet.)')
+    console.error('   (Run the table-creation SQL in docs/BARCODE-LEADING-ZERO-FIX-HANDOFF.md if it doesn\'t exist yet.)')
   } else {
     console.log(`📝 Logged ${corrections.length} leading-zero correction(s) to barcode_corrections.`)
   }

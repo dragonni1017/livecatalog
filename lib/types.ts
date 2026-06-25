@@ -37,7 +37,7 @@ export interface StockAdjustment {
   created_at: string
 }
 
-// ── Cart + Sales Order Request (see CART-AND-SALES-ORDER-PLAN.md) ───────────
+// ── Cart + Sales Order Request (see docs/CART-AND-SALES-ORDER-PLAN.md) ───────────
 
 export type OrderStatus = 'new' | 'contacted' | 'converted' | 'lost'
 
@@ -115,7 +115,7 @@ export interface ExcelRow {
 
 // One value the leading-zero recovery logic changed before it was sent to
 // the server, kept so a bad/unexpected correction can be traced back and
-// reverted later. See BARCODE-LEADING-ZERO-FIX-HANDOFF.md.
+// reverted later. See docs/BARCODE-LEADING-ZERO-FIX-HANDOFF.md.
 export interface BarcodeCorrection {
   sku: string
   column: string

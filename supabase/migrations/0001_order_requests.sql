@@ -1,4 +1,4 @@
--- Cart + Sales Order Request feature — see CART-AND-SALES-ORDER-PLAN.md
+-- Cart + Sales Order Request feature — see docs/CART-AND-SALES-ORDER-PLAN.md
 --
 -- HOW TO APPLY: this project has no migration runner. Paste this whole file
 -- into the Supabase SQL editor (project aguorduaxfqrvvywgrdi) and run it once.
