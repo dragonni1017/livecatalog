@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import './globals.css'
 import { CartProvider } from '@/lib/cart-context'
+import RepCapture from '@/components/catalog/RepCapture'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://livecatalog.vercel.app'),
@@ -22,6 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full bg-gray-50 text-gray-900 antialiased font-sans">
+        <Suspense fallback={null}>
+          <RepCapture />
+        </Suspense>
         <CartProvider>{children}</CartProvider>
       </body>
     </html>

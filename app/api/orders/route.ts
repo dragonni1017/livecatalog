@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
 import { isSmtpConfigured, sendMail } from '@/lib/email'
+import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS, formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -104,6 +105,14 @@ export async function POST(request: NextRequest) {
 
     const subtotalCents = lineItems.reduce((sum, li) => sum + li.line_total_cents, 0)
 
+    // ── Enforce the order minimum (server-side; the cart also gates this) ─────
+    if (!meetsOrderMinimum(subtotalCents)) {
+      return NextResponse.json(
+        { error: `Minimum order is ${formatPriceCents(MIN_ORDER_SUBTOTAL_CENTS)}. Add more items to submit.` },
+        { status: 400 },
+      )
+    }
+
     // ── Insert order + items (retry reference code on unique collision) ───────
     let orderId: string | null = null
     let referenceCode = ''
@@ -120,6 +129,8 @@ export async function POST(request: NextRequest) {
           customer_company: contact.company?.trim() || null,
           notes: contact.notes?.trim() || null,
           subtotal_cents: subtotalCents,
+          placed_by_rep: contact.placedByRep?.trim() || null,
+          po_number: contact.poNumber?.trim() || null,
         })
         .select('id')
         .single()
@@ -192,7 +203,9 @@ async function notifyReps(args: {
     `  Name:    ${contact.name.trim()}\n` +
     `  Email:   ${contact.email.trim()}\n` +
     `  Phone:   ${contact.phone?.trim() || '—'}\n` +
-    `  Company: ${contact.company?.trim() || '—'}\n\n` +
+    `  Company: ${contact.company?.trim() || '—'}\n` +
+    `  Rep:     ${contact.placedByRep?.trim() || '—'}\n` +
+    `  PO #:    ${contact.poNumber?.trim() || '—'}\n\n` +
     `Items\n${itemLines}\n\n` +
     `Subtotal: ${formatPrice(subtotalCents)}\n\n` +
     (contact.notes?.trim() ? `Notes\n  ${contact.notes.trim()}\n\n` : '') +

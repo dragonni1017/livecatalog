@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useCart, formatPrice } from '@/lib/cart-context'
 import { cdnImage } from '@/lib/image'
+import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 
 export default function CartPage() {
@@ -12,6 +13,22 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<{ referenceCode: string } | null>(null)
+
+  // Prefill the rep from a per-rep link: a ?rep= visit is stashed in
+  // localStorage by RepCapture, so it survives navigation to the cart.
+  useEffect(() => {
+    try {
+      const rep = window.localStorage.getItem('livecatalog_rep')
+      // One-time prefill from localStorage on mount — same external-store sync
+      // pattern as CartProvider, not a reactive setState loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (rep) setContact((c) => ({ ...c, placedByRep: rep }))
+    } catch {
+      /* localStorage unavailable — rep stays blank */
+    }
+  }, [])
+
+  const belowMinimum = !meetsOrderMinimum(subtotalCents)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,6 +39,10 @@ export default function CartPage() {
     }
     if (items.length === 0) {
       setError('Your cart is empty.')
+      return
+    }
+    if (belowMinimum) {
+      setError(`Minimum order is ${formatPrice(MIN_ORDER_SUBTOTAL_CENTS)}. Add more items to submit.`)
       return
     }
     setSubmitting(true)
@@ -158,6 +179,8 @@ export default function CartPage() {
               <Field label="Email *" type="email" value={contact.email} onChange={(v) => setContact({ ...contact, email: v })} required />
               <Field label="Phone" type="tel" value={contact.phone ?? ''} onChange={(v) => setContact({ ...contact, phone: v })} />
               <Field label="Company" value={contact.company ?? ''} onChange={(v) => setContact({ ...contact, company: v })} />
+              <Field label="Placed by (rep)" value={contact.placedByRep ?? ''} onChange={(v) => setContact({ ...contact, placedByRep: v })} />
+              <Field label="PO number" value={contact.poNumber ?? ''} onChange={(v) => setContact({ ...contact, poNumber: v })} />
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
                 <textarea
@@ -169,11 +192,18 @@ export default function CartPage() {
               </div>
             </div>
 
+            {belowMinimum && (
+              <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Minimum order is {formatPrice(MIN_ORDER_SUBTOTAL_CENTS)}. Add{' '}
+                {formatPrice(MIN_ORDER_SUBTOTAL_CENTS - subtotalCents)} more to submit.
+              </p>
+            )}
+
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || belowMinimum}
               className="mt-4 w-full rounded-md bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? 'Submitting…' : 'Submit Order Request'}

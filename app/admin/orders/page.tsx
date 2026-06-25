@@ -22,7 +22,15 @@ export default async function AdminOrdersPage() {
           <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
             ← Back to Dashboard
           </Link>
-          <h1 className="mt-2 text-2xl font-bold text-gray-900">Order Requests</h1>
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">Order Requests</h1>
+            <a
+              href="/admin/api/orders/export"
+              className="shrink-0 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Export CSV
+            </a>
+          </div>
         </div>
 
         {/* Counts */}

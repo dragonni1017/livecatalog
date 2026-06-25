@@ -67,6 +67,8 @@ export default async function SalesOrderPrintPage({ params }: PrintPageProps) {
           <h2 className="text-2xl font-bold uppercase tracking-wide">Sales Order</h2>
           <p className="mt-1 font-mono text-sm">{order.reference_code}</p>
           <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
+          {order.po_number && <p className="text-sm text-gray-600">PO #: {order.po_number}</p>}
+          {order.placed_by_rep && <p className="text-sm text-gray-600">Rep: {order.placed_by_rep}</p>}
         </div>
       </header>
 

@@ -59,6 +59,10 @@ export interface CheckoutContact {
   phone?: string
   company?: string
   notes?: string
+  // Which sales rep placed the order (free text or from a ?rep= link).
+  placedByRep?: string
+  // Customer's own purchase-order reference.
+  poNumber?: string
 }
 
 export interface OrderRequest {
@@ -71,6 +75,8 @@ export interface OrderRequest {
   customer_company: string | null
   notes: string | null
   subtotal_cents: number
+  placed_by_rep: string | null
+  po_number: string | null
   assigned_rep_email: string | null
   status_changed_by: string | null
   status_changed_at: string | null
