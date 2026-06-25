@@ -193,6 +193,10 @@ async function notifyReps(args: {
   const who = contact.company?.trim() || contact.name.trim()
   const subject = `New order request ${referenceCode} — ${who} (${formatPrice(subtotalCents)})`
 
+  // Optional sales-rep CC — only if it looks like a real email address.
+  const ccRaw = contact.ccEmail?.trim()
+  const cc = ccRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccRaw) ? ccRaw : undefined
+
   const itemLines = lineItems
     .map((li) => `  ${li.qty} × ${li.sku} — ${li.name} @ ${formatPrice(li.unit_price_cents)} = ${formatPrice(li.line_total_cents)}`)
     .join('\n')
@@ -205,7 +209,8 @@ async function notifyReps(args: {
     `  Phone:   ${contact.phone?.trim() || '—'}\n` +
     `  Company: ${contact.company?.trim() || '—'}\n` +
     `  Rep:     ${contact.placedByRep?.trim() || '—'}\n` +
-    `  PO #:    ${contact.poNumber?.trim() || '—'}\n\n` +
+    `  PO #:    ${contact.poNumber?.trim() || '—'}\n` +
+    `  CC:      ${cc || '—'}\n\n` +
     `Items\n${itemLines}\n\n` +
     `Subtotal: ${formatPrice(subtotalCents)}\n\n` +
     (contact.notes?.trim() ? `Notes\n  ${contact.notes.trim()}\n\n` : '') +
@@ -220,6 +225,7 @@ async function notifyReps(args: {
     text,
     replyTo: contact.email.trim(),
     from: process.env.SALES_ALERT_FROM || undefined,
+    cc,
   })
 }
 

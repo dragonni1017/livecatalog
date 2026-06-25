@@ -34,9 +34,11 @@ interface MailArgs {
   replyTo?: string
   // Optional "from" override; defaults to REORDER_ALERT_FROM or the mailbox.
   from?: string
+  // Optional CC recipient(s) — e.g. the sales rep on an order notification.
+  cc?: string
 }
 
-export async function sendMail({ to, subject, text, replyTo, from }: MailArgs): Promise<void> {
+export async function sendMail({ to, subject, text, replyTo, from, cc }: MailArgs): Promise<void> {
   const port = parseInt(process.env.TITAN_SMTP_PORT ?? '465', 10)
 
   // Create the transporter per-call: serverless functions cold-start, so a
@@ -62,5 +64,6 @@ export async function sendMail({ to, subject, text, replyTo, from }: MailArgs): 
     subject,
     text,
     ...(replyTo ? { replyTo } : {}),
+    ...(cc ? { cc } : {}),
   })
 }

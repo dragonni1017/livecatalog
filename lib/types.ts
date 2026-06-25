@@ -63,6 +63,8 @@ export interface CheckoutContact {
   placedByRep?: string
   // Customer's own purchase-order reference.
   poNumber?: string
+  // Optional sales-rep email to CC on the order notification.
+  ccEmail?: string
 }
 
 export interface OrderRequest {
