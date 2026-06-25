@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
+import { extractPackSpec } from '@/lib/pack'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
@@ -164,14 +165,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             <div className="border-t border-gray-100" />
 
-            {product.description && (
-              <div>
-                <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                  Description
-                </h2>
-                <p className="text-sm text-gray-700 leading-relaxed">{product.description}</p>
-              </div>
-            )}
+            {(() => {
+              const packSpec = extractPackSpec(product.name)
+              if (!packSpec && !product.description) return null
+              return (
+                <div>
+                  <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                    Pack quantity
+                  </h2>
+                  {packSpec && <p className="text-sm font-semibold text-gray-900">{packSpec}</p>}
+                  {product.description && (
+                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{product.description}</p>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
       </div>

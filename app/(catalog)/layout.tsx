@@ -9,12 +9,29 @@ export default function CatalogLayout({ children }: { children: React.ReactNode 
       {/* Sticky top nav */}
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
-          {/* Site name */}
-          <Link
-            href="/"
-            className="shrink-0 text-lg font-bold tracking-tight text-red-600 hover:text-red-700"
-          >
-            LiveCatalog
+          {/* L&Y USA logo */}
+          <Link href="/" className="group shrink-0">
+            <div className="flex h-10 w-10 flex-col items-center justify-center border-2 border-gray-900 leading-none transition-colors group-hover:border-red-600">
+              <span
+                className="font-black tracking-tighter text-gray-900 transition-colors group-hover:text-red-600"
+                style={{ fontSize: '10px', letterSpacing: '-0.5px' }}
+              >
+                L &amp; Y
+              </span>
+              <span
+                className="font-bold text-gray-900 transition-colors group-hover:text-red-600"
+                style={{ fontSize: '9px' }}
+              >
+                USA
+              </span>
+            </div>
+          </Link>
+
+          {/* Brand name */}
+          <Link href="/" className="hidden shrink-0 sm:block">
+            <span className="text-base font-bold tracking-wide text-gray-900 transition-colors hover:text-red-600">
+              L &amp; Y USA
+            </span>
           </Link>
 
           {/* Center: search */}
@@ -33,8 +50,14 @@ export default function CatalogLayout({ children }: { children: React.ReactNode 
             </Suspense>
           </div>
 
-          {/* Right side: cart */}
-          <div className="flex shrink-0 w-32 justify-end">
+          {/* Right side: quick order + cart */}
+          <div className="flex shrink-0 items-center gap-4">
+            <Link
+              href="/quick-order"
+              className="hidden text-xs font-medium text-gray-600 hover:text-red-600 sm:block"
+            >
+              Quick&nbsp;Order
+            </Link>
             <CartIndicator />
           </div>
         </div>
