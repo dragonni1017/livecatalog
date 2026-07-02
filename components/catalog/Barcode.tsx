@@ -59,8 +59,11 @@ export default function Barcode({ value }: BarcodeProps) {
       background: '#ffffff',
     }
 
+    // Synchronizes `failed` with the outcome of drawing into the SVG DOM node
+    // via JsBarcode (an external, imperative drawing library), not reactive state.
     try {
       JsBarcode(el, normalized, { ...opts, format: formatFor(normalized) })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFailed(false)
     } catch {
       try {
@@ -70,7 +73,7 @@ export default function Barcode({ value }: BarcodeProps) {
         setFailed(true)
       }
     }
-  }, [value])
+  }, [value, normalized])
 
   if (failed) {
     return <p className="text-xs text-gray-400 font-mono">Barcode: {normalized}</p>

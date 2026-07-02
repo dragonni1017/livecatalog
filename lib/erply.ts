@@ -41,15 +41,6 @@ interface ErplyProduct {
   reservedAmount?: number
 }
 
-/** Shape of one record from Erply's getProductStock call */
-interface ErplyStockRecord {
-  productID: number
-  amountInStock: number
-  reservedAmount: number
-  /** amountInStock - reservedAmount */
-  free: number
-}
-
 // ── Normalized type used by the sync route ────────────────────────────────────
 
 export interface ErplySyncProduct {
