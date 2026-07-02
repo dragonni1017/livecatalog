@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**84 items completed** (79 shipped-feature bullets + 5 checked-off backlog/design items).
+**89 items completed** (82 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -109,6 +109,13 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Save cart as draft
 - ✅ Rush / required-ship-date flag
 - ✅ Price range filter
+
+### Recently Shipped (as of 2026-07-02)
+- ✅ Quantity-break / volume discount pricing — `volume_tiers` on products, applied on product detail page, cart, order rules, and admin product edit / bulk stock tools
+- ✅ "Customers also ordered" cross-sell — co-purchase query against `order_items` on the product detail page
+- ✅ Net-terms / credit application — customer-facing form (`/credit-application`), `credit_applications` table, API route, admin review dashboard (`/admin/credit-applications`)
+- ✅ Packing slip generation — `/admin/orders/[id]/packing-slip`
+- ✅ Erply/Woo webhook endpoints for real-time stock sync — `/api/webhooks/erply`, `/api/webhooks/woo` (update `stock_qty` immediately on incoming events; daily cron still the only trigger for the low-stock check — see `docs/ROADMAP-OPEN.md`)
 
 ---
 

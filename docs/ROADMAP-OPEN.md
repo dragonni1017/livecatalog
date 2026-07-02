@@ -4,14 +4,19 @@ Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
 **8 explicitly open checklist items**, plus 3 blocked-on-external-input items,
-4 recommended-next candidates, and 24 unscoped brainstorm ideas below.
+and 21 unscoped brainstorm ideas below. (Volume pricing, cross-sell, credit
+applications, and packing slips — previously listed as "Recommended Next" —
+shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`.)
 
 ---
 
 ## Open Backlog
 
 - [ ] SMS notifications via Twilio (order received / status change)
-- [ ] Hook Erply/Woo webhooks into low-stock check (cron already catches it, known gap)
+- [ ] Hook low-stock check into the Erply/Woo webhooks — the webhooks
+      (`api/webhooks/erply`, `api/webhooks/woo`) exist and update `stock_qty`
+      in real time, but only the daily cron currently triggers the low-stock
+      alert; the webhooks don't call it yet
 
 ---
 
@@ -37,12 +42,9 @@ Priority order agreed 2026-07-02. Full direction/rationale in `docs/DESIGN-BRIEF
 
 ## Recommended Next
 
-Cherry-picked from the Future Brainstorm below for being high-leverage given what's already built:
-
-1. **Quantity-break / volume discount pricing** — direct extension of the `customers`/`discount_percent` work already shipped; reuses the same review-screen pattern.
-2. **Real "frequently bought together" cross-sell** — `order_items` data is already being collected; this is a query + UI change, no new infrastructure.
-3. **Net-terms / credit application form** — common ask for wholesale B2B buyers; pairs naturally with the buyer-profile system (e.g. a future `credit_limit` column).
-4. **Packing slip generation** — reuses the existing print-PDF pipeline (`/admin/orders/[id]/print`); quick win for fulfillment.
+All four prior candidates (volume pricing, cross-sell, credit applications,
+packing slips) shipped 2026-07-02. Next candidates TBD — pick from the
+Future Brainstorm below.
 
 ---
 
@@ -52,17 +54,14 @@ Cherry-picked from the Future Brainstorm below for being high-leverage given wha
 - Filter by brand / material / other product attributes (price range already shipped)
 - Product comparison (side-by-side spec view)
 - Downloadable spec sheets / line-card PDFs
-- Real "frequently bought together" cross-sell (co-purchase data)
 - Curated/seasonal collections
 
 **Ordering & quotes**
 - Ship-to address book (multiple addresses per customer)
 - Manager approval step (rep → manager → admin)
 - Tax-exempt certificate upload
-- Net-terms / credit application form
 
 **Pricing & customers**
-- Quantity-break / volume discount pricing
 - Promo codes / time-limited sale pricing
 - Per-customer price list PDF export
 - Sales-tax calculation by ship-to state
@@ -71,7 +70,6 @@ Cherry-picked from the Future Brainstorm below for being high-leverage given wha
 - Backorder handling
 - Multi-warehouse stock visibility
 - RMA / returns tracking
-- Packing slip generation (distinct from Sales Order PDF)
 - Shipping-carrier rate quotes + label generation (UPS/FedEx)
 
 **Integrations**
