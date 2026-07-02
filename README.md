@@ -24,6 +24,31 @@ Product data is loaded via the admin Excel import (drag-and-drop). An Erply
 auto-sync exists but is not yet enabled. There is no online payment — checkout
 submits a quote request, not a charge.
 
+### Tech stack
+
+| Layer | Tool | Cost |
+|---|---|---|
+| Frontend | Next.js 16 (App Router) | Free |
+| Hosting | Vercel | Free tier |
+| Database | Supabase (PostgreSQL) | Free tier |
+| Email | Titan Mail SMTP via nodemailer | Included with domain |
+| Image CDN | Cloudinary | Free tier |
+| Excel parsing | SheetJS (browser-side) | Free / open source |
+| Future: Erply sync | Erply REST API | Already paying |
+
+### Excel import format
+
+| Column | Required | Notes |
+|---|---|---|
+| `SKU` | Yes | Unique key — re-uploading same SKU updates, never duplicates |
+| `Name` | Yes | Product display name |
+| `Category` | Yes | Must be consistent — "Footwear" ≠ "footwear" |
+| `Price` | Yes | Numeric, no $ sign |
+| `Description` | No | Short product description |
+| `Stock Qty` | No | Defaults to 0 if blank |
+| `Image URL` | No | Direct link to hosted product image |
+| `Active` | No | TRUE/FALSE — hide without deleting |
+
 ## Getting started
 
 ```bash
@@ -64,4 +89,5 @@ docs/                    Project docs — roadmap, feature plans, handoffs
 
 ## Docs
 
-See [`docs/`](./docs) — the roadmap, the cart/order plan, and feature handoffs.
+See [`docs/`](./docs) — `ROADMAP-OPEN.md` / `ROADMAP-COMPLETED.md` (roadmap,
+split by status), the cart/order plan, and feature handoffs.

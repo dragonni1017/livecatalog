@@ -34,7 +34,11 @@
 /.claude/
 scripts/_tmp_*.mjs
 /_tmp_*
-/livecatalog-category-breakdown.xlsx
+/data/livecatalog-category-breakdown.xlsx
+/data/*.bak
+
+# Excel lock files
+~$*.xls*
 
 # debug
 npm-debug.log*
