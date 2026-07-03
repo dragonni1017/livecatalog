@@ -208,5 +208,13 @@ export async function syncToSupabase(products: SyncProduct[], db: DB): Promise<I
     console.error('[low-stock] notify failed (non-fatal):', err)
   }
 
+  // 8. Back-in-stock notifications — same non-fatal guard.
+  try {
+    const { checkBackInStockAndNotify } = await import('./back-in-stock-notify')
+    await checkBackInStockAndNotify(db)
+  } catch (err) {
+    console.error('[back-in-stock] notify failed (non-fatal):', err)
+  }
+
   return { inserted, updated, deactivated, skipped: errors.length, errors }
 }

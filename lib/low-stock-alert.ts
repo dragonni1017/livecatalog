@@ -34,44 +34,59 @@ export async function checkLowStockAndNotify(db: DB): Promise<LowStockResult> {
   const threshold = getThreshold()
   const now = new Date().toISOString()
 
-  // 1. Reset: products restocked above threshold become eligible to alert again.
-  await db
+  // 1. Fetch all active products with their per-product or global threshold.
+  //    We must evaluate per-product because each row may have its own threshold.
+  const { data: allActive, error: fetchError } = await db
     .from('products')
-    .update({ low_stock_alerted: false, updated_at: now })
-    .gt('stock_qty', threshold)
-    .eq('low_stock_alerted', true)
-
-  // 2. Find: active, at/below threshold, not yet alerted.
-  const { data: low, error } = await db
-    .from('products')
-    .select('sku, name, stock_qty')
+    .select('sku, name, stock_qty, low_stock_threshold, low_stock_alerted')
     .eq('is_active', true)
-    .lte('stock_qty', threshold)
-    .eq('low_stock_alerted', false)
-    .order('stock_qty')
 
-  if (error) {
-    console.error('[low-stock] find query failed:', error.message)
+  if (fetchError) {
+    console.error('[low-stock] fetch query failed:', fetchError.message)
     return { skipped: 'query error' }
   }
-  if (!low || low.length === 0) return { alerted: 0 }
+  if (!allActive || allActive.length === 0) return { alerted: 0 }
 
-  // 3. One email listing every newly low product.
-  const lines = low.map((p) => `  ${p.sku} — ${p.name}: ${p.stock_qty} left`).join('\n')
-  const subject = `Low stock: ${low.length} product${low.length === 1 ? '' : 's'} at/below ${threshold}`
+  // 2. Reset: products restocked above their effective threshold become eligible to alert again.
+  const restockedSkus = allActive
+    .filter((p) => p.low_stock_alerted && p.stock_qty > (p.low_stock_threshold ?? threshold))
+    .map((p) => p.sku)
+  if (restockedSkus.length > 0) {
+    await db
+      .from('products')
+      .update({ low_stock_alerted: false, updated_at: now })
+      .in('sku', restockedSkus)
+  }
+
+  // 3. Find: at/below their effective threshold, not yet alerted.
+  const low = allActive.filter((p) => {
+    const effectiveThreshold = p.low_stock_threshold ?? threshold
+    return !p.low_stock_alerted && p.stock_qty <= effectiveThreshold
+  })
+
+  if (low.length === 0) return { alerted: 0 }
+
+  // 4. One email listing every newly low product.
+  const lines = low
+    .map((p) => {
+      const effectiveThreshold = p.low_stock_threshold ?? threshold
+      return `  ${p.sku} — ${p.name}: ${p.stock_qty} left (threshold: ${effectiveThreshold})`
+    })
+    .join('\n')
+  const subject = `Low stock: ${low.length} product${low.length === 1 ? '' : 's'} at/below threshold`
   const text =
-    `These products are at or below the reorder threshold of ${threshold}:\n\n${lines}\n\n` +
-    `Reorder as needed. (You won't be alerted again for these until they're restocked above ${threshold} and drop low again.)\n`
+    `These products are at or below their reorder threshold:\n\n${lines}\n\n` +
+    `Reorder as needed. (You won't be alerted again for these until they're restocked above their threshold and drop low again.)\n`
 
   await sendMail({ to: process.env.REORDER_ALERT_TO!, subject, text })
 
-  // 4. Mark them alerted so they don't re-fire next sync.
+  // 5. Mark them alerted so they don't re-fire next sync.
   const skus = low.map((p) => p.sku)
   await db
     .from('products')
     .update({ low_stock_alerted: true, updated_at: now })
     .in('sku', skus)
 
-  console.log(`[low-stock] alerted on ${low.length} product(s) at/below ${threshold}`)
+  console.log(`[low-stock] alerted on ${low.length} product(s) at/below their threshold`)
   return { alerted: low.length }
 }

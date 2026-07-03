@@ -5,6 +5,11 @@ export interface Category {
   display_order: number
 }
 
+export interface VolumeTier {
+  min_qty: number
+  price_cents: number
+}
+
 export interface Product {
   id: string
   sku: string
@@ -21,6 +26,8 @@ export interface Product {
   // is_active === true AND manually_hidden === false.
   manually_hidden: boolean
   image_url: string | null
+  image_urls: string[]
+  volume_tiers: VolumeTier[] | null
   created_at: string
   updated_at: string
 }
