@@ -1,7 +1,23 @@
 import Link from 'next/link'
 import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
+import { getAdminClient } from '@/lib/supabase'
 
-export default function AdminDashboard() {
+export const dynamic = 'force-dynamic'
+
+export default async function AdminDashboard() {
+  let qbPending = 0
+  try {
+    const db = getAdminClient()
+    const { count } = await db
+      .from('order_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('entered_in_qb', false)
+      .neq('status', 'lost')
+    qbPending = count ?? 0
+  } catch {
+    // non-fatal — dashboard still renders without the count
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-10">
@@ -55,6 +71,77 @@ export default function AdminDashboard() {
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
                 Review incoming quote requests and update their status
+              </p>
+              {qbPending > 0 && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700">
+                  {qbPending} order{qbPending !== 1 ? 's' : ''} not yet entered in QB
+                </p>
+              )}
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/customers"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Customer Profiles
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Manage buyer discount rates — informational reference for QuickBooks entry
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/users"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Registered Users
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Buyers who created an account — sign-up date, last login, and order history
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/credit-applications"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Net-Terms Applications
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Review buyer applications for net-30 / net-60 payment terms
               </p>
             </div>
             <svg
@@ -177,6 +264,72 @@ export default function AdminDashboard() {
             </svg>
           </Link>
 
+          <Link
+            href="/admin/zero-results"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Zero-Result Searches
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Search terms that returned no products — catalog gaps or typos
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/reps"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Rep Performance
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Orders, revenue, and conversion rates by rep link
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/audit-log"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Audit Log
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                History of admin actions — stock adjustments and order status changes
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
           <div className="rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm">
             <h2 className="text-base font-semibold text-gray-900">Product Visibility</h2>
             <p className="text-sm text-gray-500 mt-0.5 mb-4">
@@ -184,6 +337,28 @@ export default function AdminDashboard() {
             </p>
             <BulkVisibilityActions />
           </div>
+
+          <Link
+            href="/admin/2fa-setup"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                2FA Setup
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Configure two-factor authentication for the admin login
+              </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
         </div>
 
         {/* Status note */}

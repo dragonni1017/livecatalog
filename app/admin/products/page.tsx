@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
-import ProductVisibilityToggle from '@/components/admin/ProductVisibilityToggle'
-import ProductEditButton from '@/components/admin/ProductEditButton'
-import StockAdjuster from '@/components/admin/StockAdjuster'
+import BulkStockTable from '@/components/admin/BulkStockTable'
 
 export const dynamic = 'force-dynamic'
+
+interface VolumeTier { min_qty: number; price_cents: number }
 
 interface AdminProduct {
   id: string
@@ -12,26 +12,54 @@ interface AdminProduct {
   name: string
   description: string | null
   image_url: string | null
+  image_urls: string[]
   is_active: boolean
   manually_hidden: boolean
   stock_qty: number
+  low_stock_threshold: number | null
+  volume_tiers: VolumeTier[] | null
+  category: { id: string; name: string } | null
 }
 
-export default async function AdminProductsPage() {
+export default async function AdminProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; category?: string; visibility?: string; active?: string }>
+}) {
+  const { q, category, visibility, active } = await searchParams
   const db = getAdminClient()
-  const { data } = await db
-    .from('products')
-    .select('id, sku, name, description, image_url, is_active, manually_hidden, stock_qty')
+
+  const { data: categories } = await db
+    .from('categories')
+    .select('id, name, slug')
     .order('name')
 
-  const products = (data ?? []) as AdminProduct[]
+  let query = db
+    .from('products')
+    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, category:categories(id, name)')
+    .order('name')
+    .limit(10000)
+
+  if (q) query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
+  if (category) {
+    const cat = (categories ?? []).find((c) => c.slug === category)
+    if (cat) query = query.eq('category_id', cat.id)
+  }
+  if (visibility === 'hidden') query = query.eq('manually_hidden', true)
+  if (visibility === 'visible') query = query.eq('manually_hidden', false)
+  if (active === 'active') query = query.eq('is_active', true)
+  if (active === 'inactive') query = query.eq('is_active', false)
+
+  const { data } = await query
+  const products = (data ?? []) as unknown as AdminProduct[]
   const total = products.length
   const hiddenCount = products.filter((p) => p.manually_hidden).length
   const noImageCount = products.filter((p) => !p.image_url || p.image_url.trim() === '').length
+  const hasFilters = !!(q || category || visibility || active)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 py-10">
+      <div className="max-w-6xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -43,9 +71,10 @@ export default async function AdminProductsPage() {
         </div>
 
         {/* Counts */}
-        <div className="mb-6 flex flex-wrap gap-4 text-sm">
+        <div className="mb-4 flex flex-wrap gap-4 text-sm">
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
-            <span className="font-semibold text-gray-900">{total.toLocaleString()}</span> total
+            <span className="font-semibold text-gray-900">{total.toLocaleString()}</span>{' '}
+            {hasFilters ? 'matching' : 'total'}
           </span>
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
             <span className="font-semibold text-gray-900">{hiddenCount.toLocaleString()}</span> hidden
@@ -55,77 +84,67 @@ export default async function AdminProductsPage() {
           </span>
         </div>
 
-        {/* Table */}
-        <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
-          <div className="overflow-auto max-h-[640px]">
-            <table className="w-full text-sm text-left">
-              <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Image</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Active</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Visibility</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {products.map((p) => {
-                  const hasImage = !!p.image_url && p.image_url.trim() !== ''
-                  return (
-                    <tr key={p.id}>
-                      <td className="px-4 py-3">
-                        {hasImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={p.image_url as string}
-                            alt={p.name}
-                            className="h-12 w-12 rounded object-cover bg-gray-100"
-                          />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded bg-gray-100 text-[10px] text-gray-400">
-                            No image
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-800 max-w-[280px] truncate">{p.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.sku || '—'}</td>
-                      <td className="px-4 py-3">
-                        {p.is_active ? (
-                          <span className="text-xs font-medium text-green-600">Active</span>
-                        ) : (
-                          <span className="text-xs font-medium text-gray-400">Inactive</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StockAdjuster id={p.id} name={p.name} stockQty={p.stock_qty} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <ProductVisibilityToggle id={p.id} initialHidden={p.manually_hidden} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <ProductEditButton
-                          id={p.id}
-                          name={p.name}
-                          description={p.description}
-                          imageUrl={p.image_url}
-                        />
-                      </td>
-                    </tr>
-                  )
-                })}
-                {products.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
-                      No products found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Filters */}
+        <form method="get" className="mb-6 flex flex-wrap items-center gap-3">
+          <input
+            type="search"
+            name="q"
+            defaultValue={q ?? ''}
+            placeholder="Search name or SKU…"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 w-56"
+          />
+          <select
+            name="category"
+            defaultValue={category ?? ''}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          >
+            <option value="">All categories</option>
+            {(categories ?? []).map((c) => (
+              <option key={c.id} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            name="visibility"
+            defaultValue={visibility ?? ''}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          >
+            <option value="">All visibility</option>
+            <option value="visible">Visible</option>
+            <option value="hidden">Hidden</option>
+          </select>
+
+          <select
+            name="active"
+            defaultValue={active ?? ''}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          >
+            <option value="">All status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          <button
+            type="submit"
+            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+          >
+            Apply
+          </button>
+
+          {hasFilters && (
+            <a
+              href="/admin/products"
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Clear filters
+            </a>
+          )}
+        </form>
+
+        {/* Table with bulk selection */}
+        <BulkStockTable products={products} />
       </div>
     </div>
   )

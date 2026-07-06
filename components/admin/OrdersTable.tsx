@@ -12,9 +12,11 @@ export interface OrderRow {
   status: OrderStatus
   customer_name: string
   customer_company: string | null
+  customer_email: string | null
   subtotal_cents: number
   created_at: string
   entered_in_qb: boolean
+  notes: string | null
   order_items: { count: number }[]
 }
 
@@ -40,10 +42,10 @@ const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
   { value: 'lost', label: 'Lost' },
 ]
 
-export default function OrdersTable({ orders }: { orders: OrderRow[] }) {
+export default function OrdersTable({ orders, initialSearch }: { orders: OrderRow[]; initialSearch?: string }) {
   const [status, setStatus] = useState<OrderStatus | 'all'>('all')
   const [qb, setQb] = useState<'all' | 'entered' | 'pending'>('all')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch ?? '')
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -52,7 +54,7 @@ export default function OrdersTable({ orders }: { orders: OrderRow[] }) {
       if (qb === 'entered' && !o.entered_in_qb) return false
       if (qb === 'pending' && o.entered_in_qb) return false
       if (q) {
-        const hay = `${o.reference_code} ${o.customer_name} ${o.customer_company ?? ''}`.toLowerCase()
+        const hay = `${o.reference_code} ${o.customer_name} ${o.customer_company ?? ''} ${o.customer_email ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -110,12 +112,17 @@ export default function OrdersTable({ orders }: { orders: OrderRow[] }) {
               {filtered.map((o) => (
                 <tr key={o.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/orders/${o.id}`}
-                      className="font-mono text-xs font-semibold text-red-600 hover:text-red-700"
-                    >
-                      {o.reference_code}
-                    </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/admin/orders/${o.id}`}
+                        className="font-mono text-xs font-semibold text-red-600 hover:text-red-700"
+                      >
+                        {o.reference_code}
+                      </Link>
+                      {o.notes?.startsWith('[RUSH') && (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">RUSH</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-800">
                     <div className="font-medium">{o.customer_company || o.customer_name}</div>

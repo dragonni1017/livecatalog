@@ -4,11 +4,16 @@ import OrdersTable, { type OrderRow } from '@/components/admin/OrdersTable'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AdminOrdersPage() {
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>
+}) {
+  const { email } = await searchParams
   const db = getAdminClient()
   const { data } = await db
     .from('order_requests')
-    .select('id, reference_code, status, customer_name, customer_company, subtotal_cents, created_at, entered_in_qb, order_items(count)')
+    .select('id, reference_code, status, customer_name, customer_company, customer_email, subtotal_cents, created_at, entered_in_qb, notes, order_items(count)')
     .order('created_at', { ascending: false })
 
   const orders = (data ?? []) as OrderRow[]
@@ -44,7 +49,7 @@ export default async function AdminOrdersPage() {
         </div>
 
         {/* Table with filters/search */}
-        <OrdersTable orders={orders} />
+        <OrdersTable orders={orders} initialSearch={email} />
       </div>
     </div>
   )

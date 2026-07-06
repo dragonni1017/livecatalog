@@ -3,25 +3,53 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface VolumeTier { min_qty: number; price_cents: number }
+
 interface Props {
   id: string
   name: string
   description: string | null
   imageUrl: string | null
+  imageUrls?: string[]
+  volumeTiers?: VolumeTier[]
 }
 
-export default function ProductEditButton({ id, name, description, imageUrl }: Props) {
+export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [] }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name, description: description ?? '', image_url: imageUrl ?? '' })
+  const [form, setForm] = useState({
+    name,
+    description: description ?? '',
+    image_url: imageUrl ?? '',
+    image_urls_text: imageUrls.join('\n'),
+  })
+  const [tiers, setTiers] = useState<VolumeTier[]>(volumeTiers)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function openModal() {
-    // Reset to the latest server-provided values each time it opens.
-    setForm({ name, description: description ?? '', image_url: imageUrl ?? '' })
+    setForm({
+      name,
+      description: description ?? '',
+      image_url: imageUrl ?? '',
+      image_urls_text: imageUrls.join('\n'),
+    })
+    setTiers(volumeTiers)
     setError(null)
     setOpen(true)
+  }
+
+  function addTier() {
+    setTiers((prev) => [...prev, { min_qty: 12, price_cents: 0 }])
+  }
+
+  function removeTier(i: number) {
+    setTiers((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  function updateTier(i: number, field: keyof VolumeTier, raw: string) {
+    const val = field === 'price_cents' ? Math.round(parseFloat(raw) * 100) : parseInt(raw, 10)
+    setTiers((prev) => prev.map((t, idx) => idx === i ? { ...t, [field]: isNaN(val) ? 0 : val } : t))
   }
 
   async function save(e: React.FormEvent) {
@@ -33,6 +61,11 @@ export default function ProductEditButton({ id, name, description, imageUrl }: P
     setSaving(true)
     setError(null)
     try {
+      const additionalUrls = form.image_urls_text
+        .split('\n')
+        .map((u) => u.trim())
+        .filter((u) => u !== '')
+
       const res = await fetch('/admin/api/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -41,6 +74,8 @@ export default function ProductEditButton({ id, name, description, imageUrl }: P
           name: form.name,
           description: form.description,
           image_url: form.image_url,
+          image_urls: additionalUrls,
+          volume_tiers: tiers.length > 0 ? tiers : null,
         }),
       })
       const data = await res.json()
@@ -97,7 +132,7 @@ export default function ProductEditButton({ id, name, description, imageUrl }: P
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Image URL</label>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Primary image URL</label>
                 <input
                   value={form.image_url}
                   onChange={(e) => setForm({ ...form, image_url: e.target.value })}
@@ -113,6 +148,107 @@ export default function ProductEditButton({ id, name, description, imageUrl }: P
                   />
                 )}
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Additional images <span className="font-normal text-gray-400">(one URL per line)</span>
+                </label>
+                <textarea
+                  value={form.image_urls_text}
+                  onChange={(e) => setForm({ ...form, image_urls_text: e.target.value })}
+                  rows={3}
+                  placeholder={'https://example.com/img1.jpg\nhttps://example.com/img2.jpg'}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 font-mono"
+                />
+                {/* Thumbnail previews of current additional URLs */}
+                {(() => {
+                  const urls = form.image_urls_text
+                    .split('\n')
+                    .map((u) => u.trim())
+                    .filter((u) => u !== '')
+                  if (urls.length === 0) return null
+                  return (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {urls.map((url, i) => (
+                        <div key={i} className="relative group">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Additional image ${i + 1}`}
+                            className="h-14 w-14 rounded object-contain bg-gray-100 border border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            title="Remove this URL"
+                            onClick={() => {
+                              const lines = form.image_urls_text
+                                .split('\n')
+                                .map((u) => u.trim())
+                                .filter((u) => u !== '')
+                              lines.splice(i, 1)
+                              setForm({ ...form, image_urls_text: lines.join('\n') })
+                            }}
+                            className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-white text-[10px] leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+
+            {/* Volume tiers */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-xs font-medium text-gray-600">Volume pricing tiers</label>
+                <button
+                  type="button"
+                  onClick={addTier}
+                  className="text-xs text-red-600 hover:text-red-700 font-medium"
+                >
+                  + Add tier
+                </button>
+              </div>
+              {tiers.length === 0 ? (
+                <p className="text-xs text-gray-400">No tiers — standard price applies.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {tiers.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500">Qty ≥</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={t.min_qty}
+                          onChange={(e) => updateTier(i, 'min_qty', e.target.value)}
+                          className="w-16 rounded border border-gray-300 px-2 py-1 text-xs text-gray-900 focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500">Price $</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={(t.price_cents / 100).toFixed(2)}
+                          onChange={(e) => updateTier(i, 'price_cents', e.target.value)}
+                          className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-gray-900 focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeTier(i)}
+                        className="text-gray-400 hover:text-red-600 text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

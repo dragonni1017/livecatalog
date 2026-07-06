@@ -58,6 +58,45 @@ export async function PATCH(request: NextRequest) {
     }
     if (typeof body.description === 'string') updates.description = body.description.trim() || null
     if (typeof body.image_url === 'string') updates.image_url = body.image_url.trim() || null
+    if ('image_urls' in body) {
+      const raw = body.image_urls
+      if (!Array.isArray(raw)) {
+        return NextResponse.json({ error: 'image_urls must be an array' }, { status: 400 })
+      }
+      const cleaned = (raw as unknown[])
+        .filter((u) => typeof u === 'string' && u.trim() !== '')
+        .map((u) => (u as string).trim())
+      updates.image_urls = cleaned
+    }
+    if ('volume_tiers' in body) {
+      const raw = body.volume_tiers
+      if (raw === null) {
+        updates.volume_tiers = null
+      } else if (Array.isArray(raw)) {
+        const tiers = raw as { min_qty: unknown; price_cents: unknown }[]
+        for (const t of tiers) {
+          if (!Number.isInteger(t.min_qty) || (t.min_qty as number) < 1) {
+            return NextResponse.json({ error: 'Each tier min_qty must be a positive integer' }, { status: 400 })
+          }
+          if (!Number.isInteger(t.price_cents) || (t.price_cents as number) < 0) {
+            return NextResponse.json({ error: 'Each tier price_cents must be a non-negative integer' }, { status: 400 })
+          }
+        }
+        updates.volume_tiers = tiers.length > 0 ? tiers : null
+      } else {
+        return NextResponse.json({ error: 'volume_tiers must be an array or null' }, { status: 400 })
+      }
+    }
+    if ('low_stock_threshold' in body) {
+      const val = body.low_stock_threshold
+      if (val === null) {
+        updates.low_stock_threshold = null
+      } else if (typeof val === 'number' && Number.isInteger(val) && val >= 0) {
+        updates.low_stock_threshold = val
+      } else {
+        return NextResponse.json({ error: 'low_stock_threshold must be a non-negative integer or null' }, { status: 400 })
+      }
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

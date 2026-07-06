@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { OrderStatus } from '@/lib/types'
+import { logAudit } from '@/lib/audit'
+import { notifyOrderStatusChange } from '@/lib/order-emails'
 
 // This route lives under /admin, so middleware.ts already gates it behind the
 // admin auth cookie — no extra auth check needed here.
@@ -35,6 +37,13 @@ export async function PATCH(request: NextRequest) {
     const db = getAdminClient()
     const now = new Date().toISOString()
 
+    // Fetch current values before updating so we can record old_value in the audit log
+    const { data: current } = await db
+      .from('order_requests')
+      .select('status, entered_in_qb')
+      .eq('id', id)
+      .single()
+
     const patch: Record<string, unknown> = { updated_at: now }
     if (hasStatus) {
       patch.status = body.status as OrderStatus
@@ -49,6 +58,19 @@ export async function PATCH(request: NextRequest) {
 
     const { error } = await db.from('order_requests').update(patch).eq('id', id)
     if (error) throw error
+
+    await logAudit({
+      action: hasStatus ? 'order_status_change' : 'order_qb_toggle',
+      entity_type: 'order',
+      entity_id: id,
+      old_value: hasStatus ? (current?.status ?? undefined) : (current != null ? String(current.entered_in_qb) : undefined),
+      new_value: hasStatus ? body.status : String(body.enteredInQb),
+    })
+
+    // Best-effort customer notification — never blocks the response
+    if (hasStatus && (body.status === 'contacted' || body.status === 'converted' || body.status === 'lost')) {
+      await notifyOrderStatusChange({ orderId: id, status: body.status, db })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

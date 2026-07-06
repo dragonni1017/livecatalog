@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logAudit } from '@/lib/audit'
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -88,6 +89,15 @@ export async function POST(request: NextRequest) {
       .update({ stock_qty: newQty, updated_at: new Date().toISOString() })
       .eq('id', productId)
     if (updateError) throw updateError
+
+    await logAudit({
+      action: 'stock_adjust',
+      entity_type: 'product',
+      entity_id: productId,
+      entity_label: product.sku,
+      old_value: String(previousQty),
+      new_value: String(newQty),
+    })
 
     const { error: logError } = await db.from('stock_adjustments').insert({
       product_id: productId,
