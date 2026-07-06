@@ -1,28 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
-import { isSmtpConfigured, sendMail } from '@/lib/email'
-import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS, formatPriceCents } from '@/lib/order-rules'
-import type { CheckoutContact } from '@/lib/types'
+import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation'
+import { notifyReps, notifyCustomer } from '@/lib/order-emails'
+import { getEffectivePrice, type VolumeTier } from '@/lib/order-rules'
 
 export const dynamic = 'force-dynamic'
-
-interface IncomingItem {
-  productId: string
-  qty: number
-}
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   return !url || url === 'your-supabase-url' || url.includes('placeholder')
 }
 
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`
-}
-
 // ORD-<year>-<4-digit sequence>. Sequence derived from this year's order count.
-// The reference_code unique constraint guards against a concurrent collision;
-// the caller retries with the next number if an insert is rejected.
+// The reference_code unique constraint guards against concurrent collisions;
+// the caller retries with the next number if the RPC returns a 23505 violation.
 async function nextReferenceCode(
   db: ReturnType<typeof getAdminClient>,
   attempt: number,
@@ -39,31 +30,25 @@ async function nextReferenceCode(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const items: IncomingItem[] = Array.isArray(body.items) ? body.items : []
-    const contact: CheckoutContact = body.contact ?? {}
 
-    // ── Validate ────────────────────────────────────────────────────────────
-    if (!contact.name?.trim() || !contact.email?.trim()) {
-      return NextResponse.json({ error: 'Name and email are required.' }, { status: 400 })
+    // ── 1. Validate input (Django form-validation pattern) ───────────────────
+    const validation = validateOrderInput(body)
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
-    const cleanItems = items.filter((i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0)
-    if (cleanItems.length === 0) {
-      return NextResponse.json({ error: 'Your cart is empty.' }, { status: 400 })
-    }
+    const { contact, items } = validation
 
-    // ── Mock mode: no Supabase wired up locally — return a fake reference ─────
     if (isMockMode()) {
       return NextResponse.json({ referenceCode: 'ORD-MOCK-0001', orderId: 'mock' })
     }
 
     const db = getAdminClient()
 
-    // ── Re-fetch authoritative product data server-side (never trust client) ──
-    const ids = cleanItems.map((i) => i.productId)
+    // ── 2. Re-fetch authoritative product data (never trust client prices) ───
     const { data: products, error: prodErr } = await db
       .from('products')
-      .select('id, sku, name, price_cents, stock_qty, is_active, manually_hidden')
-      .in('id', ids)
+      .select('id, sku, name, price_cents, stock_qty, is_active, manually_hidden, volume_tiers')
+      .in('id', items.map((i) => i.productId))
 
     if (prodErr) {
       console.error('[orders] product lookup failed:', prodErr.message)
@@ -72,27 +57,22 @@ export async function POST(request: NextRequest) {
 
     const byId = new Map((products ?? []).map((p) => [p.id, p]))
     const lineItems: {
-      product_id: string
-      sku: string
-      name: string
-      unit_price_cents: number
-      qty: number
-      line_total_cents: number
+      product_id: string; sku: string; name: string
+      unit_price_cents: number; qty: number; line_total_cents: number
     }[] = []
     const outOfStock: string[] = []
 
-    for (const item of cleanItems) {
+    for (const item of items) {
       const p = byId.get(item.productId)
-      // Skip anything not currently orderable (deleted, inactive, or hidden).
       if (!p || !p.is_active || p.manually_hidden) continue
-      if (p.stock_qty < item.qty) outOfStock.push(`${p.sku} (${p.name}) — ${p.stock_qty} in stock, ${item.qty} requested`)
+      if (p.stock_qty < item.qty) {
+        outOfStock.push(`${p.sku} (${p.name}) — ${p.stock_qty} in stock, ${item.qty} requested`)
+      }
+      const unitPrice = getEffectivePrice(p.price_cents, item.qty, p.volume_tiers as VolumeTier[] | null)
       lineItems.push({
-        product_id: p.id,
-        sku: p.sku,
-        name: p.name,
-        unit_price_cents: p.price_cents,
-        qty: item.qty,
-        line_total_cents: p.price_cents * item.qty,
+        product_id: p.id, sku: p.sku, name: p.name,
+        unit_price_cents: unitPrice, qty: item.qty,
+        line_total_cents: unitPrice * item.qty,
       })
     }
 
@@ -103,43 +83,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const subtotalCents = lineItems.reduce((sum, li) => sum + li.line_total_cents, 0)
-
-    // ── Enforce the order minimum (server-side; the cart also gates this) ─────
-    if (!meetsOrderMinimum(subtotalCents)) {
-      return NextResponse.json(
-        { error: `Minimum order is ${formatPriceCents(MIN_ORDER_SUBTOTAL_CENTS)}. Add more items to submit.` },
-        { status: 400 },
-      )
+    // ── 2b. Apply customer discount if on file ───────────────────────────────
+    const { data: customer } = await db
+      .from('customers')
+      .select('discount_percent')
+      .eq('email', contact.email.trim().toLowerCase())
+      .maybeSingle()
+    const discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
+    if (discountPct > 0) {
+      for (const li of lineItems) {
+        li.line_total_cents = Math.round(li.line_total_cents * (1 - discountPct / 100))
+      }
     }
 
-    // ── Insert order + items (retry reference code on unique collision) ───────
+    const subtotalCents = lineItems.reduce((sum, li) => sum + li.line_total_cents, 0)
+
+    // ── 3. Enforce order minimum ─────────────────────────────────────────────
+    const minErr = validateOrderMinimum(subtotalCents)
+    if (minErr) {
+      return NextResponse.json({ error: minErr.error }, { status: minErr.status })
+    }
+
+    // ── 4. Atomically insert order + items via RPC (Django atomic() pattern) ─
+    // submit_order() wraps both inserts in a single PostgreSQL transaction —
+    // no orphaned order_requests row if the items insert fails.
     let orderId: string | null = null
     let referenceCode = ''
     for (let attempt = 0; attempt < 3 && !orderId; attempt++) {
       referenceCode = await nextReferenceCode(db, attempt)
-      const { data, error } = await db
-        .from('order_requests')
-        .insert({
-          reference_code: referenceCode,
-          status: 'new',
-          customer_name: contact.name.trim(),
-          customer_email: contact.email.trim(),
-          customer_phone: contact.phone?.trim() || null,
-          customer_company: contact.company?.trim() || null,
-          notes: contact.notes?.trim() || null,
-          subtotal_cents: subtotalCents,
-          placed_by_rep: contact.placedByRep?.trim() || null,
-          po_number: contact.poNumber?.trim() || null,
-        })
-        .select('id')
-        .single()
+      const { data, error } = await db.rpc('submit_order', {
+        p_reference_code:   referenceCode,
+        p_customer_name:    contact.name.trim(),
+        p_customer_email:   contact.email.trim().toLowerCase(),
+        p_customer_phone:   contact.phone?.trim() || null,
+        p_customer_company: contact.company?.trim() || null,
+        p_notes:            contact.notes?.trim() || null,
+        p_subtotal_cents:   subtotalCents,
+        p_placed_by_rep:    contact.placedByRep?.trim() || null,
+        p_po_number:        contact.poNumber?.trim() || null,
+        p_items:            lineItems,
+      })
       if (!error) {
-        orderId = data.id
+        orderId = data as string
       } else if (error.code === '23505') {
         continue // duplicate reference_code — retry with next number
       } else {
-        console.error('[orders] insert order_requests failed:', error.message)
+        console.error('[orders] submit_order rpc failed:', error.message)
         return NextResponse.json({ error: 'Could not submit your request. Please try again.' }, { status: 500 })
       }
     }
@@ -148,19 +137,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Could not generate an order reference. Please try again.' }, { status: 500 })
     }
 
-    const { error: itemsErr } = await db
-      .from('order_items')
-      .insert(lineItems.map((li) => ({ ...li, order_id: orderId })))
-    if (itemsErr) {
-      console.error('[orders] insert order_items failed:', itemsErr.message)
-      // Roll back the parent so we don't leave an order with no items.
-      await db.from('order_requests').delete().eq('id', orderId)
-      return NextResponse.json({ error: 'Could not submit your request. Please try again.' }, { status: 500 })
-    }
+    // ── 5. Side effects after commit (Django on_commit() pattern) ────────────
+    // These run after the transaction has committed — never block the response
+    // and never roll back the order on failure.
+    void db
+      .from('cart_sessions')
+      .update({ order_placed_at: new Date().toISOString() })
+      .eq('email', contact.email.trim())
+      .is('order_placed_at', null)
 
-    // ── Notify sales reps + confirm to customer — best-effort, never fails the order ──
     await Promise.allSettled([
-      notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock }),
+      notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct }),
       notifyCustomer({ referenceCode, contact, lineItems, subtotalCents }),
     ]).then((results) => {
       const labels = ['rep notification', 'customer confirmation']
@@ -174,99 +161,4 @@ export async function POST(request: NextRequest) {
     console.error('[orders] unexpected error:', err)
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
-}
-
-async function notifyReps(args: {
-  referenceCode: string
-  contact: CheckoutContact
-  lineItems: { sku: string; name: string; unit_price_cents: number; qty: number; line_total_cents: number }[]
-  subtotalCents: number
-  outOfStock: string[]
-}): Promise<void> {
-  const to = process.env.SALES_ALERT_TO
-  if (!isSmtpConfigured() || !to) {
-    console.log('[orders] SMTP / SALES_ALERT_TO not set — skipping rep notification')
-    return
-  }
-
-  const { referenceCode, contact, lineItems, subtotalCents, outOfStock } = args
-  const who = contact.company?.trim() || contact.name.trim()
-  const subject = `New order request ${referenceCode} — ${who} (${formatPrice(subtotalCents)})`
-
-  // Optional sales-rep CC — only if it looks like a real email address.
-  const ccRaw = contact.ccEmail?.trim()
-  const cc = ccRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccRaw) ? ccRaw : undefined
-
-  const itemLines = lineItems
-    .map((li) => `  ${li.qty} × ${li.sku} — ${li.name} @ ${formatPrice(li.unit_price_cents)} = ${formatPrice(li.line_total_cents)}`)
-    .join('\n')
-
-  const text =
-    `New order request: ${referenceCode}\n\n` +
-    `Customer\n` +
-    `  Name:    ${contact.name.trim()}\n` +
-    `  Email:   ${contact.email.trim()}\n` +
-    `  Phone:   ${contact.phone?.trim() || '—'}\n` +
-    `  Company: ${contact.company?.trim() || '—'}\n` +
-    `  Rep:     ${contact.placedByRep?.trim() || '—'}\n` +
-    `  PO #:    ${contact.poNumber?.trim() || '—'}\n` +
-    `  CC:      ${cc || '—'}\n\n` +
-    `Items\n${itemLines}\n\n` +
-    `Subtotal: ${formatPrice(subtotalCents)}\n\n` +
-    (contact.notes?.trim() ? `Notes\n  ${contact.notes.trim()}\n\n` : '') +
-    (outOfStock.length
-      ? `⚠️ Stock warnings (confirm availability before quoting):\n${outOfStock.map((s) => `  ${s}`).join('\n')}\n\n`
-      : '') +
-    `Reply to this email to reach the customer directly.\n`
-
-  await sendMail({
-    to,
-    subject,
-    text,
-    replyTo: contact.email.trim(),
-    from: process.env.SALES_ALERT_FROM || undefined,
-    cc,
-  })
-}
-
-// Confirmation to the customer who placed the request. Best-effort — guarded the
-// same way as the rep notification, so a missing SMTP config just skips it. Sent
-// FROM the sales mailbox with Reply-To pointed at SALES_ALERT_TO, so if the
-// customer replies they reach the team rather than the no-reply automation.
-async function notifyCustomer(args: {
-  referenceCode: string
-  contact: CheckoutContact
-  lineItems: { sku: string; name: string; unit_price_cents: number; qty: number; line_total_cents: number }[]
-  subtotalCents: number
-}): Promise<void> {
-  if (!isSmtpConfigured()) {
-    console.log('[orders] SMTP not set — skipping customer confirmation')
-    return
-  }
-
-  const { referenceCode, contact, lineItems, subtotalCents } = args
-  const to = contact.email.trim()
-  const subject = `We received your order request — ${referenceCode}`
-
-  const itemLines = lineItems
-    .map((li) => `  ${li.qty} × ${li.name} (${li.sku}) @ ${formatPrice(li.unit_price_cents)} = ${formatPrice(li.line_total_cents)}`)
-    .join('\n')
-
-  const text =
-    `Hi ${contact.name.trim()},\n\n` +
-    `Thanks for your request — we've received it and a member of our team will be in touch shortly to confirm availability and next steps.\n\n` +
-    `Your reference: ${referenceCode}\n\n` +
-    `Items requested\n${itemLines}\n\n` +
-    `Subtotal: ${formatPrice(subtotalCents)}\n\n` +
-    `This is a request, not a finalized order — pricing and availability are confirmed by our team before anything is charged.\n\n` +
-    `If you have any questions, just reply to this email.\n\n` +
-    `— L & Y USA\n`
-
-  await sendMail({
-    to,
-    subject,
-    text,
-    replyTo: process.env.SALES_ALERT_TO || undefined,
-    from: process.env.SALES_ALERT_FROM || undefined,
-  })
 }

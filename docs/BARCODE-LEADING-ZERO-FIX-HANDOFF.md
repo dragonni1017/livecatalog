@@ -1,6 +1,6 @@
 # Handoff: Barcode Leading-Zero Fix (TBarcode mismatch)
 
-**Status:** Code changes complete in this session. Verified with a standalone logic test, but **not** verified against the real Supabase DB or a real `npm run build` — this sandbox had a stale/flaky mounted view of the project (see "Known sandbox caveat" below) and no network access to Supabase. Claude Code should re-verify both before considering this done.
+**Status:** Code complete and verified — `tsc`/`npm run build` both clean, `barcode_corrections` table confirmed live with correct schema, live barcode-length distribution confirmed (see Progress Log, 2026-06-26). Remaining open items: backfill the 11 known stripped-zero rows and re-check the source spreadsheet's column formatting — both need a session with the external source-spreadsheet folder mounted (not available in the 2026-06-26 session).
 
 **For Claude Code:** read this fully before touching code. Update the "Progress Log" at the bottom as you work.
 
@@ -95,5 +95,16 @@ This session's sandbox had a stale/inconsistent view of the project directory wh
 ## Progress Log
 
 *(Claude Code: append entries here as you work.)*
+
+- **2026-06-26 — Verification pass (build/DB confirmed, DB backfill deferred by user).**
+  - **`npx tsc --noEmit`: clean.** No errors.
+  - **`npm run build`: succeeded.** Had to build from a fresh copy outside the FUSE-mounted repo dir (`/tmp/build-test`, `npm install` + `npm run build`) — building in-place hit the same FUSE-mount `EPERM: unlink .next/...` flakiness this doc warned about. Not a code issue. One unrelated, expected warning: the sitemap generation step logged a `fetch failed` / `EAI_AGAIN` for `*.supabase.co` because this sandbox has no outbound network to Supabase — pre-existing/environmental, unrelated to the barcode fix.
+  - **`barcode_corrections` table already exists** in the live DB (`aguorduaxfqrvvywgrdi` project) with the exact schema this doc specifies (id, sku, column_name, original_value, corrected_value, source, corrected_at) — someone already ran the migration. 0 rows currently (no corrections logged yet, consistent with no import/backfill run since it was created).
+  - **Live barcode length distribution** (`products`, 3,016 rows total): 11-digit = **11**, 12-digit = **2,918**, 13-digit = **3**. No 7-digit or 8-digit values present.
+  - **The 11-digit rows** (unambiguous stripped-zero UPC-A per this doc's design — `normalizeBarcode()` already fixes these at render time, but the stored DB value is still wrong): `F286653-WT` (73787907383), `K01873` (91671105019), `K01881` (91671105064), `K01885` (91671105088), `K02203` (91671007771), `K02311` (91671115353), `K02561` (91671007979), `K02565` (91671008488), `K229480` (73787910121), `L61981` (91671961981), `T642055` (73787088036).
+  - **Could not run the real backfill / re-import**: `scripts/backfill-barcodes.mjs`'s default source path (`C:/Users/thien/Downloads/ImageOrganization/ImageOrganization/_handoff/Erply_Product_Import_WC_Format_FINAL.xlsx`) lives outside this session's mounted folder (only `livecatalog/` is mounted) — no access to the real TBarcode source spreadsheet, so the "check column formatting" and "re-run backfill" remaining-task items are still open and need a session with that folder connected.
+  - **Offered to directly zero-pad the 11 known-bad rows in the DB** (with matching `barcode_corrections` audit entries, `source = 'backfill'`) as a stand-in for the real backfill, since the correction is unambiguous regardless of the source file. **User declined** — left as-is for now. The 11 SKUs above are documented here so a future session (with the source file available) can run the proper backfill instead.
+  - **2,918 ambiguous 12-digit values**: unchanged, by design — still need a source-spreadsheet cross-check before any of these could be touched, same as originally scoped.
+  - **Not done this pass**: adding a committed test file (still no test runner in the project, per `CLAUDE.md` — out of scope).
 
 - **2026-06-22 — Added audit logging for auto-corrections (user request).** Added item #4 above: `BarcodeCorrection` type, `recoverLeadingZeros()` now returns corrections alongside fixed rows, `/api/import` logs them to a new `barcode_corrections` table, `backfill-barcodes.mjs` does the same. Verified the correction-detection logic (both the client-side and backfill-script versions) against synthetic sheets via standalone scripts — both correctly flag only the actually-recovered value (`WIDGET-1`) and leave the already-correct one (`WIDGET-2`) and non-numeric one (`WIDGET-3`/skipped) alone. **Table not created yet** — that SQL still needs to be run by hand; until then the insert fails safely (logged warning, import/backfill still completes).

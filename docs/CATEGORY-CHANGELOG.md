@@ -239,4 +239,38 @@ To undo this pass exactly, using `docs/category-merge-backups/2026-06-25-merge-b
 1. Re-insert the 16 deleted rows from `categories_before` (only the ones not equal to a surviving id: all except cat-059, cat-043, cat-047, cat-064).
 2. For every entry in `products_before`, run `UPDATE products SET category_id = '<old_category_id>' WHERE id = '<id>'`.
 3. Rename the 4 survivor categories back: cat-059 → "Tumbler", cat-043 → "Pens", cat-047 → "Plush Toys", cat-064 → "Christmas".
+
+---
+
+## EXECUTED — 2026-06-26 — Medium-confidence audit + 2 clean merges
+
+Audited the 5 "Medium confidence" groups deferred on 2026-06-25, at the SKU level (not just category counts):
+
+- **Floral & Flower Decor** — NOT merged. Floral Supplies (179 SKUs) has more cross-contamination than the original "pearl beads" caveat implied: a fleece blanket, plastic plates, a compact mirror, storage racks, cake toppers, thank-you cards. Needs a sub-split before merging.
+- **Gift Packaging & Wrap** — NOT merged. Ribbons (179 SKUs) is mostly genuine ribbon (the "mis-tagged" caveat overstates it), but carries a real tail of ~15-20 gift boxes/baskets/unrelated SKUs that should move out first.
+- **Lighting & Electronics** — NOT merged. Dome (45 SKUs): 43 are flower-in-glass decor (LED is just a feature) and only 2 are bare LED strips that aren't dome products at all. Most of Dome likely belongs in Floral, not Lighting — needs reassignment, not a straight merge.
+- **Accessories & Apparel** — checked Accessories, Hair Bands, Beanies, Hats, Slippers at SKU level: clean (one stray slime-bottle SKU in Accessories, not worth blocking on). **Merged.**
+- **Beauty & Personal Care** — checked Beauty Supplies, Mirrors, Hair Dryers, Cosmetic Bags at SKU level: clean. **Merged.**
+
+Merged the 2 clean groups using the same pattern as 2026-06-25 (survivor = largest member by count, keeps its `id`/`slug`, other members repointed then deleted, single `BEGIN…COMMIT`).
+
+**Full pre-merge snapshot (9 source categories + the exact `product_id → old_category_id` mapping for all 241 affected products) saved to** `docs/category-merge-backups/2026-06-26-merge-backup.json`.
+
+| New category | Survivor row (id / slug) | Absorbed (deleted) | Final count |
+|---|---|---|---|
+| **Accessories & Apparel** | cat-052 / `slippers` | Accessories (31), Hair Bands (26), Beanies (16), Hats (3) | 137 |
+| **Beauty & Personal Care** | cat-040 / `mirrors` | Beauty Supplies (18), Cosmetic Bags (6), Hair Dryers (1) | 104 |
+
+Verified after running:
+- Categories: 50 → **43** (7 rows deleted: 4+3 across the two groups).
+- Products: **3,016** unchanged / **0** orphaned.
+- Both survivor categories' final counts matched the plan exactly (137, 104 — table above).
+
+**Not touched this pass** (left exactly as-is — needs sub-split work first, see audit notes above): *Floral & Flower Decor*, *Gift Packaging & Wrap*, *Lighting & Electronics*.
+
+### Revert instructions
+To undo this pass exactly, using `docs/category-merge-backups/2026-06-26-merge-backup.json`:
+1. Re-insert the 7 deleted rows from `categories_before` (all except cat-052 and cat-040).
+2. For every entry in `products_before`, run `UPDATE products SET category_id = '<old_category_id>' WHERE id = '<id>'`.
+3. Rename the 2 survivor categories back: cat-052 → "Slippers", cat-040 → "Mirrors".
 4. Re-verify: total products 3,016, 0 orphaned, categories back to 66.
