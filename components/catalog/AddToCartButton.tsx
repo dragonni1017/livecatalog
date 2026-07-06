@@ -77,7 +77,7 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
         }}
         className={
           'flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 ' +
-          (detail ? 'h-11 w-11 text-lg' : 'h-7 w-6 text-sm')
+          (detail ? 'h-11 w-11 text-lg' : 'h-9 w-8 text-sm sm:h-7 sm:w-6')
         }
         disabled={qty <= 1}
       >
@@ -95,7 +95,7 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
         }}
         className={
           'border-x border-gray-300 text-center text-gray-900 focus:outline-none ' +
-          (detail ? 'h-11 w-14 text-sm' : 'h-7 w-9 text-xs')
+          (detail ? 'h-11 w-14 text-sm' : 'h-9 w-9 text-xs sm:h-7')
         }
       />
       <button
@@ -107,7 +107,7 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
         }}
         className={
           'flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 ' +
-          (detail ? 'h-11 w-11 text-lg' : 'h-7 w-6 text-sm')
+          (detail ? 'h-11 w-11 text-lg' : 'h-9 w-8 text-sm sm:h-7 sm:w-6')
         }
         disabled={qty >= max}
       >
@@ -125,7 +125,7 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
         aria-label={`Add ${qty} ${product.name} to cart`}
         className={
           'rounded-md bg-red-600 font-semibold text-white transition-colors hover:bg-red-700 ' +
-          (detail ? 'h-11 flex-1 px-4 text-sm' : 'px-3 py-1.5 text-xs')
+          (detail ? 'h-11 flex-1 px-4 text-sm' : 'px-3 py-2 text-xs sm:py-1.5')
         }
       >
         {justAdded ? (detail ? 'Added to cart ✓' : 'Added ✓') : detail ? 'Add to Cart' : 'Add'}

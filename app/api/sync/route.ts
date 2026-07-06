@@ -39,10 +39,20 @@ export async function GET(request: NextRequest) {
     // Still run the daily low-stock check against current DB stock — it's
     // decoupled from the (destructive, disabled) product sync.
     let lowStock: unknown = { skipped: 'not run' }
+    let abandonedCarts: unknown = { skipped: 'not run' }
     try {
       const { getAdminClient } = await import('@/lib/supabase')
       const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
-      lowStock = await checkLowStockAndNotify(getAdminClient())
+      const { checkAbandonedCarts } = await import('@/lib/abandoned-cart')
+      const db = getAdminClient()
+      lowStock = await checkLowStockAndNotify(db)
+      try {
+        await checkAbandonedCarts(db)
+        abandonedCarts = { ok: true }
+      } catch (err) {
+        console.error('[sync] abandoned-cart check failed (non-fatal):', err)
+        abandonedCarts = { error: String(err) }
+      }
     } catch (err) {
       console.error('[sync] low-stock check failed (non-fatal):', err)
     }
@@ -51,6 +61,7 @@ export async function GET(request: NextRequest) {
       skipped: true,
       reason: 'Erply not configured; product sync skipped to protect the catalog',
       lowStock,
+      abandonedCarts,
       syncedAt: new Date().toISOString(),
     })
   }
@@ -79,6 +90,24 @@ export async function GET(request: NextRequest) {
     const db = getAdminClient()
     const result: ImportResult = await syncToSupabase(products, db)
 
+    // 4. Run daily auxiliary checks (low-stock + abandoned carts)
+    let lowStock: unknown = { skipped: 'not run' }
+    let abandonedCarts: unknown = { skipped: 'not run' }
+    try {
+      const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
+      lowStock = await checkLowStockAndNotify(db)
+    } catch (err) {
+      console.error('[sync] low-stock check failed (non-fatal):', err)
+    }
+    try {
+      const { checkAbandonedCarts } = await import('@/lib/abandoned-cart')
+      await checkAbandonedCarts(db)
+      abandonedCarts = { ok: true }
+    } catch (err) {
+      console.error('[sync] abandoned-cart check failed (non-fatal):', err)
+      abandonedCarts = { error: String(err) }
+    }
+
     const elapsed = Date.now() - startedAt
     console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length}`)
 
@@ -86,6 +115,8 @@ export async function GET(request: NextRequest) {
       ok: true,
       syncedAt: new Date().toISOString(),
       durationMs: elapsed,
+      lowStock,
+      abandonedCarts,
       ...result,
     })
   } catch (err) {

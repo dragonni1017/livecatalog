@@ -2,7 +2,7 @@ import { cache } from 'react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
 import { extractPackSpec } from '@/lib/pack'
@@ -11,6 +11,8 @@ import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
 import ProductCard from '@/components/catalog/ProductCard'
 import TrackView from '@/components/catalog/TrackView'
+import BackInStockForm from '@/components/catalog/BackInStockForm'
+import ImageGallery from '@/components/catalog/ImageGallery'
 
 // Cache the rendered page for 10 minutes (ISR). Product pages don't depend on
 // per-request state, so this serves them from cache and only re-queries Supabase
@@ -80,6 +82,47 @@ export default async function ProductPage({ params }: ProductPageProps) {
     related = (data ?? []) as Product[]
   }
 
+  // "Customers also ordered" — products most frequently co-purchased with this one.
+  // Uses two queries against order_items (RLS = service role only) + a JS count.
+  let alsoOrdered: Product[] = []
+  const db = getAdminClient()
+  const { data: orderRows } = await db
+    .from('order_items')
+    .select('order_id')
+    .eq('product_id', product.id)
+
+  const orderIds = (orderRows ?? []).map((r) => r.order_id)
+  if (orderIds.length > 0) {
+    const { data: coItems } = await db
+      .from('order_items')
+      .select('product_id')
+      .in('order_id', orderIds)
+      .neq('product_id', product.id)
+      .not('product_id', 'is', null)
+
+    const counts: Record<string, number> = {}
+    for (const row of coItems ?? []) {
+      if (row.product_id) counts[row.product_id] = (counts[row.product_id] ?? 0) + 1
+    }
+    const topIds = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([pid]) => pid)
+
+    if (topIds.length > 0) {
+      const { data: coProducts } = await supabase
+        .from('products')
+        .select('*, category:categories(*)')
+        .in('id', topIds)
+        .eq('is_active', true)
+        .eq('manually_hidden', false)
+      const byId = new Map((coProducts ?? []).map((p) => [p.id, p]))
+      alsoOrdered = topIds
+        .map((pid) => byId.get(pid))
+        .filter((p): p is NonNullable<typeof p> => !!p) as Product[]
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <TrackView productId={product.id} />
@@ -97,23 +140,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2">
-          {/* Image */}
-          <div className="aspect-square bg-gray-100 flex items-center justify-center">
-            {product.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={cdnImage(product.image_url, 800) ?? undefined}
-                alt={product.name}
-                className="h-full w-full object-contain p-4"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-gray-400">
-                <svg className="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3 9.75h.008v.008H3V9.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                </svg>
-                <span className="text-sm">No Image Available</span>
-              </div>
-            )}
+          {/* Image gallery */}
+          <div className="p-4">
+            <ImageGallery
+              primaryUrl={product.image_url ? (cdnImage(product.image_url, 800) ?? product.image_url) : null}
+              additionalUrls={product.image_urls ?? []}
+              productName={product.name}
+            />
           </div>
 
           {/* Details */}
@@ -137,7 +170,29 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             {product.barcode && <Barcode value={product.barcode} />}
 
-            <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
+            {product.volume_tiers && product.volume_tiers.length > 0 ? (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Volume pricing</p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 text-gray-500">1+ units</td>
+                      <td className="py-1.5 text-right font-semibold text-gray-900">{formatPrice(product.price_cents)}</td>
+                    </tr>
+                    {[...product.volume_tiers]
+                      .sort((a, b) => a.min_qty - b.min_qty)
+                      .map((tier) => (
+                        <tr key={tier.min_qty} className="border-b border-gray-100 bg-green-50">
+                          <td className="py-1.5 font-medium text-green-800">{tier.min_qty}+ units</td>
+                          <td className="py-1.5 text-right font-bold text-green-800">{formatPrice(tier.price_cents)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
+            )}
 
             <div>
               <StockBadge qty={product.stock_qty} />
@@ -145,6 +200,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <span className="ml-2 text-xs text-gray-500">{product.stock_qty} units available</span>
               )}
             </div>
+
+            {product.stock_qty <= 0 && (
+              <BackInStockForm productId={product.id} />
+            )}
 
             <AddToCartButton
               variant="detail"
@@ -158,22 +217,38 @@ export default async function ProductPage({ params }: ProductPageProps) {
               }}
             />
 
-            <p className="text-xs text-gray-500">
-              Wholesale pricing. Adding to cart submits a quote request — no payment is taken online.
-              A rep confirms availability and final pricing.
-            </p>
+            <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+              <svg className="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+              </svg>
+              <span>Quote request — no payment is taken online. A rep confirms availability and pricing before invoicing.</span>
+            </div>
 
             <div className="border-t border-gray-100" />
 
             {(() => {
               const packSpec = extractPackSpec(product.name)
               if (!packSpec && !product.description) return null
+              const unitsPerCase = packSpec
+                ? Number(packSpec.match(/cs\.(\d+)/i)?.[1] ?? packSpec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+                : 0
               return (
                 <div>
                   <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
                     Pack quantity
                   </h2>
                   {packSpec && <p className="text-sm font-semibold text-gray-900">{packSpec}</p>}
+                  {packSpec && unitsPerCase > 0 && (
+                    <div className="mt-1">
+                      <span className="text-sm text-gray-500">Case size</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm text-gray-900">{unitsPerCase} units</span>
+                        <span className="text-xs text-gray-400">
+                          ${(product.price_cents / unitsPerCase / 100).toFixed(2)} per unit
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {product.description && (
                     <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{product.description}</p>
                   )}
@@ -183,6 +258,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
         </div>
       </div>
+
+      {alsoOrdered.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-4 text-lg font-bold text-gray-900">Customers also ordered</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {alsoOrdered.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {related.length > 0 && (
         <section className="mt-10">

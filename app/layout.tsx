@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import { Suspense } from 'react'
 import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 import { CartProvider } from '@/lib/cart-context'
+import { FavoritesProvider } from '@/lib/favorites-context'
 import RepCapture from '@/components/catalog/RepCapture'
 
 export const metadata: Metadata = {
@@ -22,12 +26,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className={`h-full ${inter.variable}`}>
       <body className="min-h-full bg-gray-50 text-gray-900 antialiased font-sans">
         <Suspense fallback={null}>
           <RepCapture />
         </Suspense>
-        <CartProvider>{children}</CartProvider>
+        <FavoritesProvider>
+          <CartProvider>{children}</CartProvider>
+        </FavoritesProvider>
       </body>
     </html>
   )

@@ -4,6 +4,7 @@ import { cdnImage } from '@/lib/image'
 import { extractPackSpec } from '@/lib/pack'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
+import FavoriteButton from './FavoriteButton'
 
 function formatPrice(cents: number) {
   return `$${(cents / 100).toFixed(2)}`
@@ -15,11 +16,21 @@ interface ProductCardProps {
 
 export default function ProductCard({ product }: ProductCardProps) {
   const packSpec = extractPackSpec(product.name)
+  const favoriteItem = {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    price_cents: product.price_cents,
+    image_url: product.image_url,
+    category: product.category?.name ?? '',
+  }
   return (
-    <Link
-      href={`/product/${product.id}`}
-      className="group flex flex-col rounded-lg border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow duration-200"
-    >
+    <div className="relative group flex flex-col rounded-lg border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow duration-200">
+      <FavoriteButton item={favoriteItem} />
+      <Link
+        href={`/product/${product.id}`}
+        className="flex flex-col flex-1"
+      >
       {/* Image area */}
       <div className="aspect-square w-full bg-gray-100 flex items-center justify-center">
         {product.image_url ? (
@@ -52,7 +63,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Card body */}
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
         {product.category && (
           <span className="text-xs font-medium uppercase tracking-wide text-red-600">
             {product.category.name}
@@ -63,15 +74,27 @@ export default function ProductCard({ product }: ProductCardProps) {
         </h3>
         <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
         {product.barcode && (
-          <p className="text-xs text-gray-400 font-mono">{product.barcode}</p>
+          <p className="hidden sm:block text-xs text-gray-400 font-mono">{product.barcode}</p>
         )}
         {packSpec && (
           <p className="text-xs font-medium text-gray-600">{packSpec}</p>
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
-          <span className="text-base font-bold text-gray-900">
-            {formatPrice(product.price_cents)}
-          </span>
+          <div>
+            <span className="text-base font-bold text-gray-900">
+              {formatPrice(product.price_cents)}
+            </span>
+            {(() => {
+              if (!packSpec) return null
+              const unitsPerCase = Number(packSpec.match(/cs\.(\d+)/i)?.[1] ?? packSpec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+              if (!unitsPerCase) return null
+              return (
+                <p className="text-xs text-gray-400">
+                  ${(product.price_cents / unitsPerCase / 100).toFixed(2)} / unit · {unitsPerCase} per case
+                </p>
+              )
+            })()}
+          </div>
           <StockBadge qty={product.stock_qty} />
         </div>
         <div className="pt-1">
@@ -87,6 +110,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           />
         </div>
       </div>
-    </Link>
+      </Link>
+    </div>
   )
 }

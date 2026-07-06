@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useCart } from '@/lib/cart-context'
+import CsvUploadPanel from './CsvUploadPanel'
 
 interface Parsed {
   sku: string
@@ -35,6 +36,7 @@ function parseLines(text: string): Parsed[] {
 
 export default function QuickOrder() {
   const { addItem } = useCart()
+
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ added: number; lines: number; notFound: string[] } | null>(null)
@@ -77,54 +79,60 @@ export default function QuickOrder() {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <label className="mb-1 block text-sm font-medium text-gray-700">SKUs</label>
-      <p className="mb-2 text-xs text-gray-500">
-        One per line. Add a quantity after the SKU (e.g. <span className="font-mono">ABC-123 24</span>) — defaults to 1.
-      </p>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={8}
-        placeholder={'ABC-123 24\nDEF-456, 12\nGHI-789'}
-        className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-      />
+    <div className="space-y-5">
+      {/* ── CSV Upload ── */}
+      <CsvUploadPanel addItem={addItem} />
 
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy || text.trim().length === 0}
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-        >
-          {busy ? 'Adding…' : 'Add all to cart'}
-        </button>
-        {result && result.added > 0 && (
-          <Link href="/cart" className="text-sm font-medium text-red-600 hover:text-red-700">
-            View cart →
-          </Link>
-        )}
-      </div>
+      {/* ── Manual SKU entry ── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <label className="mb-1 block text-sm font-medium text-gray-700">SKUs</label>
+        <p className="mb-2 text-xs text-gray-500">
+          One per line. Add a quantity after the SKU (e.g. <span className="font-mono">ABC-123 24</span>) — defaults to 1.
+        </p>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={8}
+          placeholder={'ABC-123 24\nDEF-456, 12\nGHI-789'}
+          className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+        />
 
-      {result && (
-        <div className="mt-4 space-y-2 text-sm">
-          {result.added > 0 ? (
-            <p className="rounded-md bg-green-50 px-3 py-2 text-green-700">
-              Added {result.added} item{result.added === 1 ? '' : 's'} to your cart.
-            </p>
-          ) : (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">
-              Nothing was added — check the SKUs below.
-            </p>
-          )}
-          {result.notFound.length > 0 && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">
-              Not found ({result.notFound.length}):{' '}
-              <span className="font-mono">{result.notFound.join(', ')}</span>
-            </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy || text.trim().length === 0}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {busy ? 'Adding…' : 'Add all to cart'}
+          </button>
+          {result && result.added > 0 && (
+            <Link href="/cart" className="text-sm font-medium text-red-600 hover:text-red-700">
+              View cart →
+            </Link>
           )}
         </div>
-      )}
+
+        {result && (
+          <div className="mt-4 space-y-2 text-sm">
+            {result.added > 0 ? (
+              <p className="rounded-md bg-green-50 px-3 py-2 text-green-700">
+                Added {result.added} item{result.added === 1 ? '' : 's'} to your cart.
+              </p>
+            ) : (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">
+                Nothing was added — check the SKUs below.
+              </p>
+            )}
+            {result.notFound.length > 0 && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">
+                Not found ({result.notFound.length}):{' '}
+                <span className="font-mono">{result.notFound.join(', ')}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
