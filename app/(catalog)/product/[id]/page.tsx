@@ -243,9 +243,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
                       <span className="text-sm text-gray-500">Case size</span>
                       <div className="flex items-baseline gap-2">
                         <span className="text-sm text-gray-900">{unitsPerCase} units</span>
-                        <span className="text-xs text-gray-400">
-                          ${(product.price_cents / unitsPerCase / 100).toFixed(2)} per unit
-                        </span>
                       </div>
                     </div>
                   )}

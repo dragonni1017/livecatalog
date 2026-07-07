@@ -4,6 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface VolumeTier { min_qty: number; price_cents: number }
+type UnitType = 'pc' | 'case' | 'box' | 'pack'
+
+const UNIT_TYPE_LABELS: Record<UnitType, string> = {
+  pc: 'Per piece',
+  case: 'Per case',
+  box: 'Per box',
+  pack: 'Per pack',
+}
 
 interface Props {
   id: string
@@ -12,9 +20,11 @@ interface Props {
   imageUrl: string | null
   imageUrls?: string[]
   volumeTiers?: VolumeTier[]
+  priceCents: number
+  unitType: UnitType
 }
 
-export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [] }: Props) {
+export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [], priceCents, unitType }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
@@ -22,6 +32,8 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
     description: description ?? '',
     image_url: imageUrl ?? '',
     image_urls_text: imageUrls.join('\n'),
+    price: (priceCents / 100).toFixed(2),
+    unit_type: unitType,
   })
   const [tiers, setTiers] = useState<VolumeTier[]>(volumeTiers)
   const [saving, setSaving] = useState(false)
@@ -33,6 +45,8 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
       description: description ?? '',
       image_url: imageUrl ?? '',
       image_urls_text: imageUrls.join('\n'),
+      price: (priceCents / 100).toFixed(2),
+      unit_type: unitType,
     })
     setTiers(volumeTiers)
     setError(null)
@@ -58,6 +72,11 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
       setError('Name is required.')
       return
     }
+    const priceCents = Math.round(parseFloat(form.price) * 100)
+    if (!Number.isInteger(priceCents) || priceCents < 0) {
+      setError('Enter a valid, non-negative price.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -76,6 +95,8 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
           image_url: form.image_url,
           image_urls: additionalUrls,
           volume_tiers: tiers.length > 0 ? tiers : null,
+          price_cents: priceCents,
+          unit_type: form.unit_type,
         }),
       })
       const data = await res.json()
@@ -121,6 +142,31 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Price ($)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Priced per</label>
+                  <select
+                    value={form.unit_type}
+                    onChange={(e) => setForm({ ...form, unit_type: e.target.value as UnitType })}
+                    className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  >
+                    {Object.entries(UNIT_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Description</label>

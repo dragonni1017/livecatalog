@@ -58,6 +58,21 @@ export async function PATCH(request: NextRequest) {
     }
     if (typeof body.description === 'string') updates.description = body.description.trim() || null
     if (typeof body.image_url === 'string') updates.image_url = body.image_url.trim() || null
+    if ('price_cents' in body) {
+      const val = body.price_cents
+      if (!Number.isInteger(val) || (val as number) < 0) {
+        return NextResponse.json({ error: 'price_cents must be a non-negative integer' }, { status: 400 })
+      }
+      updates.price_cents = val
+    }
+    if ('unit_type' in body) {
+      const val = body.unit_type
+      const ALLOWED_UNIT_TYPES = ['pc', 'case', 'box', 'pack']
+      if (typeof val !== 'string' || !ALLOWED_UNIT_TYPES.includes(val)) {
+        return NextResponse.json({ error: 'unit_type must be one of: pc, case, box, pack' }, { status: 400 })
+      }
+      updates.unit_type = val
+    }
     if ('image_urls' in body) {
       const raw = body.image_urls
       if (!Array.isArray(raw)) {

@@ -22,6 +22,8 @@ interface Product {
   manually_hidden: boolean
   low_stock_threshold: number | null
   volume_tiers: VolumeTier[] | null
+  price_cents: number
+  unit_type: 'pc' | 'case' | 'box' | 'pack'
   category: { id: string; name: string } | null
 }
 
@@ -179,6 +181,8 @@ export default function BulkStockTable({ products }: Props) {
                         imageUrl={p.image_url}
                         imageUrls={p.image_urls}
                         volumeTiers={p.volume_tiers ?? []}
+                        priceCents={p.price_cents}
+                        unitType={p.unit_type}
                       />
                     </td>
                   </tr>

@@ -18,6 +18,8 @@ interface AdminProduct {
   stock_qty: number
   low_stock_threshold: number | null
   volume_tiers: VolumeTier[] | null
+  price_cents: number
+  unit_type: 'pc' | 'case' | 'box' | 'pack'
   category: { id: string; name: string } | null
 }
 
@@ -36,7 +38,7 @@ export default async function AdminProductsPage({
 
   let query = db
     .from('products')
-    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, category:categories(id, name)')
+    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories(id, name)')
     .order('name')
     .limit(10000)
 

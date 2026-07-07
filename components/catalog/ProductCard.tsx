@@ -84,16 +84,6 @@ export default function ProductCard({ product }: ProductCardProps) {
             <span className="text-base font-bold text-gray-900">
               {formatPrice(product.price_cents)}
             </span>
-            {(() => {
-              if (!packSpec) return null
-              const unitsPerCase = Number(packSpec.match(/cs\.(\d+)/i)?.[1] ?? packSpec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
-              if (!unitsPerCase) return null
-              return (
-                <p className="text-xs text-gray-400">
-                  ${(product.price_cents / unitsPerCase / 100).toFixed(2)} / unit · {unitsPerCase} per case
-                </p>
-              )
-            })()}
           </div>
           <StockBadge qty={product.stock_qty} />
         </div>

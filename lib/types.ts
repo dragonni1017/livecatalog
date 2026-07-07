@@ -10,6 +10,8 @@ export interface VolumeTier {
   price_cents: number
 }
 
+export type UnitType = 'pc' | 'case' | 'box' | 'pack'
+
 export interface Product {
   id: string
   sku: string
@@ -17,6 +19,9 @@ export interface Product {
   name: string
   description: string | null
   price_cents: number
+  // What price_cents is quoted per. Admin-facing only — never shown to
+  // customers on the storefront, so public catalog queries don't select it.
+  unit_type?: UnitType
   category_id: string
   category?: Category
   stock_qty: number
