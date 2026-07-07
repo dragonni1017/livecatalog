@@ -6,6 +6,7 @@ import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
 import { extractPackSpec } from '@/lib/pack'
+import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
@@ -65,6 +66,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const product = await getProduct(id)
 
   if (!product) notFound()
+
+  const settings = await getDisplaySettings()
 
   // "More in this category" — a few other in-catalog products from the same
   // category, so a product page isn't a dead end.
@@ -151,7 +154,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* Details */}
           <div className="flex flex-col gap-4 p-8">
-            {product.category && (
+            {product.category && settings.show_category_detail && (
               <nav className="flex items-center gap-1.5 text-xs text-gray-500">
                 <Link href="/" className="hover:text-red-600">All Products</Link>
                 <span>/</span>
@@ -166,9 +169,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             <h1 className="text-2xl font-bold text-gray-900 leading-snug">{product.name}</h1>
 
-            <p className="text-xs text-gray-400 font-mono">SKU: {product.sku}</p>
-
-            {product.barcode && <Barcode value={product.barcode} />}
+            {settings.show_sku_barcode_detail && (
+              <>
+                <p className="text-xs text-gray-400 font-mono">SKU: {product.sku}</p>
+                {product.barcode && <Barcode value={product.barcode} />}
+              </>
+            )}
 
             {product.volume_tiers && product.volume_tiers.length > 0 ? (
               <div>
@@ -194,12 +200,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
             )}
 
-            <div>
-              <StockBadge qty={product.stock_qty} />
-              {product.stock_qty > 0 && (
-                <span className="ml-2 text-xs text-gray-500">{product.stock_qty} units available</span>
-              )}
-            </div>
+            {settings.show_stock_detail && (
+              <div>
+                <StockBadge qty={product.stock_qty} />
+                {product.stock_qty > 0 && (
+                  <span className="ml-2 text-xs text-gray-500">{product.stock_qty} units available</span>
+                )}
+              </div>
+            )}
 
             {product.stock_qty <= 0 && (
               <BackInStockForm productId={product.id} />
@@ -228,23 +236,28 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             {(() => {
               const packSpec = extractPackSpec(product.name)
-              if (!packSpec && !product.description) return null
-              const unitsPerCase = packSpec
-                ? Number(packSpec.match(/cs\.(\d+)/i)?.[1] ?? packSpec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+              const showPackInfo = settings.show_pack_info_detail && !!packSpec
+              if (!showPackInfo && !product.description) return null
+              const unitsPerCase = showPackInfo
+                ? Number(packSpec!.match(/cs\.(\d+)/i)?.[1] ?? packSpec!.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
                 : 0
               return (
                 <div>
-                  <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
-                    Pack quantity
-                  </h2>
-                  {packSpec && <p className="text-sm font-semibold text-gray-900">{packSpec}</p>}
-                  {packSpec && unitsPerCase > 0 && (
-                    <div className="mt-1">
-                      <span className="text-sm text-gray-500">Case size</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-sm text-gray-900">{unitsPerCase} units</span>
-                      </div>
-                    </div>
+                  {showPackInfo && (
+                    <>
+                      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                        Pack quantity
+                      </h2>
+                      <p className="text-sm font-semibold text-gray-900">{packSpec}</p>
+                      {unitsPerCase > 0 && (
+                        <div className="mt-1">
+                          <span className="text-sm text-gray-500">Case size</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm text-gray-900">{unitsPerCase} units</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   {product.description && (
                     <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{product.description}</p>

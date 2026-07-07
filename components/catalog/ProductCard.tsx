@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
 import { extractPackSpec } from '@/lib/pack'
+import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
 import FavoriteButton from './FavoriteButton'
@@ -14,8 +15,9 @@ interface ProductCardProps {
   product: Product
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default async function ProductCard({ product }: ProductCardProps) {
   const packSpec = extractPackSpec(product.name)
+  const settings = await getDisplaySettings()
   const favoriteItem = {
     id: product.id,
     sku: product.sku,
@@ -64,7 +66,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
       {/* Card body */}
       <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
-        {product.category && (
+        {product.category && settings.show_category_listing && (
           <span className="text-xs font-medium uppercase tracking-wide text-red-600">
             {product.category.name}
           </span>
@@ -72,11 +74,15 @@ export default function ProductCard({ product }: ProductCardProps) {
         <h3 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-red-600 transition-colors">
           {product.name}
         </h3>
-        <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
-        {product.barcode && (
-          <p className="hidden sm:block text-xs text-gray-400 font-mono">{product.barcode}</p>
+        {settings.show_sku_barcode_listing && (
+          <>
+            <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
+            {product.barcode && (
+              <p className="hidden sm:block text-xs text-gray-400 font-mono">{product.barcode}</p>
+            )}
+          </>
         )}
-        {packSpec && (
+        {packSpec && settings.show_pack_info_listing && (
           <p className="text-xs font-medium text-gray-600">{packSpec}</p>
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
@@ -85,7 +91,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               {formatPrice(product.price_cents)}
             </span>
           </div>
-          <StockBadge qty={product.stock_qty} />
+          {settings.show_stock_listing && <StockBadge qty={product.stock_qty} />}
         </div>
         <div className="pt-1">
           <AddToCartButton
