@@ -81,9 +81,18 @@ export async function POST(request: NextRequest) {
             .update({ stock_qty: row.amountInStock, updated_at: new Date().toISOString() })
             .eq('sku', row.code)
         }
-        // Fall back to relative adjustment
-        return db.rpc('decrement_stock', { p_sku: row.code, p_qty: -row.amount })
-        // (negative amount = sold/removed, positive = restocked)
+        // Fall back to relative adjustment. adjust_stock() (migration 0018)
+        // takes a signed delta directly — row.amount is already signed
+        // (negative = sold/removed, positive = restocked) so it passes straight
+        // through. NOTE: not live today (see docs/LIVE-INVENTORY-COUNT-HANDOFF.md);
+        // this just repoints a call that referenced a function that never
+        // existed (decrement_stock) so it stops failing silently if enabled.
+        return db.rpc('adjust_stock', {
+          p_sku: row.code,
+          p_delta: row.amount,
+          p_reason: `erply webhook: ${payload.event}`,
+          p_changed_by_email: 'erply-webhook',
+        })
       }),
     )
 

@@ -98,13 +98,18 @@ export async function POST(request: NextRequest) {
     const db = getAdminClient()
 
     const results = await Promise.allSettled(
+      // adjust_stock() (migration 0018) takes a signed delta and does the
+      // clamp-at-0 + audit row atomically. NOTE: not live today (see
+      // docs/LIVE-INVENTORY-COUNT-HANDOFF.md); this just repoints a call that
+      // referenced a function that never existed (decrement_stock) so it
+      // stops failing silently if this webhook is enabled later.
       lineItems.map((item) =>
-        db.rpc('decrement_stock', { p_sku: item.sku, p_qty: item.quantity })
-        // TODO: create this Supabase function — see note below
-        // Alternatively, use:
-        //   db.from('products')
-        //     .update({ stock_qty: db.raw('GREATEST(stock_qty - ?, 0)', [item.quantity]) })
-        //     .eq('sku', item.sku)
+        db.rpc('adjust_stock', {
+          p_sku: item.sku,
+          p_delta: -item.quantity,
+          p_reason: `woo order ${order.id}`,
+          p_changed_by_email: 'woo-webhook',
+        })
       ),
     )
 

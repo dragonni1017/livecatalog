@@ -76,19 +76,28 @@ export async function POST(request: NextRequest) {
     }
 
     const previousQty: number = product.stock_qty
-    const newQty = previousQty + delta
-    if (newQty < 0) {
+    if (previousQty + delta < 0) {
       return NextResponse.json(
         { error: `Can't remove ${Math.abs(delta)} — only ${previousQty} in stock.` },
         { status: 400 }
       )
     }
 
-    const { error: updateError } = await db
-      .from('products')
-      .update({ stock_qty: newQty, updated_at: new Date().toISOString() })
-      .eq('id', productId)
-    if (updateError) throw updateError
+    // adjust_stock() (migration 0018) does the read-lock, update, and audit
+    // insert as one atomic statement — see docs/LIVE-INVENTORY-COUNT-HANDOFF.md.
+    // This replaces the old separate .update() + stock_adjustments .insert(),
+    // which could race with a concurrent write to the same SKU.
+    const { data: rpcData, error: rpcError } = await db
+      .rpc('adjust_stock', {
+        p_sku: product.sku,
+        p_delta: delta,
+        p_reason: reason,
+        p_changed_by_email: 'admin',
+      })
+      .single()
+    if (rpcError) throw rpcError
+
+    const newQty = (rpcData as { new_qty: number }).new_qty
 
     await logAudit({
       action: 'stock_adjust',
@@ -98,23 +107,6 @@ export async function POST(request: NextRequest) {
       old_value: String(previousQty),
       new_value: String(newQty),
     })
-
-    const { error: logError } = await db.from('stock_adjustments').insert({
-      product_id: productId,
-      sku: product.sku,
-      product_name: product.name,
-      delta,
-      previous_qty: previousQty,
-      new_qty: newQty,
-      reason,
-      changed_by_user_id: null,
-      changed_by_email: 'admin',
-    })
-    if (logError) {
-      // The stock change already succeeded — don't fail the request over a
-      // logging error, but make sure it's visible in the server logs.
-      console.error('[admin/stock POST] failed to log adjustment:', logError)
-    }
 
     // Best-effort — mirrors the same check that runs after Excel/Erply syncs,
     // so a manual adjustment that crosses the threshold also alerts.

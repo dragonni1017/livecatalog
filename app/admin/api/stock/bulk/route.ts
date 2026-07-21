@@ -40,31 +40,54 @@ export async function POST(request: NextRequest) {
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
 
-    if (mode === 'set') {
-      const { error } = await db
-        .from('products')
-        .update({ stock_qty: adj, updated_at: new Date().toISOString() })
-        .in('id', ids)
-      if (error) throw error
-    } else {
-      // 'adjust' mode: update each product individually so we can clamp to 0
-      for (const id of ids) {
-        const { data: product, error: fetchError } = await db
-          .from('products')
-          .select('stock_qty')
-          .eq('id', id)
-          .single()
-        if (fetchError || !product) continue
+    // Need sku + current stock_qty per product: adjust_stock() (migration 0018)
+    // takes a signed delta and a sku, not a product id or an absolute value.
+    const { data: products, error: fetchError } = await db
+      .from('products')
+      .select('id, sku, stock_qty')
+      .in('id', ids)
+    if (fetchError) throw fetchError
 
-        const newQty = Math.max((product.stock_qty as number) + adj, 0)
-        await db
-          .from('products')
-          .update({ stock_qty: newQty, updated_at: new Date().toISOString() })
-          .eq('id', id)
+    let updated = 0
+    const failedSkus: string[] = []
+    const reason = mode === 'set' ? 'bulk set' : 'bulk adjust'
+
+    for (const p of products ?? []) {
+      // 'set' mode: turn the target absolute qty into a delta against current
+      // stock so it still goes through adjust_stock() as a delta + audit row
+      // instead of a silent overwrite. 'adjust' mode: delta is the adjustment
+      // itself. Either way, adjust_stock() clamps the result at 0 and skips
+      // logging a zero-delta row.
+      const delta = mode === 'set' ? adj - (p.stock_qty as number) : adj
+      if (delta === 0) continue
+
+      const { error: rpcError } = await db.rpc('adjust_stock', {
+        p_sku: p.sku,
+        p_delta: delta,
+        p_reason: reason,
+        p_changed_by_email: 'admin',
+      })
+      if (rpcError) {
+        console.error('[admin/stock/bulk POST] adjust_stock failed for', p.sku, rpcError)
+        failedSkus.push(p.sku as string)
+        continue
       }
+      updated++
     }
 
-    return NextResponse.json({ ok: true, updated: ids.length })
+    // Best-effort — mirrors the check that runs after a single adjustment.
+    try {
+      const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
+      await checkLowStockAndNotify(db)
+    } catch (err) {
+      console.error('[admin/stock/bulk POST] low-stock check failed:', err)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      updated,
+      ...(failedSkus.length > 0 ? { failed: failedSkus } : {}),
+    })
   } catch (err) {
     console.error('[admin/stock/bulk POST] error:', err)
     return NextResponse.json({ error: 'Failed to update stock' }, { status: 500 })
