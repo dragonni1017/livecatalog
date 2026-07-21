@@ -37,6 +37,30 @@ scripts/_tmp_*.mjs
 /data/livecatalog-category-breakdown.xlsx
 /data/*.bak
 
+# root-level scratch exports (inventory counts, image backfill mappings,
+# QB comparisons, etc.) — these belong in data/ or docs/, never commit
+# straight from repo root. Added 2026-07-14 after a cleanup found ~30 loose
+# files + 3.7GB of image dumps sitting untracked in root; actually relocated
+# 2026-07-15 into the data/ subfolders below. Root rules kept as a guard
+# against the same clutter recurring.
+/*.xlsx
+/*.csv
+/*.pdf
+/imgur-upload/
+/recent-3mo-images/
+/*.ps1
+
+# scratch working files relocated from repo root 2026-07-15 — same
+# never-commit intent as the root-level rules above, just organized by topic
+/data/images/
+/data/inventory-counts/
+/data/price-comparisons/
+/data/livecatalog-products.xlsx
+
+# superseded scratch exports moved aside (not deleted) during the 2026-07-14
+# cleanup — same never-commit intent, newer versions live in the folders above
+/data/archive/
+
 # Excel lock files
 ~$*.xls*
 

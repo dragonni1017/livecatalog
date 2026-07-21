@@ -1,5 +1,6 @@
 // update-prices-from-qb.mjs
 // Run with: node scripts/update-prices-from-qb.mjs [path/to/QB_vs_Catalog_Price_Comparison.xlsx] [--apply]
+// (defaults to data/price-comparisons/QB_vs_Catalog_Price_Comparison.xlsx)
 // One-time correction: reads the vetted "Price Differences" sheet (QB Item
 // Price List vs. catalog, real nonzero QB prices only — $0.00 QB placeholder
 // rows are already excluded from that sheet) and updates products.price_cents
@@ -19,7 +20,7 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env.loca
 const APPLY = process.argv.includes('--apply')
 const XLSX_PATH =
   process.argv.slice(2).find((a) => !a.startsWith('--')) ||
-  resolve(dirname(fileURLToPath(import.meta.url)), '..', 'QB_vs_Catalog_Price_Comparison.xlsx')
+  resolve(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'price-comparisons', 'QB_vs_Catalog_Price_Comparison.xlsx')
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
