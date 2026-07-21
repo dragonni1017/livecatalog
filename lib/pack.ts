@@ -12,3 +12,14 @@ export function extractPackSpec(name: string | null | undefined): string | null 
   const m = name.match(/\d+\s*\/\s*pk\b[^]*?\d+\s*bx\s*\/\s*cs(?:\s*cs\.\d+)?/i)
   return m ? m[0].replace(/\s+/g, ' ').trim() : null
 }
+
+/**
+ * How many individual units make up one case, read off the pack spec (e.g.
+ * "cs.144" or "12bx/cs" with no explicit cs. count). Returns 0 when the name
+ * has no parseable pack spec — callers should treat that as "unknown."
+ */
+export function extractUnitsPerCase(name: string | null | undefined): number {
+  const spec = extractPackSpec(name)
+  if (!spec) return 0
+  return Number(spec.match(/cs\.(\d+)/i)?.[1] ?? spec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+}

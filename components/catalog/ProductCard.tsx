@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
-import { extractPackSpec } from '@/lib/pack'
+import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
@@ -17,6 +17,7 @@ interface ProductCardProps {
 
 export default async function ProductCard({ product }: ProductCardProps) {
   const packSpec = extractPackSpec(product.name)
+  const unitsPerCase = extractUnitsPerCase(product.name)
   const settings = await getDisplaySettings()
   const favoriteItem = {
     id: product.id,
@@ -103,6 +104,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
               imageUrl: product.image_url,
               stockQty: product.stock_qty,
             }}
+            unitsPerCase={unitsPerCase}
           />
         </div>
       </div>

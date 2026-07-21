@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { cdnImage } from '@/lib/image'
-import { extractPackSpec } from '@/lib/pack'
+import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
@@ -68,6 +68,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (!product) notFound()
 
   const settings = await getDisplaySettings()
+  const unitsPerCase = extractUnitsPerCase(product.name)
 
   // "More in this category" — a few other in-catalog products from the same
   // category, so a product page isn't a dead end.
@@ -223,6 +224,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 imageUrl: product.image_url,
                 stockQty: product.stock_qty,
               }}
+              unitsPerCase={unitsPerCase}
             />
 
             <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
@@ -238,9 +240,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
               const packSpec = extractPackSpec(product.name)
               const showPackInfo = settings.show_pack_info_detail && !!packSpec
               if (!showPackInfo && !product.description) return null
-              const unitsPerCase = showPackInfo
-                ? Number(packSpec!.match(/cs\.(\d+)/i)?.[1] ?? packSpec!.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
-                : 0
               return (
                 <div>
                   {showPackInfo && (

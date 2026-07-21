@@ -9,14 +9,19 @@ interface AddToCartButtonProps {
   // 'card' is the compact control used inside the ProductCard link; 'detail'
   // is the full-width version on the product page.
   variant?: 'card' | 'detail'
+  // Units in one case, parsed from the product name's pack spec (e.g.
+  // "cs.144"). When set and stock covers at least one full case, shows a
+  // "+1 case" quick-add shortcut next to the stepper.
+  unitsPerCase?: number
 }
 
-export default function AddToCartButton({ product, variant = 'card' }: AddToCartButtonProps) {
+export default function AddToCartButton({ product, variant = 'card', unitsPerCase }: AddToCartButtonProps) {
   const { addItem } = useCart()
   const [qty, setQty] = useState(1)
   const [justAdded, setJustAdded] = useState(false)
   const outOfStock = product.stockQty <= 0
   const max = product.stockQty > 0 ? product.stockQty : 1
+  const canAddCase = !outOfStock && !!unitsPerCase && unitsPerCase > 1 && max >= unitsPerCase
 
   // ProductCard wraps the whole card in a <Link>; keep clicks on these controls
   // from navigating to the product page.
@@ -42,6 +47,23 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
         imageUrl: product.imageUrl,
       },
       qty,
+    )
+    setJustAdded(true)
+    window.setTimeout(() => setJustAdded(false), 1500)
+  }
+
+  function handleAddCase(e: React.MouseEvent) {
+    stop(e)
+    if (!canAddCase || !unitsPerCase) return
+    addItem(
+      {
+        productId: product.productId,
+        sku: product.sku,
+        name: product.name,
+        priceCents: product.priceCents,
+        imageUrl: product.imageUrl,
+      },
+      unitsPerCase,
     )
     setJustAdded(true)
     window.setTimeout(() => setJustAdded(false), 1500)
@@ -117,7 +139,7 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
   )
 
   return (
-    <div className={detail ? 'flex items-center gap-3' : 'flex items-center gap-1.5'}>
+    <div className={detail ? 'flex flex-wrap items-center gap-3' : 'flex flex-wrap items-center gap-1.5'}>
       {stepper}
       <button
         type="button"
@@ -130,6 +152,19 @@ export default function AddToCartButton({ product, variant = 'card' }: AddToCart
       >
         {justAdded ? (detail ? 'Added to cart ✓' : 'Added ✓') : detail ? 'Add to Cart' : 'Add'}
       </button>
+      {canAddCase && (
+        <button
+          type="button"
+          onClick={handleAddCase}
+          aria-label={`Add 1 case (${unitsPerCase} units) of ${product.name} to cart`}
+          className={
+            'rounded-md border border-red-600 font-semibold text-red-600 transition-colors hover:bg-red-50 ' +
+            (detail ? 'h-11 px-4 text-sm' : 'px-2 py-2 text-xs sm:py-1.5')
+          }
+        >
+          + 1 case ({unitsPerCase})
+        </button>
+      )}
     </div>
   )
 }
