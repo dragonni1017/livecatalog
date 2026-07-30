@@ -126,12 +126,28 @@ export async function previewSync(products: SyncProduct[], db: DB): Promise<Sync
   }
 }
 
+export interface SyncOptions {
+  /**
+   * Fields to leave out of the upsert payload entirely (existing DB value is
+   * preserved) rather than overwritten with the incoming value. Use this for
+   * sources whose data for that field isn't trustworthy yet — e.g. Erply's
+   * image_url/stock_qty (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) —
+   * without affecting other sources (Excel import legitimately sets both).
+   */
+  skipFields?: Array<'image_url' | 'stock_qty'>
+}
+
 /**
  * Bulk-upsert products into Supabase and deactivate any that are no longer
  * in the incoming list.  Returns insert / update / deactivate counts.
  */
-export async function syncToSupabase(products: SyncProduct[], db: DB): Promise<ImportResult> {
+export async function syncToSupabase(
+  products: SyncProduct[],
+  db: DB,
+  options: SyncOptions = {},
+): Promise<ImportResult> {
   const errors: ImportResult['errors'] = []
+  const skip = new Set(options.skipFields ?? [])
 
   // 1. Resolve categories
   const categoryNames = products.map((p) => p.category_name)
@@ -159,9 +175,9 @@ export async function syncToSupabase(products: SyncProduct[], db: DB): Promise<I
       name: p.name,
       price_cents: p.price_cents,
       description: p.description,
-      stock_qty: p.stock_qty,
-      image_url: p.image_url,
       is_active: p.is_active,
+      ...(skip.has('stock_qty') ? {} : { stock_qty: p.stock_qty }),
+      ...(skip.has('image_url') ? {} : { image_url: p.image_url }),
       ...(categoryId ? { category_id: categoryId } : {}),
       updated_at: now,
     })

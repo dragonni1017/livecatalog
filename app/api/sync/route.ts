@@ -88,7 +88,12 @@ export async function GET(request: NextRequest) {
     // 3. Upsert into Supabase
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
-    const result: ImportResult = await syncToSupabase(products, db)
+    // Erply's images aren't accessible yet and its inventory reads 0 across the
+    // board (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) — don't let a real
+    // sync null out working Cloudinary images or zero out real stock counts.
+    const result: ImportResult = await syncToSupabase(products, db, {
+      skipFields: ['image_url', 'stock_qty'],
+    })
 
     // 4. Run daily auxiliary checks (low-stock + abandoned carts)
     let lowStock: unknown = { skipped: 'not run' }

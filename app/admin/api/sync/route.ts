@@ -61,7 +61,10 @@ export async function POST() {
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
     const products = toSyncProducts(await getErplyProducts())
-    const result = await syncToSupabase(products, db)
+    // Same guard as /api/sync — Erply's images/stock aren't trustworthy yet.
+    const result = await syncToSupabase(products, db, {
+      skipFields: ['image_url', 'stock_qty'],
+    })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     console.error('[admin/sync POST] run failed:', err)
