@@ -91,7 +91,12 @@ Full detail: [`project-erply-image-backfill`](memory/project-erply-image-backfil
 
 ## Data quality findings (from cross-checking Supabase against live Erply)
 
-- **146 active Supabase products aren't in Erply's active feed.** 3 are
+- **146 active Supabase products aren't in Erply's active feed** (at time of
+  writing 2026-07-30 morning; re-checked same day evening via
+  `scripts/check-erply-woo-health.mjs` after the F286606 duplicate-row fix
+  below landed — count moved to **143**, expected since those 3 rows
+  (`-Wt`/`-Pk`/`-BLK`) were deactivated and no longer count. Re-run the health
+  script rather than trusting either number if picking this up later). 3 are
   SKU-casing mismatches only (`F286606-Wt`→Erply's real `F286606-WT`,
   `F286606-Pk`→`F286606-PK`, `F286606-BLK`→Erply's real `F286606-Blk` —
   note the casing that "wins" isn't consistent per color, checked each

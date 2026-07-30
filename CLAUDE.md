@@ -70,12 +70,16 @@ resolved/fixed errors, intermediate exploration that didn't lead anywhere.
 
 ## Subagents
 
-- `.claude/agents/` defines four subagents: `catalog-ui`, `admin-quickbooks`,
-  `supabase-migrations`, `data-import`. Each scopes to one area (see its
-  `description` field) and routes to automatically — a task spanning two
-  areas (e.g. a schema change plus the admin screen that shows it) can
-  invoke more than one at once. No manual dispatch needed; add a new agent
-  file here rather than growing one agent's scope.
+- `.claude/agents/` defines five subagents: `catalog-ui`, `admin-quickbooks`,
+  `supabase-migrations`, `data-import`, `erply-woo-integration`. Each scopes
+  to one area (see its `description` field) and routes to automatically — a
+  task spanning two areas (e.g. a schema change plus the admin screen that
+  shows it) can invoke more than one at once. `erply-woo-integration` covers
+  `lib/erply.ts`, `lib/product-sync.ts`, `app/api/sync/`,
+  `app/admin/api/sync/`, and the Erply/Woo webhook routes — the sync/webhook
+  plumbing gap between `data-import` (scripts) and `admin-quickbooks` (admin
+  UI + order keying). No manual dispatch needed; add a new agent file here
+  rather than growing one agent's scope.
 
 ## Memory graph
 
