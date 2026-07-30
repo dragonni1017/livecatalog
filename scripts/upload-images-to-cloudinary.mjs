@@ -19,6 +19,10 @@
 // in -- both the local image files and a fast connection to Cloudinary
 // are needed, and reading many multi-MB images off the network-mounted
 // project folder from that sandbox was too slow/flaky to be practical.
+//
+// Optional CLI args to point this at a different backfill batch (e.g. the
+// Erply image pull) instead of the default godaddy recent-3mo paths:
+//   node scripts/upload-images-to-cloudinary.mjs <imagesDir> <mappingCsv> [logCsv]
 
 import fs from 'fs'
 import path from 'path'
@@ -50,9 +54,15 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-const IMAGES_DIR = path.join(ROOT, 'data', 'images', 'recent-3mo-images')
-const MAPPING_CSV = path.join(ROOT, 'data', 'images', 'recent-3mo-image-mapping.csv')
-const LOG_CSV = path.join(ROOT, 'data', 'images', 'cloudinary-upload-log.csv')
+const IMAGES_DIR = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.join(ROOT, 'data', 'images', 'recent-3mo-images')
+const MAPPING_CSV = process.argv[3]
+  ? path.resolve(process.argv[3])
+  : path.join(ROOT, 'data', 'images', 'recent-3mo-image-mapping.csv')
+const LOG_CSV = process.argv[4]
+  ? path.resolve(process.argv[4])
+  : path.join(ROOT, 'data', 'images', 'cloudinary-upload-log.csv')
 
 function parseCsvLine(line) {
   const fields = []
