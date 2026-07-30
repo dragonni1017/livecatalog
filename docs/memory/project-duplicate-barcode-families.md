@@ -49,6 +49,26 @@ that without checking, the way F286606 turned out not to be fine. See also
 [[reference-barcode-backfill-handoff]] for the separate leading-zero gap,
 which is a different class of barcode problem.
 
+**Same-barcode/different-category groups within the 143 deactivate candidates
+(reviewed 2026-07-30, no action taken):** cross-checking barcodes within
+`data/erply-review/deactivate-candidates.csv` (TODO #6, see
+[[project-erply-woo-proactivity-setup]]) surfaced 7 groups sharing a barcode
+across SKUs with inconsistent `category` values — the same shape of signal
+that caught the real F286606 bug above: `F286366` (`-P`/`-W` vs `-WH`),
+`F286388` (`-Clear`/`-PK`/`-PUR` vs `-R`), `F286431` (`-PK` vs `-RD`),
+`F286587` (`-PK`/`-R` vs `-RG`), `F286591` (`-Clear`/`-PK` vs `-Rd`),
+`F287062` (`-A` vs `-D`), and `F287279` (`F287279`/`-Pp`/`-R`/`F287279R` —
+this last group also has `F287279-R`/`F287279R` differing only by a hyphen,
+the strongest signal of the set). **User reviewed and decided these are
+fine as legitimate variations — do not treat category mismatch alone as a
+duplicate-listing signal for this catalog, and do not re-flag these 7
+groups without new information.** Unlike F286606, this was a judgment call
+without independently confirming against Erply's real code per-row — if the
+`F287279` group later causes a real problem (e.g. two genuinely different
+listed prices customers can pick between for what should be one SKU), it's
+worth revisiting specifically, since it's the one with the hyphen-only
+code collision on top of the category mismatch.
+
 **F286573-LPK vs F286573-PK (checked 2026-07-30, NOT fixed yet):** confirmed
 against live Erply data that `F286573-LPK` is Erply's real, active code;
 `F286573-PK` doesn't exist in Erply at all (any casing). Same name/barcode/

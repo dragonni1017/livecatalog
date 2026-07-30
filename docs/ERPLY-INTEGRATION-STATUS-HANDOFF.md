@@ -156,8 +156,18 @@ Full detail: [`project-erply-image-backfill`](memory/project-erply-image-backfil
    pointed at stub/no credentials in Vercel prod until that's reviewed.
 5. Resolve the 143-missing-from-Erply question (flat products vs. matrix
    variants), then build/run the `saveProduct` import if going the
-   flat-product route.
-6. Review the 146 deactivate candidates manually.
+   flat-product route. `scripts/match-deactivate-candidates.mjs` (added
+   2026-07-30) auto-splits the 143 into 104 "same-family" (Erply carries a
+   sibling code — this is exactly the matrix-variant case) vs. 39 "no-match"
+   (genuinely absent) — see `data/erply-review/deactivate-candidates-matched.csv`.
+   Still needs a decision on the 104, then handling the 39.
+6. Review the 146 (now 143, see [[project-erply-woo-proactivity-setup]])
+   deactivate candidates manually. **Partially done 2026-07-30**: 7
+   same-barcode/inconsistent-category groups within the 143 were reviewed
+   and confirmed as legitimate variations, not duplicate-listing bugs — see
+   [[project-duplicate-barcode-families]] for the list and reasoning. The
+   remaining ~136 (143 minus those 7 groups' member rows) are still
+   unreviewed.
 7. Physically verify the 41 cross-family barcode collisions
    (`docs/BARCODE-CROSS-FAMILY-COLLISIONS.md`), prioritizing the 3
    systematic patterns.
