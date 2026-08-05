@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-08-03T22:03:27.423Z",
+  "lookbackDays": 365,
+  "sampleSize": 0,
+  "salesDocsScanned": 0,
+  "percentiles": {
+    "totalSpend": {
+      "p20": 0,
+      "p40": 0,
+      "p60": 0,
+      "p80": 0
+    },
+    "avgOrderValue": {
+      "p20": 0,
+      "p40": 0,
+      "p60": 0,
+      "p80": 0
+    },
+    "ordersPerMonth": {
+      "p20": 0,
+      "p40": 0,
+      "p60": 0,
+      "p80": 0
+    }
+  },
+  "tierBands": {
+    "retail": {
+      "note": "bottom 40% by total spend -- occasional/low-volume buyers",
+      "totalSpend_max": 0
+    },
+    "wholesale": {
+      "note": "middle 40% by total spend -- the default working tier",
+      "totalSpend_min": 0,
+      "totalSpend_max": 0
+    },
+    "distribution_chain": {
+      "note": "top 20% by total spend -- highest volume, best pricing",
+      "totalSpend_min": 0
+    }
+  }
+}

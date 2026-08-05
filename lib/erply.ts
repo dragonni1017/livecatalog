@@ -48,6 +48,13 @@ interface ErplyProduct {
   warehouses?: Record<string, { warehouseID: number; totalInStock: number; reserved: number }>
 }
 
+// Public catalog markup over Erply's retail-anchored price (decided
+// 2026-08-04): the livecatalog storefront shows retail + 20% as "wholesale."
+// This is separate from Erply's own per-customer Wholesale tier, which is a
+// 50%-off-retail price list rule applied internally in Erply -- do not
+// conflate the two or touch that rule here.
+const WHOLESALE_MARKUP = 1.2
+
 // ── Normalized type used by the sync route ────────────────────────────────────
 
 export interface ErplySyncProduct {
@@ -189,7 +196,7 @@ function normalizeProduct(p: ErplyProduct): ErplySyncProduct {
     sku: (p.code || String(p.productID)).trim(),
     barcode: p.code2?.trim() || null,
     name: p.name,
-    price: p.price ?? p.netPrice ?? 0,
+    price: (p.price ?? p.netPrice ?? 0) * WHOLESALE_MARKUP,
     categoryName: p.groupName ?? '',
     description: p.description ?? '',
     imageUrl: primaryImage?.fullURL ?? primaryImage?.largeURL ?? null,

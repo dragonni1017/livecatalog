@@ -33,6 +33,7 @@
 # local Claude Code workspace + scratch scripts + one-off data exports
 /.claude/
 scripts/_tmp_*.mjs
+scripts/_*.mjs
 /_tmp_*
 /data/livecatalog-category-breakdown.xlsx
 /data/*.bak
@@ -56,6 +57,10 @@ scripts/_tmp_*.mjs
 /data/inventory-counts/
 /data/price-comparisons/
 /data/livecatalog-products.xlsx
+/data/erply-review/
+/data/erply-woo-review/
+/data/price-rebase-review/
+/data/product-review/
 
 # superseded scratch exports moved aside (not deleted) during the 2026-07-14
 # cleanup — same never-commit intent, newer versions live in the folders above
