@@ -30,9 +30,19 @@
  * time) before creating a customer, never checked for an existing Erply
  * customer by email. Two manual test runs against production created 1,121
  * duplicate Erply customers before this was caught. Requires
- * SYNC_CUSTOMERS_ENABLED=true to run at all (in addition to CRON_SECRET) —
- * do not set that until the root cause is fixed AND the duplicate cleanup
- * is verified complete.
+ * SYNC_CUSTOMERS_ENABLED=true to run at all in write mode (in addition to
+ * CRON_SECRET) — do not set that until the fix has been dry-run-verified.
+ *
+ * Dry-run mode (added 2026-08-07 after the incident, same pattern every
+ * scripts/*.mjs in this project already uses): defaults ON. Reads live from
+ * both Erply and WooCommerce and computes the full diff, but makes NO
+ * writes to either API or to Supabase — every create/update/link is only
+ * counted, never executed. This is intentionally NOT gated by
+ * SYNC_CUSTOMERS_ENABLED, since it's the safe way to verify the sync logic
+ * against live data without the kill switch in the way.
+ *   GET /api/sync/customers            -> dry run (no writes, any time)
+ *   GET /api/sync/customers?apply=true -> real writes (still requires
+ *                                          SYNC_CUSTOMERS_ENABLED=true)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -124,14 +134,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Dry run by default — see the file header. Only ?apply=true attempts
+  // real writes, and even then only if the kill switch below is on.
+  const dryRun = request.nextUrl.searchParams.get('apply') !== 'true'
+
   // Hard kill switch — see the DISABLED note in the file header. Must be
-  // explicitly re-enabled once the duplicate-creation bug is fixed and the
-  // 1,121-record cleanup is verified complete.
-  if (process.env.SYNC_CUSTOMERS_ENABLED !== 'true') {
+  // explicitly re-enabled once the fix has been dry-run-verified. Does not
+  // apply to dry runs, which make no writes regardless.
+  if (!dryRun && process.env.SYNC_CUSTOMERS_ENABLED !== 'true') {
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: 'Disabled pending fix for the 2026-08-07 duplicate-customer incident — set SYNC_CUSTOMERS_ENABLED=true to re-enable',
+      reason: 'Write mode disabled pending fix verification for the 2026-08-07 duplicate-customer incident — set SYNC_CUSTOMERS_ENABLED=true to re-enable, or omit ?apply=true for a dry run',
     })
   }
 
@@ -159,9 +173,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { data: linkRows, error: linkErr } = await db.from('erply_woo_customer_links').select('*')
-    if (linkErr) throw new Error(`Failed to load erply_woo_customer_links: ${linkErr.message}`)
-    const links = (linkRows ?? []) as LinkRow[]
+    // Paginated — a bare .select('*') silently caps at Supabase's default
+    // 1000-row limit. Confirmed live 2026-08-07 via dry-run mode: with 2,768
+    // real link rows, an unpaginated select only saw the first 1,000 and
+    // treated the other 1,768 already-linked customers as unlinked. Caught
+    // before any write happened; see
+    // docs/memory/project-erply-duplicate-customer-incident.md.
+    const links: LinkRow[] = []
+    {
+      const pageSize = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await db
+          .from('erply_woo_customer_links')
+          .select('*')
+          .range(from, from + pageSize - 1)
+        if (error) throw new Error(`Failed to load erply_woo_customer_links: ${error.message}`)
+        links.push(...((data ?? []) as LinkRow[]))
+        if (!data || data.length < pageSize) break
+        from += pageSize
+      }
+    }
     const linkByEmail = new Map(links.map((l) => [l.email.toLowerCase(), l]))
     const linkByWooId = new Map(links.filter((l) => l.woo_customer_id != null).map((l) => [l.woo_customer_id as number, l]))
 
@@ -181,7 +213,9 @@ export async function GET(request: NextRequest) {
     // so the second loop below sees links created by the first loop in this
     // same request instead of working off a stale snapshot (which would
     // otherwise cause it to redundantly re-process the same email — caught
-    // by the table's unique index, but as a noisy error, not silently).
+    // by the table's unique index, but as a noisy error, not silently). In
+    // dry-run mode, the in-memory maps still update (so counting logic
+    // downstream is accurate) but nothing is written to Supabase.
     async function recordLink(row: {
       email: string
       erply_customer_id: string
@@ -191,11 +225,13 @@ export async function GET(request: NextRequest) {
       last_sync_source: 'erply' | 'woo'
     }) {
       const email = row.email.toLowerCase()
-      await db.from('erply_woo_customer_links').insert({
-        ...row,
-        email,
-        last_synced_at: new Date().toISOString(),
-      })
+      if (!dryRun) {
+        await db.from('erply_woo_customer_links').insert({
+          ...row,
+          email,
+          last_synced_at: new Date().toISOString(),
+        })
+      }
       const stored: LinkRow = {
         id: -1,
         email,
@@ -234,17 +270,24 @@ export async function GET(request: NextRequest) {
             result.skippedNoRoleForTier++
             continue
           }
-          const wooCustomer = await createWooCustomer({
-            email: c.email,
-            firstName: c.firstName,
-            lastName: c.lastName ?? c.companyName,
-            roleSlug: role.slug,
-          })
+          // dry run: never call createWooCustomer -- a real write to Woo,
+          // not just Supabase. Use a synthetic negative id purely so the
+          // in-memory link map has something to key on for this request.
+          const wooCustomerId = dryRun
+            ? -(1000000 + result.wooCreated)
+            : (
+                await createWooCustomer({
+                  email: c.email,
+                  firstName: c.firstName,
+                  lastName: c.lastName ?? c.companyName,
+                  roleSlug: role.slug,
+                })
+              ).id
           await recordLink({
             email: c.email,
             erply_customer_id: c.customerID,
             erply_tier: c.tier,
-            woo_customer_id: wooCustomer.id,
+            woo_customer_id: wooCustomerId,
             woo_role_slug: role.slug,
             last_sync_source: 'erply',
           })
@@ -255,17 +298,19 @@ export async function GET(request: NextRequest) {
             result.skippedNoRoleForTier++
             continue
           }
-          await updateWooCustomerRole(existingLink.woo_customer_id, role.slug)
-          await db
-            .from('erply_woo_customer_links')
-            .update({
-              erply_tier: c.tier,
-              woo_role_slug: role.slug,
-              last_synced_at: new Date().toISOString(),
-              last_sync_source: 'erply',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingLink.id)
+          if (!dryRun) {
+            await updateWooCustomerRole(existingLink.woo_customer_id, role.slug)
+            await db
+              .from('erply_woo_customer_links')
+              .update({
+                erply_tier: c.tier,
+                woo_role_slug: role.slug,
+                last_synced_at: new Date().toISOString(),
+                last_sync_source: 'erply',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existingLink.id)
+          }
           result.wooRoleUpdated++
         }
       } catch (err) {
@@ -307,15 +352,21 @@ export async function GET(request: NextRequest) {
         }
 
         const tier: ErplyTier = DEFAULT_TIER
-        const created = await createErplyCustomer({
-          email: wc.email,
-          firstName: wc.first_name || null,
-          lastName: wc.last_name || null,
-          tier,
-        })
+        // dry run: never call createErplyCustomer -- a real write to Erply,
+        // not just Supabase. Synthetic negative id, same reasoning as above.
+        const erplyCustomerId = dryRun
+          ? String(-(2000000 + result.erplyCreated))
+          : (
+              await createErplyCustomer({
+                email: wc.email,
+                firstName: wc.first_name || null,
+                lastName: wc.last_name || null,
+                tier,
+              })
+            ).customerID
         await recordLink({
           email: emailLower,
-          erply_customer_id: created.customerID,
+          erply_customer_id: erplyCustomerId,
           erply_tier: tier,
           woo_customer_id: wc.id,
           woo_role_slug: wooRoleForTier(tier)?.slug ?? null,
@@ -329,13 +380,15 @@ export async function GET(request: NextRequest) {
 
     const elapsed = Date.now() - startedAt
     console.log(
-      `[sync/customers] Done in ${elapsed}ms — wooCreated:${result.wooCreated} wooRoleUpdated:${result.wooRoleUpdated} ` +
-        `erplyCreated:${result.erplyCreated} linkedExisting:${result.linkedExisting} skippedNoRole:${result.skippedNoRoleForTier} ` +
-        `skippedStaff:${result.skippedStaffAccount} skippedKnownNonSync:${result.skippedKnownNonSync} errors:${result.errors.length}`,
+      `[sync/customers] ${dryRun ? 'DRY RUN' : 'APPLIED'} — Done in ${elapsed}ms — wooCreated:${result.wooCreated} ` +
+        `wooRoleUpdated:${result.wooRoleUpdated} erplyCreated:${result.erplyCreated} linkedExisting:${result.linkedExisting} ` +
+        `skippedNoRole:${result.skippedNoRoleForTier} skippedStaff:${result.skippedStaffAccount} ` +
+        `skippedKnownNonSync:${result.skippedKnownNonSync} errors:${result.errors.length}`,
     )
 
     return NextResponse.json({
       ok: true,
+      dryRun,
       syncedAt: new Date().toISOString(),
       durationMs: elapsed,
       ...result,

@@ -61,12 +61,30 @@ growth had actually stopped once fully killed.
    before each delete. 0 errors. Erply customer count confirmed back to
    3,466 (exact expected baseline) after cleanup.
 
+**Follow-up same day: added dry-run mode to the route itself**
+(`GET /api/sync/customers` defaults to dry-run now; `?apply=true` required
+for real writes, still gated by `SYNC_CUSTOMERS_ENABLED`). First dry run
+against live data caught a SECOND bug: `db.from('erply_woo_customer_links').select('*')`
+had no pagination, and Supabase silently caps unpaginated selects at 1,000
+rows — with the link table now at 2,768 rows, the route only ever saw the
+first 1,000 and treated the other 1,768 already-linked customers as
+unlinked (`linkedExisting: 1768` in the dry run, should have been ~0). Not
+dangerous on its own (the per-email unique constraint would have turned
+each into a caught error, not a duplicate) but would have been a wall of
+noise on a real run. Fixed by paginating the link-table read in 1,000-row
+pages; re-ran dry-run and confirmed `linkedExisting: 0`, `wooCreated: 27`
+(the known malformed-multi-email gap), 0 errors — matches the expected
+steady state exactly. This is the dry-run mode paying for itself on its
+first real use.
+
 **Current state:** root cause fixed and verified via dry-run-then-apply
 tooling; 1,121 duplicates removed with 0 dangling references; link table
-populated for all 2,764 genuine pre-existing matches. The sync route itself
-has **not** been re-run live since the fix — `SYNC_CUSTOMERS_ENABLED` is
-still unset by design. Two throwaway test customers from earlier in the
-session (`claude-backfill-test-*@example.invalid`, Erply IDs 13037/13038)
+populated for all 2,764 genuine pre-existing matches; pagination bug in the
+link-table read also fixed and dry-run-verified. The sync route itself has
+**not** been re-run live (`?apply=true`) since either fix —
+`SYNC_CUSTOMERS_ENABLED` is still unset by design. Two throwaway test
+customers from earlier in the session (`claude-backfill-test-*@example.invalid`,
+Erply IDs 13037/13038)
 are still present in Erply — Dragon said he'd handle those himself,
 unrelated to this incident's duplicate range (13041+).
 
