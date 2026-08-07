@@ -55,12 +55,13 @@ mechanical script, before anything writes to either side again.
 bidirectionally, tier-aware, daily — this closes that out except for the
 small edge-case list above.
 
-**How to apply:** the cron route and backfill script are correct now (role=
-all fixed) but the backfill script should NOT be re-run blindly — the
-remaining 27/50 emails need Dragon's input on multi-email splitting and
-which Woo-only accounts are real vs test junk before either direction
-touches them. The daily cron is safe to enable as-is for the steady-state
-trickle (new customers, tier changes) since it only acts on customers that
-don't already have a link row or whose tier changed — re-confirm the cron's
-first live run once enabled rather than assuming it behaves like the local
-verification.
+**SUPERSEDED 2026-08-07, same day — the "safe to enable as-is" line above was
+WRONG and caused a real incident.** The cron was NOT safe as-is: it only
+checked the link table (2 rows) before creating, never checked whether the
+target side already had that email, and created 1,121 duplicate Erply
+customers when actually run. Root cause fixed, duplicates cleaned up, link
+table now properly backfilled (2,768 rows) — full writeup in
+[[project-erply-duplicate-customer-incident]], **read that before touching
+this route again**. The cron is currently disabled
+(`SYNC_CUSTOMERS_ENABLED` unset, also removed from `vercel.json`) and stays
+that way until deliberately re-enabled.

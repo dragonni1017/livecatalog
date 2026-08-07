@@ -60,6 +60,7 @@ scripts/_*.mjs
 /data/erply-review/
 /data/erply-woo-review/
 /data/erply-woo-customer-backfill/
+/data/erply-duplicate-cleanup/
 /data/price-rebase-review/
 /data/product-review/
 

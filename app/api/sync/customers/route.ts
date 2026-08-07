@@ -151,6 +151,7 @@ export async function GET(request: NextRequest) {
     wooCreated: 0,
     wooRoleUpdated: 0,
     erplyCreated: 0,
+    linkedExisting: 0,
     skippedNoRoleForTier: 0,
     skippedStaffAccount: 0,
     skippedKnownNonSync: 0,
@@ -164,16 +165,71 @@ export async function GET(request: NextRequest) {
     const linkByEmail = new Map(links.map((l) => [l.email.toLowerCase(), l]))
     const linkByWooId = new Map(links.filter((l) => l.woo_customer_id != null).map((l) => [l.woo_customer_id as number, l]))
 
-    // ── 1. Erply -> Woo ──────────────────────────────────────────────────
+    // Fetch BOTH full lists up front so each direction can check whether the
+    // customer already exists on the OTHER side by email — not just whether
+    // a link row happens to exist. Missing this check is what caused the
+    // 2026-08-07 incident (1,121 duplicate Erply customers created because
+    // erply_woo_customer_links was near-empty and the only guard was
+    // linkByWooId.has(wc.id)) — see
+    // docs/memory/project-erply-duplicate-customer-incident.md.
     const erplyCustomers = await getErplyCustomers()
+    const wooCustomers = await getAllWooCustomers()
+    const erplyByEmail = new Map(erplyCustomers.map((c) => [c.email, c]))
+    const wooByEmail = new Map(wooCustomers.filter((c) => c.email).map((c) => [c.email.toLowerCase(), c]))
 
+    // Records a new link both in Supabase and in the in-memory maps above,
+    // so the second loop below sees links created by the first loop in this
+    // same request instead of working off a stale snapshot (which would
+    // otherwise cause it to redundantly re-process the same email — caught
+    // by the table's unique index, but as a noisy error, not silently).
+    async function recordLink(row: {
+      email: string
+      erply_customer_id: string
+      erply_tier: string
+      woo_customer_id: number
+      woo_role_slug: string | null
+      last_sync_source: 'erply' | 'woo'
+    }) {
+      const email = row.email.toLowerCase()
+      await db.from('erply_woo_customer_links').insert({
+        ...row,
+        email,
+        last_synced_at: new Date().toISOString(),
+      })
+      const stored: LinkRow = {
+        id: -1,
+        email,
+        erply_customer_id: row.erply_customer_id,
+        erply_tier: row.erply_tier,
+        woo_customer_id: row.woo_customer_id,
+        woo_role_slug: row.woo_role_slug,
+      }
+      linkByEmail.set(email, stored)
+      linkByWooId.set(row.woo_customer_id, stored)
+    }
+
+    // ── 1. Erply -> Woo ──────────────────────────────────────────────────
     for (const c of erplyCustomers) {
       const existingLink = linkByEmail.get(c.email)
       const role = wooRoleForTier(c.tier)
 
       try {
         if (!existingLink) {
-          // No link row yet — new Erply customer (or pre-dates the backfill).
+          const existingWoo = wooByEmail.get(c.email)
+          if (existingWoo) {
+            // Already exists in Woo under this email, just never linked —
+            // link them, do not create a duplicate.
+            await recordLink({
+              email: c.email,
+              erply_customer_id: c.customerID,
+              erply_tier: c.tier,
+              woo_customer_id: existingWoo.id,
+              woo_role_slug: role?.slug ?? null,
+              last_sync_source: 'erply',
+            })
+            result.linkedExisting++
+            continue
+          }
           if (!role) {
             result.skippedNoRoleForTier++
             continue
@@ -184,13 +240,12 @@ export async function GET(request: NextRequest) {
             lastName: c.lastName ?? c.companyName,
             roleSlug: role.slug,
           })
-          await db.from('erply_woo_customer_links').insert({
+          await recordLink({
             email: c.email,
             erply_customer_id: c.customerID,
             erply_tier: c.tier,
             woo_customer_id: wooCustomer.id,
             woo_role_slug: role.slug,
-            last_synced_at: new Date().toISOString(),
             last_sync_source: 'erply',
           })
           result.wooCreated++
@@ -219,23 +274,38 @@ export async function GET(request: NextRequest) {
     }
 
     // ── 2. Woo -> Erply ──────────────────────────────────────────────────
-    const wooCustomers = await getAllWooCustomers()
-
     for (const wc of wooCustomers) {
-      if (linkByWooId.has(wc.id)) continue // already linked (backfill or prior sync)
       if (!wc.email) continue
+      const emailLower = wc.email.toLowerCase()
+      if (linkByWooId.has(wc.id) || linkByEmail.has(emailLower)) continue // already linked
       if (NON_CUSTOMER_WOO_ROLES.has(wc.role)) {
         // Staff/dev account (site owner, agency, plugin support) — never
         // create an Erply customer for these. See lib/woo.ts.
         result.skippedStaffAccount++
         continue
       }
-      if (KNOWN_NON_SYNC_WOO_EMAILS.has(wc.email.toLowerCase())) {
+      if (KNOWN_NON_SYNC_WOO_EMAILS.has(emailLower)) {
         result.skippedKnownNonSync++
         continue
       }
 
       try {
+        const existingErply = erplyByEmail.get(emailLower)
+        if (existingErply) {
+          // Already exists in Erply under this email, just never linked —
+          // link them, do not create a duplicate.
+          await recordLink({
+            email: emailLower,
+            erply_customer_id: existingErply.customerID,
+            erply_tier: existingErply.tier,
+            woo_customer_id: wc.id,
+            woo_role_slug: wooRoleForTier(existingErply.tier)?.slug ?? null,
+            last_sync_source: 'woo',
+          })
+          result.linkedExisting++
+          continue
+        }
+
         const tier: ErplyTier = DEFAULT_TIER
         const created = await createErplyCustomer({
           email: wc.email,
@@ -243,13 +313,12 @@ export async function GET(request: NextRequest) {
           lastName: wc.last_name || null,
           tier,
         })
-        await db.from('erply_woo_customer_links').insert({
-          email: wc.email,
+        await recordLink({
+          email: emailLower,
           erply_customer_id: created.customerID,
           erply_tier: tier,
           woo_customer_id: wc.id,
           woo_role_slug: wooRoleForTier(tier)?.slug ?? null,
-          last_synced_at: new Date().toISOString(),
           last_sync_source: 'woo',
         })
         result.erplyCreated++
@@ -261,8 +330,8 @@ export async function GET(request: NextRequest) {
     const elapsed = Date.now() - startedAt
     console.log(
       `[sync/customers] Done in ${elapsed}ms — wooCreated:${result.wooCreated} wooRoleUpdated:${result.wooRoleUpdated} ` +
-        `erplyCreated:${result.erplyCreated} skippedNoRole:${result.skippedNoRoleForTier} skippedStaff:${result.skippedStaffAccount} ` +
-        `skippedKnownNonSync:${result.skippedKnownNonSync} errors:${result.errors.length}`,
+        `erplyCreated:${result.erplyCreated} linkedExisting:${result.linkedExisting} skippedNoRole:${result.skippedNoRoleForTier} ` +
+        `skippedStaff:${result.skippedStaffAccount} skippedKnownNonSync:${result.skippedKnownNonSync} errors:${result.errors.length}`,
     )
 
     return NextResponse.json({
