@@ -153,6 +153,34 @@ before or during their import, not after** — either get the two missing
 roles created in WooCommerce first, or confirm with the third-party team
 how they're handling tiers with no matching role yet.
 
+**RE-CHECKED 2026-08-06** via `scripts/check-woo-customer-changes.mjs`
+(read-only): the third-party import Dragon said was "running right now" as
+of 2026-08-04 has **not actually landed** — WooCommerce still has only 6
+customer accounts total (test/junk emails, oldest from 2023), not
+3,461. Role picture also moved since 08-03: 4 Wholesale Suite roles now
+exist (`Chain`, `Distributor`, `Exclusive`, `Wholesale`/`default_wholesaler`,
+all count 0) — **Exclusive was added**, but **Retail still does not
+exist**. Given [[project-retail-anchor-pricing-flip]] made Retail the
+*default* tier for essentially every customer, a live import run today
+would fail/no-op role assignment for the majority of customers, not just an
+edge case — worse than the original 2-of-4-roles risk note above implied at
+the time it was written (Retail wasn't the default tier yet on 08-03).
+**Don't assume the import has happened or that Retail exists in Woo without
+re-checking** — this script is safe (read-only) to re-run before trusting
+either.
+
+**CORRECTED 2026-08-07 — the "has not actually landed" conclusion above was
+WRONG, caused by a bug in the check script itself, not an absent import.**
+`wc/v3/customers` defaults to `role=customer` and silently hides every
+Wholesale Suite-tiered account — the "6 customers" reading was real for the
+query as written, but the query was blind to ~3,176 real accounts. With
+`role=all` added, Woo has 3,182 customers (import landed 2026-08-06,
+matching the original claim) and Retail/Exclusive roles both exist. Full
+details, the resulting bad backfill run (self-corrected, no lasting damage),
+and the real remaining ~27/50-email gap: see
+[[project-woocommerce-customer-role-filter-bug]] and
+[[project-erply-woo-customer-sync]].
+
 **Why:** Dragon wants WooCommerce pricing/customer segmentation to
 eventually mirror the Erply tier structure, but is still in a
 verify-before-touching-prod mindset for the Woo side specifically

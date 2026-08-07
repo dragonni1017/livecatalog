@@ -59,6 +59,7 @@ scripts/_*.mjs
 /data/livecatalog-products.xlsx
 /data/erply-review/
 /data/erply-woo-review/
+/data/erply-woo-customer-backfill/
 /data/price-rebase-review/
 /data/product-review/
 

@@ -1,10 +1,12 @@
 /**
  * Shared Erply tier <-> WooCommerce/Wholesale Suite role mapping.
  *
- * Source of truth for the customer bridge (app/api/webhooks/erply/customers,
- * app/api/webhooks/woo/customers). Mirrors TIER_TO_WOO_ROLE in
- * scripts/assign-woo-tier-roles.mjs — that script is a standalone .mjs and
- * can't import this file, so if you change one, change both. See
+ * Source of truth for the customer bridge: app/api/sync/customers/route.ts
+ * (daily cron) and the dormant webhook scaffolding in
+ * app/api/webhooks/erply/customers, app/api/webhooks/woo/customers. Mirrors
+ * TIER_TO_WOO_ROLE in scripts/assign-woo-tier-roles.mjs and
+ * scripts/backfill-erply-customers-to-woo.mjs — those are standalone .mjs
+ * and can't import this file, so if you change one, change all three. See
  * docs/memory/project-woocommerce-tier-mapping.md for status/history.
  */
 
@@ -15,10 +17,7 @@ export type ErplyTier = 'Base' | 'Wholesale' | 'Retail' | 'Distribution-Chain' |
  * explicit tier defaults here. Originally Wholesale; changed to Retail once
  * Dragon moved all 3,461 existing Erply customers into Retail and confirmed
  * Retail is the new default going forward too (see
- * docs/memory/project-retail-anchor-pricing-flip.md). Retail still has no
- * Wholesale Suite role on the Woo side (see TIER_TO_WOO_ROLE below) — the
- * webhook routes that read this will skip/log rather than assign a role
- * until that's created.
+ * docs/memory/project-retail-anchor-pricing-flip.md).
  */
 export const DEFAULT_TIER: ErplyTier = 'Retail'
 
@@ -31,14 +30,13 @@ interface WooRole {
  * `null` means no Wholesale Suite role exists yet for that tier — callers
  * must skip (never fall back to another role) until it's filled in here.
  * Base is intentionally always null: no customer should ever be assigned it.
+ * All 5 term_ids reconfirmed live 2026-08-07 via GET wp-json/wholesale/v1/roles.
  */
 export const TIER_TO_WOO_ROLE: Record<ErplyTier, WooRole | null> = {
   'Distribution-Chain': { slug: 'chain', termId: 45 },
   Wholesale: { slug: 'default_wholesaler', termId: 18 },
-  // TODO: create a Wholesale Suite role for Retail, then fill in its slug/termId.
-  Retail: null,
-  // TODO: create a Wholesale Suite role for Exclusive, then fill in its slug/termId.
-  Exclusive: null,
+  Retail: { slug: 'retail', termId: 204 },
+  Exclusive: { slug: 'exclusive', termId: 203 },
   // Deliberately permanent null — Base is not a customer-assignable role.
   Base: null,
 }

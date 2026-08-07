@@ -14,12 +14,12 @@
 -- HOW TO APPLY: paste into the Supabase SQL editor (project aguorduaxfqrvvywgrdi)
 -- and run once. No migration runner in this project.
 --
--- SCAFFOLDING ONLY as of 2026-08-04 — see docs/memory/project-woocommerce-tier-mapping.md.
--- Nothing writes to this table yet; the webhook routes that will populate it
--- are skeletons pending: (1) Retail/Exclusive Wholesale Suite roles being
--- created in WooCommerce, (2) the third-party Erply->Woo customer import
--- finishing, (3) fetchErplyCustomerGroupMembership-equivalent logic being
--- verified against live Erply data.
+-- APPLIED LIVE 2026-08-07 (project aguorduaxfqrvvywgrdi) -- the three
+-- blockers from the original SCAFFOLDING note are resolved/moot: all 5
+-- Wholesale Suite roles now exist, the third-party import never landed
+-- (superseded by scripts/backfill-erply-customers-to-woo.mjs +
+-- app/api/sync/customers/route.ts), and the sync design moved from
+-- webhook-driven to a daily cron pull instead.
 
 create table erply_woo_customer_links (
   id                 bigserial primary key,
@@ -42,3 +42,8 @@ create index erply_woo_customer_links_erply_id_idx
 
 create index erply_woo_customer_links_woo_id_idx
   on erply_woo_customer_links (woo_customer_id);
+
+-- Only ever written/read via the service-role key (cron + scripts/), never
+-- from a client-side Supabase call -- RLS with no policies blocks anon/
+-- authenticated access while service role (which bypasses RLS) is unaffected.
+alter table erply_woo_customer_links enable row level security;
