@@ -3,10 +3,6 @@
     {
       "path": "/api/sync",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/sync/customers",
-      "schedule": "0 9 * * *"
     }
   ]
 }

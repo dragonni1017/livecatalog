@@ -23,6 +23,16 @@
  *
  * Security: requires Authorization: Bearer {CRON_SECRET} header, same as
  * /api/sync.
+ *
+ * DISABLED 2026-08-07 pending a fix — see
+ * docs/memory/project-erply-duplicate-customer-incident.md. The Woo->Erply
+ * direction below only checked erply_woo_customer_links (near-empty at the
+ * time) before creating a customer, never checked for an existing Erply
+ * customer by email. Two manual test runs against production created 1,121
+ * duplicate Erply customers before this was caught. Requires
+ * SYNC_CUSTOMERS_ENABLED=true to run at all (in addition to CRON_SECRET) —
+ * do not set that until the root cause is fixed AND the duplicate cleanup
+ * is verified complete.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -112,6 +122,17 @@ interface LinkRow {
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Hard kill switch — see the DISABLED note in the file header. Must be
+  // explicitly re-enabled once the duplicate-creation bug is fixed and the
+  // 1,121-record cleanup is verified complete.
+  if (process.env.SYNC_CUSTOMERS_ENABLED !== 'true') {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: 'Disabled pending fix for the 2026-08-07 duplicate-customer incident — set SYNC_CUSTOMERS_ENABLED=true to re-enable',
+    })
   }
 
   // Same guard as /api/sync: never run against either side in stub mode.
