@@ -128,6 +128,21 @@ whole set, if the count is fetchable) after any bulk financial write,
 independent of the writer's own log, the way this incident was actually
 caught.
 
+**UPDATE 2026-08-06 — customer groups split from the POS default:**
+Dragon wanted the POS walk-in default (no customer attached) to keep
+showing full Retail price, but every *real* customer account to carry the
+Wholesale discount automatically once selected at POS. `scripts/move-
+customers-to-wholesale.mjs` (new, mirrors `move-all-customers-to-retail.mjs`
+but excludes `POS_DEFAULT_CUSTOMER_IDS = [3]`) moved all 3,461 real
+customers from Retail (21) to Wholesale (19), leaving only `customerID 3`
+("POS Customer" — the `defaultCustomerID` on both physical registers,
+Warehouse and Store LA, confirmed via `check-pos-default-customer.mjs`) in
+Retail. Verified live after the write (not trusting the run's own log,
+per this project's standard pattern): 3,461/3,461 in Wholesale, customerID
+3 still Retail on both registers. Net effect: POS with no customer attached
+= full retail price; POS with any real customer selected = Wholesale price
+(-50% off retail, see the discountPercent section above) automatically.
+
 **How to apply (pricing model, unchanged from before):** if anyone asks
 "why is Wholesale a +50% discount instead
 of a +20% markup," this is why — read this file, not just
