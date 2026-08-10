@@ -63,6 +63,9 @@ scripts/_*.mjs
 /data/erply-duplicate-cleanup/
 /data/price-rebase-review/
 /data/product-review/
+/data/price-quarter-round-review/
+/data/woo-tier-review/
+/export-out/
 
 # superseded scratch exports moved aside (not deleted) during the 2026-07-14
 # cleanup — same never-commit intent, newer versions live in the folders above
