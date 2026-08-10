@@ -101,39 +101,51 @@ export default function SearchInput() {
     []
   )
 
-  // Debounced URL update (existing behavior) — 300ms, updates catalog grid
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedUpdate = useCallback(
-    debounce((query: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (query) {
-        params.set('q', query)
-      } else {
-        params.delete('q')
-      }
-      params.delete('page')
-      router.push(`/?${params.toString()}`)
+  // Grid reload only happens on explicit submit (Enter / search button tap) —
+  // not per-keystroke. A per-keystroke router.push here used to race with
+  // continued typing on slow (mobile) connections: the URL-sync effect above
+  // would revert `value` to the stale debounced query once the slow
+  // navigation resolved, which read as dropped keystrokes/lag.
+  function submitSearch(query: string) {
+    const trimmed = query.trim()
+    const params = new URLSearchParams(searchParams.toString())
+    if (trimmed) {
+      params.set('q', trimmed)
+    } else {
+      params.delete('q')
+    }
+    params.delete('page')
+    router.push(`/?${params.toString()}`)
+    setOpen(false)
+    setHighlightIdx(-1)
 
-      if (query.trim().length >= 2) {
-        fetch('/api/track', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'search', term: query }),
-          keepalive: true,
-        }).catch(() => {})
-      }
-    }, 300),
-    [searchParams, router]
-  )
+    if (trimmed.length >= 2) {
+      fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'search', term: trimmed }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newValue = e.target.value
     setValue(newValue)
     debouncedSuggest(newValue)
-    debouncedUpdate(newValue)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (open && highlightIdx >= 0 && results[highlightIdx]) {
+        navigateToProduct(results[highlightIdx].id)
+      } else {
+        submitSearch(value)
+      }
+      return
+    }
+
     if (!open || results.length === 0) return
 
     if (e.key === 'ArrowDown') {
@@ -142,14 +154,6 @@ export default function SearchInput() {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setHighlightIdx(prev => (prev <= 0 ? results.length - 1 : prev - 1))
-    } else if (e.key === 'Enter') {
-      if (highlightIdx >= 0 && results[highlightIdx]) {
-        e.preventDefault()
-        navigateToProduct(results[highlightIdx].id)
-      }
-      // If no highlight, let the form submit naturally (existing URL search)
-      setOpen(false)
-      setHighlightIdx(-1)
     } else if (e.key === 'Escape') {
       setOpen(false)
       setHighlightIdx(-1)
@@ -171,12 +175,22 @@ export default function SearchInput() {
 
   return (
     <div ref={containerRef} className="relative w-full max-w-sm">
-      <div className="flex items-center gap-2">
-        {/* Search input with magnifying glass icon */}
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          submitSearch(value)
+        }}
+      >
+        {/* Search input with magnifying glass submit button */}
         <div className="relative flex-1">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+          <button
+            type="submit"
+            aria-label="Search"
+            className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 hover:text-gray-600"
+          >
             <svg
-              className="h-4 w-4 text-gray-400"
+              className="h-4 w-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -189,7 +203,7 @@ export default function SearchInput() {
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-          </div>
+          </button>
           <input
             type="search"
             value={value}
@@ -201,7 +215,7 @@ export default function SearchInput() {
             className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
           />
 
-          {/* Loading spinner — shown inside input right side while fetching */}
+          {/* Loading spinner — shown inside input right side while fetching suggestions */}
           {loading && (
             <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-red-500" />
@@ -211,7 +225,7 @@ export default function SearchInput() {
 
         {/* Barcode scanner button */}
         <BarcodeScanner onScan={handleScan} />
-      </div>
+      </form>
 
       {/* Autosuggest dropdown */}
       {open && results.length > 0 && (
