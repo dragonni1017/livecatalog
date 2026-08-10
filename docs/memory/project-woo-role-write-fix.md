@@ -70,3 +70,36 @@ needed since the script reads it from env. The 372 Erply customers with no
 Woo email match are unchanged by this fix (that's a separate email/data-gap
 question, not a role-writing problem) — see [[project-erply-woo-customer-sync]]
 for that gap's history.
+
+**372 no-Woo-match breakdown, investigated 2026-08-10 (read-only, from
+`data/woo-tier-review/no-woo-match.csv` after the fix above) — this is NOT
+the same issue as the "27/50 email" gap in
+[[project-woocommerce-customer-role-filter-bug]], and is much simpler than
+the row count suggests:**
+- **368 of 372 (99%) have no email on file in Erply at all** — nothing for
+  any email-matching script to work with. This is a data-completeness gap
+  in Erply itself, not a sync bug — no script fix is possible until these
+  customers get a real email entered on the Erply side. Customer #3 ("POS
+  Customer") is expected here — that's the intentional POS walk-in default
+  account (see [[project-retail-anchor-pricing-flip]]'s
+  `POS_DEFAULT_CUSTOMER_IDS`), not a real customer that should ever match a
+  Woo account.
+- **Only 4 have an email that failed to match, all data-quality issues,
+  not sync issues:**
+  - `sibia@ly_usa.com` (underscore instead of hyphen — invalid domain)
+    appears on **two different** customer records (#1460 "Lorenzo
+    Martinez", #12466 "Hernandez, Rosalva") — looks like a shared
+    placeholder someone typed rather than either customer's real email.
+  - `ollyollybr@gmail.com.` (#1773 "Olly-Olly.") — trailing period typo.
+  - `sol@redhot.la,nora@redhot.la` (#1938 "Red Hot Chilli Los Angeles") —
+    two emails comma-joined into one Erply field, same underlying pattern
+    as the semicolon-joined multi-address records already flagged in
+    [[project-woocommerce-customer-role-filter-bug]], just a different
+    separator.
+- **Sanity check:** 3,093 of 3,466 Erply customers (89%) do have a
+  matching Woo email — 3,091 real customer accounts (now on the correct
+  role per the fix above) plus the 2 `conglai@ly-usa.com` admin-account
+  matches (never written, see `NEVER_TOUCH_ROLES`). No action taken on any
+  of the 372 — decided against auto-fixing or guessing emails; if this
+  needs closing out later, the fix is a human backfill pass in Erply, not
+  more script work.
