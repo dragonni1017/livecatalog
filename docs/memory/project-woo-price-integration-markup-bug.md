@@ -1,6 +1,6 @@
 ---
 name: project-woo-price-integration-markup-bug
-description: CORRECTED 2026-08-13 -- WooCommerce (ly-usa.com) shows every product at exactly 2.400x, but the stored _regular_price postmeta is actually correct (matches Erply); the 2.4x is applied by an unfound display/API-time filter on the WooCommerce/WordPress side, NOT an Erply markup setting and NOT the Wholesale For WooCommerce plugin's role pricing (both ruled out)
+description: UPDATED 2026-08-14 (4 passes) -- WooCommerce (ly-usa.com) shows every product at exactly 2.400x via wc/v3 REST, but _regular_price postmeta is correct (matches Erply); Wholesale For WooCommerce's price filter bails on REST_REQUEST (ruled out as direct source), WooCommerce-core's RestApiCache trait is present but its feature flag is OFF (ruled out), Codisto + NetSuite sync plugins register no price filters (ruled out/unlikely) -- paradox unresolved by static reading; needs the live plugin-deactivate test or a full-page-cache purge+recheck on the front-end symptom specifically
 type: project
 ---
 
@@ -329,3 +329,137 @@ after the point read so far wasn't reached) in case it has its own
 non-guarded fallback multiplier, or (c) check whether a stale WooCommerce
 price transient explains the REST/admin-form split per the cache theory
 above.
+
+**2026-08-14, third pass — "second registration" lead fully closed, still
+read-only, no site changes.** Pulled the full text of
+`class-wwp-wholesale-multiuser.php` via the wp-admin Plugin Editor's
+underlying textarea (`document.getElementById('newcontent').value`,
+read via javascript_tool — `get_page_text`/the rendered CodeMirror view
+only exposes the first screenful, this bypasses that limit) and located
+all 14 occurrences of `wwp_regular_price_change` in the file:
+
+- 4 in the constructor (`__construct`, priority 200 on all four
+  `get_price`/`get_regular_price` hooks — already known).
+- 1 as a **direct method call** (not a filter registration) inside a
+  variation-price-HTML helper, unrelated to REST.
+- 4 more inside `wwp_override_product_price_cart()`
+  (`woocommerce_before_calculate_totals`) which `remove_filter`s all four
+  hooks, and `wwp_override_price_filter_on()`
+  (`woocommerce_after_calculate_totals`) which re-`add_filter`s the exact
+  same four with the identical priority/args — this is cart-total
+  recalculation bookkeeping (temporarily disable the override while
+  WooCommerce sums the cart, then restore it), **not** a second,
+  differently-guarded registration. The memory node's prior "two were a
+  second, differently-conditioned registration block" note was a
+  half-read false lead — confirmed now it's the same guarded function,
+  just unhooked/rehooked around cart calc. This closes out path (b) from
+  the "how to apply" above: there is no unguarded second registration
+  anywhere in this file.
+- Also confirmed via the full un-redacted function body: the
+  `REST_REQUEST` bail-out is the very first substantive check after two
+  earlier early-returns (a `wc_quote_convert_to_order_customer` request
+  check, and an `is_shop() && product_variation` check) — it fires before
+  `wc_delete_product_transients()` is ever called and before any
+  role/tier resolution. So a REST call genuinely cannot reach the tier
+  pricing logic or the transient-delete line in this function, full stop.
+
+**Net effect: this file is now fully read and is not where the 2.4x
+comes from for REST responses** — it's the right file for explaining why
+*front-end* page views could show a role-adjusted price, but the
+REST_REQUEST guard is real, unconditional, and unbypassed anywhere in
+this plugin's own registrations. The paradox is not resolvable by further
+source reading of this file.
+
+**How to apply (updated 08-14, third pass):** stop re-reading
+`class-wwp-wholesale-multiuser.php` — it's fully accounted for. Two paths
+remain, both needing something beyond static PHP review of this plugin:
+(a) the deactivate-and-recheck live test (still pending Dragon's
+go-ahead), which would now also rule out or confirm this plugin
+*entirely*, including hooks not yet found; or (b) check WooCommerce core's
+own REST product controller (`class-wc-rest-products-controller.php` /
+`class-wc-product-data-store-cpt.php`) for whether `regular_price` in a
+`wc/v3` response is actually read via `$product->get_regular_price()`
+(which would run this filter and get correctly bailed-out raw data) or
+via a lookup-table/meta-cache path that could be serving an already-stale
+inflated value written during some earlier front-end request — i.e. the
+stale-transient/lookup-table theory now needs to be chased on the
+WooCommerce-core side, not the Wholesale-plugin side, since the plugin's
+own filter provably cannot be the direct source for REST responses.
+
+**2026-08-14, fourth pass — chased path (b) above, found and ruled out a
+concrete WooCommerce-core REST caching layer; also cleared the two
+ERP/multichannel sync plugins as suspects. Still read-only, no site
+changes.**
+
+- Traced the REST read path fully: `class-wc-rest-products-v2-controller.php`
+  (`get_product_data()`, the actual response formatter used by v3 via
+  inheritance) does `$base_data['regular_price'] = $product->get_regular_price( $context )`
+  with `$context` defaulting to `'view'`. `WC_Product::get_regular_price()`
+  → `WC_Data::get_prop()` (`abstract-wc-data.php`) confirms the
+  `apply_filters()` call is gated on `'view' === $context` — so REST
+  responses genuinely do run through the same filtered getter as
+  front-end views, just with the Wholesale plugin's own `REST_REQUEST`
+  guard (confirmed 3rd pass) bailing it out specifically for REST. No
+  contradiction found in this part of core.
+- **Found a real caching layer that fits the "stale value survives a fix"
+  shape of this bug almost perfectly, then ruled it out by config, not
+  just code reading:** WooCommerce core ships
+  `src/Internal/Traits/RestApiCache.php` (`RestApiCache` trait, used by
+  `WC_REST_Products_V2_Controller`) — a full REST-response cache keyed by
+  route+method+query+user, invalidated only via explicit
+  `VersionStringGenerator::generate_version()` calls, not a straight
+  postmeta read. This would have explained everything (why the wp-admin
+  edit form is correct but the API/front-end is stale) if it were active.
+  But it's gated behind two flags read directly in the trait's
+  constructor: WooCommerce's `rest_api_caching` experimental feature flag,
+  and (for the version-string invalidation path specifically) the
+  `woocommerce_rest_api_enable_backend_caching` option. **Checked live at
+  WooCommerce → Settings → Advanced → Features → Experimental features →
+  "REST API Caching": the checkbox
+  (`#woocommerce_feature_rest_api_caching_enabled`) is unchecked/disabled
+  on this site.** Per the trait's own early-return
+  (`if ( ! $this->rest_api_caching_feature_enabled ) { return; }`), this
+  makes every `with_cache()` call in the controller a no-op. **Ruled out
+  — not the source.**
+- **Checked the two ERP/multichannel sync plugins flagged as "not
+  narrowed down" since the very first investigation pass:**
+  - **Codisto Channel Cloud** (`codistoconnect/connect.php`, 107KB single
+    file): grepped for any `add_filter` mentioning `price` in any form
+    (both the specific `woocommerce_product_get_(regular_)price` hooks
+    and a broad `price` substring match) — zero matches anywhere in the
+    file. It reads prices (for pushing to Codisto's own marketplace feed)
+    but registers no filter that could alter what WooCommerce itself
+    serves. **Ruled out.**
+  - **NetSuite Integration for WooCommerce**
+    (`netsuite-integration-for-woocommerce/netsuite-integration-for-woocommerce.php`):
+    the plugin's actual bootstrap file is tiny (6.9KB) and has no price
+    filters. The bulk of the plugin (its file tree has hundreds/thousands
+    of entries) turned out to be a vendored NetSuite SOAP client library
+    (`inc/NS_Toolkit/`, one generated PHP class per SOAP type —
+    `functions.php` inside there is the toolkit's own helper file, not
+    plugin logic, and isn't directly editable). Did not find and did not
+    fully rule out the plugin's own custom sync/hook code (would require
+    locating specific integration files among hundreds of vendor files,
+    not done this pass) — **downgraded to unlikely, not conclusively
+    ruled out**, since a SOAP-client vendor library is not the kind of
+    code that would register a `woocommerce_product_get_price` filter.
+
+**How to apply (updated 08-14, fourth pass):** the REST-caching and
+sync-plugin theories are closed. What remains open: (a) the
+deactivate-and-recheck live test on **Wholesale For WooCommerce**
+specifically (still needs Dragon's go-ahead — now the most direct
+remaining way to confirm/deny that plugin given static analysis is
+exhausted for its own filter registrations), (b) a **separate, so-far
+unconsidered angle**: full-page HTML caching. Two full-page cache plugins
+are active on this site (**Cache Enabler**, **LiteSpeed Cache**) — worth
+checking whether the live front-end product page
+(`/?p=54320`, still showing 2.4x per the original 08-13 check) is being
+served from a stale cached HTML page from before the Aug 4 price flip,
+which would NOT explain the `wc/v3` REST API result (REST endpoints
+aren't normally covered by full-page HTML cache) but could be a fully
+separate, easily-fixed bug for the front-end symptom specifically — purge
+the cache and recheck rather than assuming both symptoms share one root
+cause. (c) No persistent object cache plugin (Redis/Memcached) was found
+in the active-plugins list, which weakens any theory relying on a
+cross-request stale value surviving via `wp_cache_*` outside of what's
+already covered by (a) and the ruled-out RestApiCache trait.
