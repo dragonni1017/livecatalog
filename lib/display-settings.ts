@@ -10,6 +10,8 @@ export interface DisplaySettings {
   show_category_detail: boolean
   show_pack_info_listing: boolean
   show_pack_info_detail: boolean
+  show_price_listing: boolean
+  show_price_detail: boolean
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -21,6 +23,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   show_category_detail: true,
   show_pack_info_listing: true,
   show_pack_info_detail: true,
+  show_price_listing: true,
+  show_price_detail: true,
 }
 
 // React.cache dedupes this per request — ProductCard calls it once per card

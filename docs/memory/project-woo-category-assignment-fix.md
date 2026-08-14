@@ -1,6 +1,6 @@
 ---
 name: project-woo-category-assignment-fix
-description: 2026-08-10 -- ly-usa.com WooCommerce had 0 products assigned to any of its 61 categories; backfilled 2,869 via Erply's own groupName field (matches Woo's taxonomy almost exactly). Homepage "Browse by Category" tile links partially fixed; nav menu + duplicate promo blocks still have the same slug-typo bug, deferred
+description: 2026-08-10 -- ly-usa.com WooCommerce had 0 products assigned to any of its 61 categories; backfilled 2,869 via Erply's own groupName field (matches Woo's taxonomy almost exactly). Homepage tile links + the full 27-link sweep (nav menu, mega-menu, duplicate promo blocks) fixed 2026-08-11; 14 links remain 404 by design (no backing category exists)
 type: project
 ---
 
@@ -98,3 +98,75 @@ to open a specific widget's settings panel for automation — plain
 click-based selection was unreliable on this page (widgets are nested
 several levels deep inside sections/columns and clicks didn't register
 against the actual widget most of the time).
+
+**27-link sweep fixed 2026-08-11.** Re-derived the live 61-slug list via
+`wc/v3/products/categories` (unchanged from 08-10 except the `gifts` slug
+no longer exists at all — confirms it was never a real category, just a
+typo target). A full DOM scan of `a[href*="product-category"]` on the
+homepage (`document.querySelectorAll`, checked `href` slug against the
+valid set) found exactly 27 broken links across 4 separate places, each
+needing a different edit mechanism:
+
+- **Top nav headers** (Florals/Gifts, Toys, Drinkware) are NOT part of any
+  Elementor template — they're a real WordPress nav menu (`menu=21`, "main
+  menu (Header)", the one assigned to the Header location; do not confuse
+  with the unrelated "About us" menu, id 24). Fixed via
+  `wp-admin/nav-menus.php?action=edit&menu=21`, editing the
+  `input[name="menu-item-url[ID]"]` fields directly and clicking Save.
+  **Gotcha: the `find` tool's cached element coordinates went stale after
+  the page's dismissible admin notices re-rendered — a `find`-based click
+  on "Save Menu" landed on the sidebar "Payments" menu instead, and the
+  save silently never happened** (page looked identical, no error, but a
+  fresh reload showed the old values still there). Confirm any wp-admin
+  form save by reloading the page fresh afterward and re-reading the
+  values — don't trust that a click "succeeded" just because no error
+  appeared. Clicking the button by DOM id via
+  `document.getElementById('save_menu_header').click()` in
+  javascript_tool worked reliably; prefer that over coordinate-based
+  clicks for admin-UI buttons that move around dismissible notices.
+- **Mega-menu dropdown content** for the Florals/Gifts nav item lives in
+  Elementor template id **46258** (title
+  `dynamic-content-megamenu-menuitem45947` — ElementsKit names these
+  per-menu-item templates `...menuitem{ID}`, one per top-level nav item
+  with a mega menu). Fixed `icon-list` widgets `e7e5fa6` (Floral Basket
+  -> `floral-baskets`, Crochet -> `crochets`) and `8dc27a7` (Gifts ->
+  `florals-gifts`).
+- **Duplicated promo block** (appears twice in the mega-menu) is Elementor
+  template id **48511** (title "LY Footersss" — a shared footer/promo
+  template reused inside the mega-menu, hence "duplicate"). Fixed
+  `icon-list` widgets `57d44ab` (Toys & Novelties -> `toys`, Backpacks &
+  Purses -> `bags-purses`) and `baed349` (Stationery Supplies ->
+  `stationary-supplies`, Gifts -> `florals-gifts`, Seasonal ->
+  `seasonal-items`).
+- **Homepage** itself (template **45918**) had one more instance not
+  caught in the original 4-tile fix: `icon-box` widget `5616315`
+  (Backpacks & Purses -> `backups-purses`, fixed to `bags-purses`).
+
+For `icon-list` repeater widgets, read/write the whole array via
+`container.model.get('settings').toJSON().icon_list` (must call
+`.toJSON()` — the raw `.get('icon_list')` returns a Backbone Collection,
+not plain objects, and `.link.url` access on it throws). Write back with
+`$e.run('document/elements/settings', { container, settings: { icon_list:
+updatedArray } })`, matching only the target `_id`(s) and spreading the
+rest unchanged. For a single-link widget (`icon-box`), same command with
+`settings: { link: {...existingLink, url: newUrl} }`. Save with `await
+$e.run('document/save/update')`; confirm by checking the top-bar Publish/
+Update button is greyed out (disabled = no pending changes = saved).
+
+**Front-end cache:** this site has a caching plugin exposing a "Clear Site
+Cache" link in `#wpadminbar`. Elementor template edits and the WP menu
+edit did not appear on the live front-end until this was clicked — always
+clear it and re-fetch the live page after any content edit here before
+concluding a fix didn't take effect (the WP menu save failure above was
+real, not a caching illusion, but caching was *also* in play and would
+have masked the same symptom either way).
+
+**Verified 2026-08-11:** live DOM scan post-fix shows exactly 14 broken
+`product-category` links remain, all in the "no real backing category"
+bucket identified 08-10 (Party Supplies x2, Plate State x2, Top Sellers
+x3, New Arrivals x3, Sale x4) — 13 of the original 27 were genuine
+slug-typo fixes now applied; the other 14 need a business decision (either
+create matching WooCommerce categories, or repoint these tiles to
+something else — e.g. a "Sale" tile might belong on a WooCommerce sale
+query/shortcode rather than a `product_cat` term) before they can be
+fixed, not another editor pass.

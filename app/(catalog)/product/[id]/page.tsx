@@ -177,28 +177,30 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </>
             )}
 
-            {product.volume_tiers && product.volume_tiers.length > 0 ? (
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Volume pricing</p>
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-1.5 text-gray-500">1+ units</td>
-                      <td className="py-1.5 text-right font-semibold text-gray-900">{formatPrice(product.price_cents)}</td>
-                    </tr>
-                    {[...product.volume_tiers]
-                      .sort((a, b) => a.min_qty - b.min_qty)
-                      .map((tier) => (
-                        <tr key={tier.min_qty} className="border-b border-gray-100 bg-green-50">
-                          <td className="py-1.5 font-medium text-green-800">{tier.min_qty}+ units</td>
-                          <td className="py-1.5 text-right font-bold text-green-800">{formatPrice(tier.price_cents)}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
+            {settings.show_price_detail && (
+              product.volume_tiers && product.volume_tiers.length > 0 ? (
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Volume pricing</p>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr className="border-b border-gray-100">
+                        <td className="py-1.5 text-gray-500">1+ units</td>
+                        <td className="py-1.5 text-right font-semibold text-gray-900">{formatPrice(product.price_cents)}</td>
+                      </tr>
+                      {[...product.volume_tiers]
+                        .sort((a, b) => a.min_qty - b.min_qty)
+                        .map((tier) => (
+                          <tr key={tier.min_qty} className="border-b border-gray-100 bg-green-50">
+                            <td className="py-1.5 font-medium text-green-800">{tier.min_qty}+ units</td>
+                            <td className="py-1.5 text-right font-bold text-green-800">{formatPrice(tier.price_cents)}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
+              )
             )}
 
             {settings.show_stock_detail && (

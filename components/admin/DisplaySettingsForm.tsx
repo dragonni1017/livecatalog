@@ -11,6 +11,7 @@ interface Row {
 }
 
 const ROWS: Row[] = [
+  { label: 'Price', listingField: 'show_price_listing', detailField: 'show_price_detail' },
   { label: 'Stock badge / quantity', listingField: 'show_stock_listing', detailField: 'show_stock_detail' },
   { label: 'SKU / barcode', listingField: 'show_sku_barcode_listing', detailField: 'show_sku_barcode_detail' },
   { label: 'Category label', listingField: 'show_category_listing', detailField: 'show_category_detail' },

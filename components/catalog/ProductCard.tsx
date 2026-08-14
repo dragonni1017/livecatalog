@@ -88,9 +88,11 @@ export default async function ProductCard({ product }: ProductCardProps) {
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
           <div>
-            <span className="text-base font-bold text-gray-900">
-              {formatPrice(product.price_cents)}
-            </span>
+            {settings.show_price_listing && (
+              <span className="text-base font-bold text-gray-900">
+                {formatPrice(product.price_cents)}
+              </span>
+            )}
           </div>
           {settings.show_stock_listing && <StockBadge qty={product.stock_qty} />}
         </div>

@@ -274,3 +274,54 @@ To undo this pass exactly, using `docs/category-merge-backups/2026-06-26-merge-b
 2. For every entry in `products_before`, run `UPDATE products SET category_id = '<old_category_id>' WHERE id = '<id>'`.
 3. Rename the 2 survivor categories back: cat-052 → "Slippers", cat-040 → "Mirrors".
 4. Re-verify: total products 3,016, 0 orphaned, categories back to 66.
+
+---
+
+## EXECUTED — 2026-08-11 — New "Plush" category (partial un-merge of 2026-06-25)
+
+Dragon asked to find all plush-like products and put them in a new "Plush"
+category. cat-047 (`plush-toys` slug) used to **be** "Plush Toys" — the
+largest of five groups merged into "Toys & Novelties" on 2026-06-25 (see
+above). Flagged this history to Dragon before touching anything; confirmed
+proceeding anyway.
+
+This is narrower than reverting that merge: only products matching
+`/plush|stuffed|teddy|plushie/i` by name move, not the full original
+158-product "Plush Toys" set, and only Squishy/Slime, Sticks Toys, Fidgets,
+and Bubbles stay merged into Toys & Novelties — nothing from those groups
+moves.
+
+**Scope decision:** 184 products site-wide match the keywords, but 46 of
+them are filed under Keychains, Accessories & Apparel, Bags/Purses, or
+Flowers (e.g. "Plush Keychains", "Teddy Bear Sherpa Slippers", "Plushie
+Mountain Bear Backpack") — since a product has exactly one `category_id`
+here, moving those would remove their current, arguably more useful,
+categorization. Dragon's call: **core toys only** — restrict to products
+already sitting in Toys & Novelties or Flower Bears. Script:
+`scripts/add-plush-category.mjs` (dry-run by default, `--apply` to write).
+
+| New category | id / slug | Moved from | Count |
+|---|---|---|---|
+| **Plush** | `cat-074` / `plush` | Toys & Novelties (138), Flower Bears (5) | 143 |
+
+Verified after running: category `cat-074` "Plush" exists with 143 products;
+Toys & Novelties and Flower Bears each dropped by exactly that many. Every
+move logged individually to `audit_log` (action `plush-category-split`),
+plus one `category-create` row for `cat-074` itself.
+
+**Not moved** (stayed in their existing category, no Supabase change made):
+the 46 keychain/slipper/backpack/flower items above. WooCommerce (ly-usa.com)
+handled separately and more broadly, since it allows multiple categories per
+product — see `docs/memory/project-woo-category-assignment-fix.md` for that
+side (all 182 keyword matches now carry "Plush Toys" there, including the 46
+that were deliberately excluded here).
+
+### Revert instructions
+No JSON backup file for this pass (small, single-category change — not the
+merge-script pattern). To undo: `UPDATE products SET category_id = 'cat-047'
+WHERE category_id = 'cat-074' AND sku IN (<the 138 Toys & Novelties SKUs
+from the audit_log old_value='Toys & Novelties' rows>)`, same for the 5
+Flower Bears SKUs with `category_id = '<Flower Bears id>'`, then `DELETE
+FROM categories WHERE id = 'cat-074'`. The exact SKU list and old category
+per product is in `audit_log` (`action = 'plush-category-split'`,
+`old_value` column), not a separate backup file.
