@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useFavorites, type FavoriteItem } from '@/lib/favorites-context'
 import FavoriteButton from '@/components/catalog/FavoriteButton'
-import { cdnImage } from '@/lib/image'
+import { resolveCdnImage } from '@/lib/image'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,7 @@ function FavoriteCard({ item }: { item: FavoriteItem }) {
           {item.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={cdnImage(item.image_url, 400) ?? undefined}
+              src={resolveCdnImage(item.image_url, 400) ?? undefined}
               alt={item.name}
               className="h-full w-full object-contain p-2"
               loading="lazy"

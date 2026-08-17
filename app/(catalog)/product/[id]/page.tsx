@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
-import { cdnImage } from '@/lib/image'
+import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from '@/components/catalog/StockBadge'
@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   const price = formatPrice(product.price_cents)
   const description = (product.description?.trim() || `${product.name} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
-  const img = cdnImage(product.image_url, 1200)
+  const img = resolveCdnImage(product.image_url, 1200)
 
   return {
     title: product.name,
@@ -147,7 +147,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Image gallery */}
           <div className="p-4">
             <ImageGallery
-              primaryUrl={product.image_url ? (cdnImage(product.image_url, 800) ?? product.image_url) : null}
+              primaryUrl={product.image_url ? (resolveCdnImage(product.image_url, 800) ?? product.image_url) : null}
               additionalUrls={product.image_urls ?? []}
               productName={product.name}
             />

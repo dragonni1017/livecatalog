@@ -34,3 +34,54 @@ export function cdnImage(url: string | null | undefined, width: number): string 
   const transform = `f_auto,q_auto,w_${width},c_limit/`
   return url.slice(0, idx + marker.length) + transform + after
 }
+
+/**
+ * Erply CDN on-the-fly image resize -- an alternative to cdnImage() above,
+ * for image_url values that point at cdn.erply.com instead of Cloudinary
+ * (see docs/memory/project-erply-image-backfill.md: the CDN API, unlike
+ * Erply's legacy getProducts.images field, has no documented hotlinking
+ * restriction and is explicitly cache-optimized for direct serving).
+ *
+ * Deliberately NOT merged into cdnImage() -- kept as a separate function so
+ * the Cloudinary path above stays untouched and this can be pulled back out
+ * cleanly if the Erply CDN direction doesn't work out.
+ *
+ * cdn.erply.com's GET /assets/{tenant}/image/{hash} supports `width`,
+ * `height`, and `format` (webp only) query params -- confirmed against the
+ * CDN's own swagger doc (cdn.erply.com/documentation/swagger/doc.json).
+ * There's no q_auto/c_limit equivalent: no quality param, and per the docs
+ * "Use width and height parameters to resize image size" with no stated
+ * upscale-limiting behavior, so this only ever sets width (not height, to
+ * preserve aspect ratio) and requests webp.
+ *
+ * Non-Erply-CDN URLs (or malformed ones) are returned untouched.
+ */
+export function erplyCdnImage(url: string | null | undefined, width: number): string | null {
+  if (!url) return url ?? null
+
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return url
+  }
+  if (parsed.hostname !== 'cdn.erply.com') return url
+
+  parsed.searchParams.set('width', String(width))
+  parsed.searchParams.set('format', 'webp')
+  return parsed.toString()
+}
+
+/**
+ * Dispatches to cdnImage() or erplyCdnImage() based on which CDN a given
+ * image_url actually points at. Call sites that just want "the right
+ * transform for whatever this product's image_url happens to be" (rather
+ * than assuming Cloudinary) should use this instead of calling cdnImage()
+ * directly -- it's what makes the two functions above a drop-in mix rather
+ * than requiring every image_url in the DB to be on one CDN.
+ */
+export function resolveCdnImage(url: string | null | undefined, width: number): string | null {
+  if (!url) return url ?? null
+  if (url.includes('cdn.erply.com')) return erplyCdnImage(url, width)
+  return cdnImage(url, width)
+}

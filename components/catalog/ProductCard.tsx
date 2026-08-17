@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
-import { cdnImage } from '@/lib/image'
+import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from './StockBadge'
@@ -39,7 +39,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={cdnImage(product.image_url, 400) ?? undefined}
+            src={resolveCdnImage(product.image_url, 400) ?? undefined}
             alt={product.name}
             className="h-full w-full object-contain p-2"
             loading="lazy"

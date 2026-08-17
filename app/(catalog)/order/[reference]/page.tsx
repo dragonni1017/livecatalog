@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
-import { cdnImage } from '@/lib/image'
+import { resolveCdnImage } from '@/lib/image'
 import ReorderButton from '@/components/catalog/ReorderButton'
 
 function formatPrice(cents: number): string {
@@ -175,7 +175,7 @@ export default async function OrderPage({ params }: PageProps) {
                   {item.product_id && imageById[item.product_id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={cdnImage(imageById[item.product_id]!, 80) ?? undefined}
+                      src={resolveCdnImage(imageById[item.product_id]!, 80) ?? undefined}
                       alt={item.name}
                       className="h-10 w-10 rounded object-contain bg-gray-50"
                     />
