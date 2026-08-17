@@ -1,6 +1,6 @@
 ---
 name: project-woo-price-integration-markup-bug
-description: UPDATED 2026-08-14 (4 passes + 2 live tests) -- WooCommerce (ly-usa.com) shows every product at exactly 2.400x via wc/v3 REST, but _regular_price postmeta is correct (matches Erply); Wholesale For WooCommerce's price filter bails on REST_REQUEST, WooCommerce-core's RestApiCache trait ruled out by live toggle-test, Codisto + NetSuite sync plugins register no price filters -- paradox unresolved; Wholesale-plugin deactivate test attempted but BLOCKED by Claude Code's own harness classifier (not a site issue, plugin never actually toggled) -- Dragon is looping in other people working on the site before retrying; do not re-attempt without him explicitly raising it again
+description: UPDATED 2026-08-17 -- full-catalog re-check (2,855/2,869 SKUs at exactly 2.400x) confirms Erply->WooCommerce sync itself is clean, bug is WooCommerce-side display/API filtering only; root cause still the Wholesale For WooCommerce plugin's REST_REQUEST paradox (see body); a second team now owns the live WooCommerce/plugin side -- do NOT attempt any live toggle/deactivate test on ly-usa.com from this repo's sessions anymore, read-only diagnostics only
 type: project
 ---
 
@@ -543,3 +543,31 @@ agent to be able to do it directly. The investigation itself is otherwise
 fully exhausted by static reading + the REST-caching live test above —
 this remaining test is the last concrete lever, so it's worth keeping on
 the radar rather than closing the bug out as unsolved.
+
+**2026-08-17 — full-catalog re-verification, read-only, confirms the sync
+side is clean, and Dragon has ruled out the plugin-deactivate test
+entirely (not just paused).** Ran `scripts/compare-erply-woo.mjs` (the
+existing Erply<->Woo diff script, not previously run against this specific
+bug — earlier passes only spot-checked 16 SKUs by hand) to double-check
+"is the Erply price being translated into WooCommerce properly" against
+the full catalog:
+
+- 2,868 of 2,869 matched SKUs show a price mismatch. Of those, **2,855 sit
+  at exactly ratio 2.400** (Woo `regular_price` / Erply raw `price`) — the
+  same uniform multiplier as the original 16-SKU sample, now confirmed
+  catalog-wide rather than a small sample. No other ratio cluster showed
+  up in meaningful numbers, so this is not a second/different bug hiding
+  alongside the known one.
+- **This re-confirms (does not change) the existing conclusion: the
+  Erply->WooCommerce sync itself is fine.** The stored data matches; the
+  multiplier is applied at WooCommerce's display/API layer, not in
+  transit. No new "multiple outlets" cause found or suspected.
+- **Dragon confirmed another team is now handling the live WooCommerce
+  site/plugin work — do not attempt the Wholesale For WooCommerce
+  deactivate-and-recheck test, or any other live toggle on ly-usa.com, at
+  all going forward.** This supersedes the earlier "paused, needs Dragon
+  to re-raise it" framing — it's not this repo's session's lever to pull
+  anymore, full stop. If asked to help further on this bug, stick to
+  read-only diagnostics (like the compare script above) or code reading;
+  route any live WordPress/plugin action to the other team instead of
+  attempting it.
