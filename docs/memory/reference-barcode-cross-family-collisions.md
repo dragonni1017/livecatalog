@@ -1,10 +1,10 @@
 ---
 name: reference-barcode-cross-family-collisions
-description: where the 41 cross-family barcode collisions (real product, wrong barcode) are tracked, including 3 systematic patterns
+description: where the 56 cross-family barcode collisions (real product, wrong barcode) are tracked, including 3 systematic patterns; 41 found 2026-07-30, 15 more 2026-08-18
 type: reference
 ---
 
-41 of the 106 duplicate-barcode groups from [[project-duplicate-barcode-families]]
+56 (41 original + 15 more found 2026-08-18) of the ~104-106 duplicate-barcode groups from [[project-duplicate-barcode-families]]
 are not legitimate color-family barcode sharing — they're unrelated products
 carrying the same barcode by mistake. Full list and detail is in
 `docs/BARCODE-CROSS-FAMILY-COLLISIONS.md`.

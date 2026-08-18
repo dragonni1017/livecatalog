@@ -9,6 +9,13 @@ products carrying the same barcode. Full source data (all groups, including
 the legitimate ones) is in `duplicate-barcode-families.csv` from the same
 session.
 
+**Updated 2026-08-18**: reviewed the remaining ~56 duplicate-barcode groups
+that had never been individually checked (see
+`docs/memory/project-duplicate-barcode-families.md` for the methodology and
+what it did/didn't catch). Found 15 more cross-family collisions of the same
+kind — see the new section below. The total is now 56, not 41 (the doc title
+below is kept as the original count for history; treat 56 as current).
+
 None of these can be fixed from the database — there's no way to tell from
 Supabase or Erply alone which SKU has the *correct* barcode. Someone needs to
 check the physical product/packaging (or the original supplier invoice) for
@@ -90,6 +97,38 @@ side). Don't assume; verify.
 | 737879098318 | F286606-Blk + F286606-BLK (already fixed, see below) + F287638 (Green Santa Claus Wrapping Paper, still wrong) |
 | 681402400201 | T641521 (Collapsible Water Bottle) + T641519 (Gummy Bear Water Bottle) |
 | 737879073421 | P273670-L (White & Pink Love Bear Plush) + P273673-L (Red Love Bear Plush w/ Lights) |
+
+## Found 2026-08-18 (15 more, same treatment as above)
+
+Same signal as the rest of this doc — genuinely unrelated products, not
+color/size variants, sharing a barcode. None fixable from Supabase/Erply
+alone; needs the physical product or supplier invoice.
+
+| Barcode | SKU A | SKU B |
+|---|---|---|
+| 737879101889 | 3D801227 (Large 3D Printed Lobster) | 3D801227-STARFISH (3D Printed Flexi Starfish) |
+| 737879069509 | T641647 (Automatic Tri-Fold Travel Umbrella) | T641647-1 (Two in One Water Jug 64oz/32oz) |
+| 681402398973 | P273581 (Graduation Bear Plush) | P273581-1 (Bear Keychain W. Love Heart) |
+| 681402398775 | S162713-SD (Stegosaurus Dinosaur Mesh Ball) | S162713 (Dino Squish Toy) |
+| 681402387960 | F286384-B (24K Blue Rose) | F286384-W (Rose Clear Gold Stem Light Up) |
+| 681402388592 | F286411-M (Metallic Flower Without The Box) | F286411 (Iridescent Artificial Flowers with LED Lights) |
+| 737879092729 | F287438-NEW (Heart Handle Iron Bucket with Lights) | F287438 (Flower Basket with Woven Rope Handle) |
+| 737879094082 | F287491-BOX (3-piece Mix Color Round Glitter Box Set) | F287491 (Magic Gold Heart Ribbon Gift Box) |
+| 737879101247 | F287815 (Square Shape Gift Box) | F287815-Paper (Black Solid Color Paper) |
+| 737879100356 | F287753-BOUQUET (Chenille Stem Lilly Bouquet) | F287753 (Heart Shape 3-piece Gift Box Set) |
+| 737879096994 | F287579-PAPER (Dark Red Ollita de Barro Floral Paper) | F287579 (Gold & Silver Wire Tie) |
+| 737879067833 | T641582-1 (Mixed Unicorn Traveling Pet) | T641582 (Bamboo Cow Single Plate) |
+| 737879094280 | F287497 (Glossy Red Cylindrical Gift box) | F287497-1 (3-piece Pink Heart Gift Box with Gold Outline) |
+| 737879099957 | D701120-C (Reindeer Christmas Wreaths) | D701120-LB (Smiley Rabbit Christmas Wreaths) |
+| 737879089361 | F287277 (Gift box) | F287277-1 (Light Pink Ribbon 1.5") |
+
+Two more from the same review are **ambiguous, not classified either way** —
+could be a near-duplicate-listing (like F286606) or a legitimate variant,
+not confident enough to place in either list:
+- `3D801203-SLKGLD` ("1.5M 3D Chinese Dragon") vs `3D801203-FIRE` ("1.5M
+  Chinese Dragon") — barcode 737879092507
+- `D751004` ("3D Printed Mystery Dragon Egg XL") vs `D751004-NEW` ("New 3D
+  Printed Dragons & Eggs") — barcode 737879077689
 
 ## Already handled separately
 

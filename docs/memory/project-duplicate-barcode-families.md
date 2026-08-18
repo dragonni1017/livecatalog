@@ -1,6 +1,6 @@
 ---
 name: project-duplicate-barcode-families
-description: 106 barcode groups (252 rows) share a barcode across multiple SKUs; F286606 confirmed as true duplicate listings and deactivated 2026-07-30, rest need manual review
+description: 104-106 barcode groups share a barcode across multiple SKUs; F286606 confirmed+deactivated everywhere 2026-08-18; 6 more likely-duplicate candidates found 2026-08-18 but on hold (price mismatch); ~15 more cross-family collisions found, not yet merged into the 41-item collision doc
 type: project
 ---
 
@@ -79,3 +79,42 @@ F286606 was. User decided to **hold off** rather than deactivate `-PK`
 outright — needs the price discrepancy checked against a supplier invoice or
 QuickBooks before touching either row. Do not deactivate `-PK` or edit
 `-LPK`'s price until that's resolved.
+
+**2026-08-18: reviewed all remaining ~56 never-individually-checked
+duplicate-barcode groups** (the ones not already covered by
+[[reference-barcode-cross-family-collisions]]'s 41, the 7 reviewed-fine
+groups above, or F286573) by checking each SKU's exact code against Erply's
+live `code` field, the same method that confirmed F286606. **First-pass
+result was mostly false positives** — a crude "some rows match Erply, some
+don't" filter flags the expected/legitimate "one barcode covers a whole
+color family, only one variant tracked in Erply" pattern just as often as a
+real bug, so don't reuse that filter alone. Manually reading all 56 for the
+real F286606 signature (two rows describing the *same specific variant*, not
+different colors) found two genuinely new buckets:
+
+1. **~15 new cross-family collisions** (unrelated products sharing a
+   barcode by data error, e.g. `3D801227` Lobster vs `3D801227-STARFISH`,
+   `T641647` Umbrella vs `T641647-1` Water Jug, `P273581` Graduation Bear
+   Plush vs `P273581-1` Bear Keychain) — same class as
+   [[reference-barcode-cross-family-collisions]]'s existing 41, needs the
+   same physical/supplier check, not data-fixable. Not yet added to
+   `docs/BARCODE-CROSS-FAMILY-COLLISIONS.md` — do that before acting on any
+   of them.
+2. **6 likely-genuine near-duplicate-listing candidates**, same shape as
+   F286606 (one Erply-matching row, one stale non-matching row, matching
+   name/barcode/category): `D751067`/`D751067-Pink` (3D Pink Backpack),
+   `H424249`/`H424249-1` (Bunny Headband w/ Lights), `T641545`/`T641545-1`
+   (Cow Bounce Toy), `D751052`/`D751052-3D Egg` (mystery egg), `T642023`/
+   `T642023-YELLOW` (Diamond Cup, sport-name typo), `F286162-1
+   PANDA`/`F286162-Panda` (Panda Rose Bear). All 6 non-matching rows have
+   `updated_at` stuck at `2026-06-19` (never touched by the 2026-08-06
+   quarter-rounding price update) vs `2026-08-06` on the matching rows —
+   same staleness signal as F286606/F286573.
+
+   **But unlike F286606, every one of these 6 pairs has a price
+   discrepancy between the two rows** (e.g. `H424249` $0.50 vs `H424249-1`
+   $1.00) — same blocking condition as F286573 above. **User decision
+   2026-08-18: hold off on all 6, same reasoning as F286573** — don't
+   deactivate any of them until the price discrepancy is checked against a
+   supplier invoice or QuickBooks. Do not re-propose deactivating these
+   without new price-resolution information.
