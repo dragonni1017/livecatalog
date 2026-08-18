@@ -21,5 +21,27 @@ export function extractPackSpec(name: string | null | undefined): string | null 
 export function extractUnitsPerCase(name: string | null | undefined): number {
   const spec = extractPackSpec(name)
   if (!spec) return 0
-  return Number(spec.match(/cs\.(\d+)/i)?.[1] ?? spec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+  const explicit = spec.match(/cs\.(\d+)/i)?.[1]
+  if (explicit) return Number(explicit)
+  // No explicit "cs.N" total (e.g. after stripping it for display) -- derive
+  // it as per-pack x packs-per-case rather than reading packs-per-case alone,
+  // which would undercount whenever a pack holds more than one unit.
+  const perPack = Number(spec.match(/(\d+)\s*\/\s*pk/i)?.[1] ?? 0)
+  const packsPerCase = Number(spec.match(/(\d+)\s*bx\s*\/\s*cs/i)?.[1] ?? 0)
+  return perPack * packsPerCase
+}
+
+/**
+ * Display-only: drop the trailing "cs.144"-style case-count marker from a
+ * product name or pack spec. The underlying name is left untouched wherever
+ * this isn't called (extractUnitsPerCase still reads the real name), so case
+ * math stays correct even though the marker is hidden from customers.
+ */
+export function stripCsSuffix(text: string | null | undefined): string {
+  if (!text) return ''
+  return text
+    .replace(/\s*cs\.\d+\b/gi, '')
+    // drop a now-dangling trailing separator, e.g. "... 10 inners/case ·"
+    .replace(/[\s·•\-|,]+$/, '')
+    .trim()
 }

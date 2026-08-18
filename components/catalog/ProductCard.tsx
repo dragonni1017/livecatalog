@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
-import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
+import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
@@ -18,11 +18,12 @@ interface ProductCardProps {
 export default async function ProductCard({ product }: ProductCardProps) {
   const packSpec = extractPackSpec(product.name)
   const unitsPerCase = extractUnitsPerCase(product.name)
+  const displayName = stripCsSuffix(product.name)
   const settings = await getDisplaySettings()
   const favoriteItem = {
     id: product.id,
     sku: product.sku,
-    name: product.name,
+    name: displayName,
     price_cents: product.price_cents,
     image_url: product.image_url,
     category: product.category?.name ?? '',
@@ -73,7 +74,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
           </span>
         )}
         <h3 className="text-sm font-semibold text-gray-900 leading-snug group-hover:text-red-600 transition-colors">
-          {product.name}
+          {displayName}
         </h3>
         {settings.show_sku_barcode_listing && (
           <>
@@ -84,7 +85,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
           </>
         )}
         {packSpec && settings.show_pack_info_listing && (
-          <p className="text-xs font-medium text-gray-600">{packSpec}</p>
+          <p className="text-xs font-medium text-gray-600">{stripCsSuffix(packSpec)}</p>
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
           <div>
@@ -101,7 +102,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
             product={{
               productId: product.id,
               sku: product.sku,
-              name: product.name,
+              name: displayName,
               priceCents: product.price_cents,
               imageUrl: product.image_url,
               stockQty: product.stock_qty,

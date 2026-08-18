@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractPackSpec } from '@/lib/pack'
+import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 
 describe('extractPackSpec', () => {
   it('returns null for null input', () => {
@@ -48,5 +48,46 @@ describe('extractPackSpec', () => {
 
   it('returns null when only pk appears but not bx/cs', () => {
     expect(extractPackSpec('Widget 12/pk')).toBeNull()
+  })
+})
+
+describe('extractUnitsPerCase', () => {
+  it('returns 0 when there is no pack spec', () => {
+    expect(extractUnitsPerCase('Red Plastic Cups')).toBe(0)
+  })
+
+  it('reads the explicit cs.N total when present', () => {
+    expect(extractUnitsPerCase('Large 3D Printed Lobster - 12/pk 12bx/cs cs.144')).toBe(144)
+  })
+
+  it('derives per-pack x packs-per-case when cs.N is absent', () => {
+    expect(extractUnitsPerCase('Large 3D Printed Lobster - 12/pk 12bx/cs')).toBe(144)
+  })
+
+  it('matches the explicit total for a single-unit pack', () => {
+    expect(extractUnitsPerCase('1.5M 3D Chinese Dragon - 1/pk 1bx/cs')).toBe(1)
+  })
+})
+
+describe('stripCsSuffix', () => {
+  it('returns empty string for null/undefined', () => {
+    expect(stripCsSuffix(null)).toBe('')
+    expect(stripCsSuffix(undefined)).toBe('')
+  })
+
+  it('drops the trailing cs.N marker from a product name', () => {
+    expect(stripCsSuffix('Large 3D Printed Lobster - 12/pk 12bx/cs cs.144')).toBe(
+      'Large 3D Printed Lobster - 12/pk 12bx/cs',
+    )
+  })
+
+  it('leaves names with no cs.N marker unchanged', () => {
+    expect(stripCsSuffix('1.5M 3D Chinese Dragon - 1/pk 1bx/cs')).toBe('1.5M 3D Chinese Dragon - 1/pk 1bx/cs')
+  })
+
+  it('drops a dangling separator left behind after stripping mid-sentence', () => {
+    expect(stripCsSuffix('12 pcs/inner · 10 inners/case · cs.120')).toBe(
+      '12 pcs/inner · 10 inners/case',
+    )
   })
 })

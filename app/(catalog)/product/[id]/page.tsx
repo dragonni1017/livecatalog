@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
-import { extractPackSpec, extractUnitsPerCase } from '@/lib/pack'
+import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
@@ -46,17 +46,18 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   if (!product) return { title: 'Product not found' }
 
   const price = formatPrice(product.price_cents)
-  const description = (product.description?.trim() || `${product.name} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
+  const displayName = stripCsSuffix(product.name)
+  const description = (stripCsSuffix(product.description) || `${displayName} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
   const img = resolveCdnImage(product.image_url, 1200)
 
   return {
-    title: product.name,
+    title: displayName,
     description,
     openGraph: {
-      title: product.name,
+      title: displayName,
       description,
       type: 'website',
-      images: img ? [{ url: img, alt: product.name }] : undefined,
+      images: img ? [{ url: img, alt: displayName }] : undefined,
     },
   }
 }
@@ -69,6 +70,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const settings = await getDisplaySettings()
   const unitsPerCase = extractUnitsPerCase(product.name)
+  const displayName = stripCsSuffix(product.name)
 
   // "More in this category" — a few other in-catalog products from the same
   // category, so a product page isn't a dead end.
@@ -149,7 +151,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <ImageGallery
               primaryUrl={product.image_url ? (resolveCdnImage(product.image_url, 800) ?? product.image_url) : null}
               additionalUrls={product.image_urls ?? []}
-              productName={product.name}
+              productName={displayName}
             />
           </div>
 
@@ -168,7 +170,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </nav>
             )}
 
-            <h1 className="text-2xl font-bold text-gray-900 leading-snug">{product.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 leading-snug">{displayName}</h1>
 
             {settings.show_sku_barcode_detail && (
               <>
@@ -221,7 +223,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               product={{
                 productId: product.id,
                 sku: product.sku,
-                name: product.name,
+                name: displayName,
                 priceCents: product.price_cents,
                 imageUrl: product.image_url,
                 stockQty: product.stock_qty,
@@ -249,7 +251,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
                         Pack quantity
                       </h2>
-                      <p className="text-sm font-semibold text-gray-900">{packSpec}</p>
+                      <p className="text-sm font-semibold text-gray-900">{stripCsSuffix(packSpec)}</p>
                       {unitsPerCase > 0 && (
                         <div className="mt-1">
                           <span className="text-sm text-gray-500">Case size</span>
@@ -261,7 +263,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                     </>
                   )}
                   {product.description && (
-                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{product.description}</p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{stripCsSuffix(product.description)}</p>
                   )}
                 </div>
               )
