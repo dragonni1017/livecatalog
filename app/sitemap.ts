@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { supabase } from '@/lib/supabase'
 
-const BASE = 'https://livecatalog.vercel.app'
+const BASE = 'https://lyusa.app'
 
 // Regenerated hourly so newly synced products get indexed without a redeploy.
 export const revalidate = 3600

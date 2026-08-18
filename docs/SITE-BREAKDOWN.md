@@ -1,6 +1,6 @@
 # L&Y USA Live Catalog — Site Breakdown
 
-**Live site:** https://livecatalog.vercel.app  
+**Live site:** https://lyusa.app (underlying Vercel deployment: https://livecatalog.vercel.app)  
 **Last updated:** 2026-06-30
 
 This document walks through every part of the website in plain English — what it does, how it works, and where it lives in the codebase. Use it as a reference when you want to understand, change, or explain any feature.
@@ -462,7 +462,7 @@ When a product is restocked (via import or manual stock adjustment) and crosses 
 ## 25. Infrastructure & Services
 
 **Hosting — Vercel**  
-The app is deployed on Vercel. Every push to the main branch triggers an automatic deployment. The production URL is `https://livecatalog.vercel.app`. A custom domain (`lyusacatalog.com`) is ready to be pointed here once purchased.
+The app is deployed on Vercel. Every push to the main branch triggers an automatic deployment. The underlying Vercel URL is `https://livecatalog.vercel.app`; the custom domain `lyusa.app` is pointed here and is the live production URL.
 
 **Database — Supabase (PostgreSQL)**  
 All data lives in Supabase: products, categories, orders, customers, analytics, audit log, cart sessions, back-in-stock requests, stock adjustments. Row Level Security (RLS) is enabled on all tables — public routes can only read active products; admin reads and writes use a service-role key kept server-side.

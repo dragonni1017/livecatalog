@@ -9,7 +9,7 @@ import { FavoritesProvider } from '@/lib/favorites-context'
 import RepCapture from '@/components/catalog/RepCapture'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://livecatalog.vercel.app'),
+  metadataBase: new URL('https://lyusa.app'),
   title: {
     default: 'L & Y USA — Wholesale Product Catalog',
     template: '%s · L & Y USA',

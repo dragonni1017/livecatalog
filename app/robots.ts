@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/admin', '/api'],
     },
-    sitemap: 'https://livecatalog.vercel.app/sitemap.xml',
+    sitemap: 'https://lyusa.app/sitemap.xml',
   }
 }

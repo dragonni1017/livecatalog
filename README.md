@@ -6,7 +6,7 @@ submit order requests; the team reviews them in an admin dashboard and keys
 them into QuickBooks Desktop.
 
 **Stack:** Next.js (App Router) · Supabase (Postgres) · Vercel · Cloudinary (images)
-**Production:** https://livecatalog.vercel.app
+**Production:** https://lyusa.app (underlying Vercel deployment: https://livecatalog.vercel.app)
 
 ---
 
