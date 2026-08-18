@@ -73,3 +73,63 @@ feed at all** — a real sync would deactivate/hide them from the storefront.
 **Do not point `app/api/sync/route.ts` at real credentials until `image_url`
 and `stock_qty` are excluded from the upsert payload (or Erply's own data is
 fixed first) and the 146 deactivate candidates have been reviewed.**
+
+**Reconfirmed 2026-08-17, still unfixed on Erply's side (before the test
+below):** ran `scripts/export-products-with-images-and-inventory.mjs` live
+(2,113 active Supabase products with a real image, 2,074 matched an active
+Erply SKU) -- all 2,074 read exactly 0 stock, summed across both warehouses.
+Not a placeholder/dummy value like 1000, genuinely zero everywhere, same as
+the 2026-07-30 finding above. No change on Erply's end in the ~2.5 weeks
+since.
+
+**2026-08-17, later same day -- Dragon deliberately set warehouse 1 ("L&Y
+USA") stock to 1000 for these same 2,074 SKUs as a live connectivity test**
+(does Erply stock actually reach WooCommerce/WordPress?), via the new
+`scripts/set-erply-stock-1000-test.mjs`. Not a real inventory count --
+**live Erply stock for these 2,074 SKUs currently reads 1000 in warehouse 1
+as fabricated test data, not their real 0.** Confirmed via independent
+re-fetch after writing: all 2,074 numerically read 1000 (Erply returns
+`totalInStock` as a numeric string like `"1000.000000"`, so compare with
+`Number(...) === `, not `===`, or a real match will show as a false
+mismatch). Warehouse 2 ("Store LA") and the 39 no-Erply-match SKUs were
+untouched, still 0. Backup of exactly what changed (productID, sku, name,
+oldStock=0, newStock=1000, delta=+1000) is in
+`data/erply-stock-1000-test/planned-changes.csv` (gitignored, local only).
+Dragon flagged this to the team now owning the live WooCommerce site before
+running it, per [[project-woo-price-integration-markup-bug]]'s handoff
+note.
+
+**How to apply:** this is temporary test data sitting live in Erply/on the
+storefront pipeline right now -- don't treat 1000 as real stock for these
+SKUs in any future session, and don't re-run
+`export-products-with-images-and-inventory.mjs` or similar and assume 0 is
+still current without re-checking. **Revert path, not yet run:** Erply has
+no "set absolute stock" call, only deltas -- reverting these 2,074 back to 0
+needs `saveInventoryWriteOff` (removes stock) with a valid `reasonID`, which
+requires a separate lookup (e.g. `getInventoryWriteOffReasons` or checking
+Erply's back office) not done this session. `set-erply-stock-1000-test.mjs`
+only implements the forward (registration) direction and will refuse to run
+if it finds stock already above 1000 rather than guess a write-off.
+
+**2026-08-17, later same day -- partial revert completed, scoped to the
+no-image subset.** After confirming images never sync to Woo via Erply's
+integration regardless of source/age (see
+[[project-erply-image-backfill]]'s final finding), Dragon asked to revert
+the test for any SKU still showing no working image in Woo, in both
+systems. 171 of the 2,074 test SKUs qualified (the other 1,903 have a
+working, usually pre-existing/Woo-native image and were deliberately left
+at stock=1000). Built `scripts/revert-stock-1000-no-image.mjs` -- the
+write-off script this node's "not yet run" note was waiting on, using
+reasonID 4 ("warehouse leftovers", Dragon's pick from the account's only 4
+configured reason codes). **All 171 reverted successfully, independently
+verified in both systems** (Erply warehouse-1 stock=0; Woo
+`stock_status=outofstock` + `stock_quantity=0` together -- see
+[[project-woo-direct-outofstock-write]] for why both fields are required).
+Backup: `data/revert-stock-1000-no-image/planned-changes.csv`.
+
+**Current state of the stock-1000 test, for any future session:** 1,903
+SKUs still intentionally read stock=1000 (real stock is actually 0, but
+they display fine with a working image so left as-is); 171 SKUs are back to
+their real pre-test state (0/outofstock, both systems). Don't assume either
+number is "real" inventory without re-checking -- both are deliberately
+diverged from Erply's true 0 for different reasons.
