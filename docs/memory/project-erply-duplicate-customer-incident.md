@@ -105,3 +105,18 @@ indefinitely as data drifts on either side. Any future change to either
 direction's create path must preserve the "check the target side by email
 before creating" invariant — that is the actual fix, not just this
 incident's symptom.
+
+**Re-verified live 2026-08-18** (code unchanged since the fix, confirmed by
+reading `app/api/sync/customers/route.ts` — both directions still check the
+target side by email before creating): link table is exactly 2,768 rows,
+100% unique across `erply_customer_id`/`woo_customer_id`/`email` (zero
+drift or corruption since the cleanup). Ran a real dry-run against the
+route itself (`GET /api/sync/customers`, no `?apply=true`, so genuinely
+zero writes) against live Erply/Woo data: `wooCreated:28 wooRoleUpdated:1
+erplyCreated:0 linkedExisting:0 skippedStaffAccount:9
+skippedKnownNonSync:40 errors:0`. `erplyCreated:0` is the important number
+— the direction that caused this incident would create zero new Erply
+customers if enabled right now. `linkedExisting:0` confirms no accumulated
+drift. Not yet re-enabled (`SYNC_CUSTOMERS_ENABLED` still unset) — that's a
+separate decision requiring explicit go-ahead, this only re-confirms the
+fix still holds up against current data.
