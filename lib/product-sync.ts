@@ -55,7 +55,23 @@ export async function resolveCategories(
   const unique = [...new Set(categoryNames.filter(Boolean))]
   const map: Record<string, string> = {}
 
+  // Look up by NAME first, not just slug. Several categories' stored slug
+  // is a leftover from before a rename (e.g. "Toys & Novelties" is stored
+  // with slug "plush-toys", from before the Plush category was split out)
+  // and no longer matches what this function's own slugification would
+  // generate from the current name -- matching by slug alone in that case
+  // finds no conflict and silently inserts a duplicate row with the same
+  // display name but a different id/slug.
+  const { data: existingByName } = await db.from('categories').select('id, name').in('name', unique)
+  const idByName = new Map((existingByName ?? []).map((c) => [c.name, c.id]))
+
   for (const name of unique) {
+    const existingId = idByName.get(name)
+    if (existingId) {
+      map[name] = existingId
+      continue
+    }
+
     const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     const { data, error } = await db
       .from('categories')
@@ -133,8 +149,16 @@ export interface SyncOptions {
    * sources whose data for that field isn't trustworthy yet — e.g. Erply's
    * image_url/stock_qty (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) —
    * without affecting other sources (Excel import legitimately sets both).
+   *
+   * 'category' is different from the other two: it's not that the incoming
+   * value is untrustworthy, it's that several Supabase categories are
+   * deliberate manual carve-outs from a broader source group with no clean
+   * 1:1 mapping (see lib/erply-category-aliases.ts) — reassigning category
+   * on every sync run would silently flatten that curation back on a
+   * schedule. Skipping it means category_id is only ever set when a
+   * product is first inserted, never overwritten on update.
    */
-  skipFields?: Array<'image_url' | 'stock_qty'>
+  skipFields?: Array<'image_url' | 'stock_qty' | 'category'>
 }
 
 /**
@@ -168,7 +192,11 @@ export async function syncToSupabase(
 
   for (const p of products) {
     incomingSkus.push(p.sku)
-    const categoryId = categoryMap[p.category_name] ?? null
+    // When 'category' is skipped, only set category_id for products that
+    // don't exist yet (a real insert) -- an existing product's category
+    // is left alone rather than reassigned on every sync run.
+    const setCategory = !skip.has('category') || !existingSkus.has(p.sku)
+    const categoryId = setCategory ? categoryMap[p.category_name] ?? null : null
     records.push({
       sku: p.sku,
       barcode: p.barcode,

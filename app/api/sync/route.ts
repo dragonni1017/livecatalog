@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getErplyProducts, isConfigured } from '@/lib/erply'
 import { syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
 
 function isAuthorized(request: NextRequest): boolean {
@@ -82,7 +83,10 @@ export async function GET(request: NextRequest) {
       stock_qty: p.stockQty,
       image_url: p.imageUrl,
       is_active: p.isActive,
-      category_name: p.categoryName,
+      // Erply's raw groups are more granular than this catalog's
+      // consolidated categories (e.g. "Tumblers" -> "Drinkware & Cups") --
+      // see lib/erply-category-aliases.ts for the full mapping and why.
+      category_name: resolveErplyCategoryAlias(p.categoryName),
     }))
 
     // 3. Upsert into Supabase
@@ -91,8 +95,13 @@ export async function GET(request: NextRequest) {
     // Erply's images aren't accessible yet and its inventory reads 0 across the
     // board (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) — don't let a real
     // sync null out working Cloudinary images or zero out real stock counts.
+    // 'category' is skipped too: several categories are deliberate manual
+    // carve-outs the alias map above can't fully capture (see
+    // lib/erply-category-aliases.ts) — only set on first insert, never
+    // reassigned on update, so this cron can't flatten curated categories
+    // back on a schedule.
     const result: ImportResult = await syncToSupabase(products, db, {
-      skipFields: ['image_url', 'stock_qty'],
+      skipFields: ['image_url', 'stock_qty', 'category'],
     })
 
     // 4. Run daily auxiliary checks (low-stock + abandoned carts)
