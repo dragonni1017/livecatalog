@@ -170,3 +170,15 @@ create matching WooCommerce categories, or repoint these tiles to
 something else — e.g. a "Sale" tile might belong on a WooCommerce sale
 query/shortcode rather than a `product_cat` term) before they can be
 fixed, not another editor pass.
+
+**Re-verified 2026-08-18: still exactly the same 14, nothing drifted.**
+WooCommerce category count is still 61, none of the 5 names exist. New
+detail found: Supabase has a real `Plate Set` category (`cat-063`, 2
+products) with no WooCommerce equivalent; `Party Supplies` doesn't exist
+as a category in Erply, Supabase, or WooCommerce at all — genuinely no
+backing content anywhere, not just a missing Woo term. Presented both
+groups (Party Supplies + Plate Set vs. the Top Sellers/New Arrivals/Sale
+dynamic-concept group) to Dragon with options for each — **he chose to
+leave both parked, no action taken.** Don't re-propose a fix next session
+without him reopening it himself; treat this the same as the declined
+image-sync toggle in [[project-erply-image-backfill]].
