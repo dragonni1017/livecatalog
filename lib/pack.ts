@@ -40,7 +40,10 @@ export function extractUnitsPerCase(name: string | null | undefined): number {
 export function stripCsSuffix(text: string | null | undefined): string {
   if (!text) return ''
   return text
-    .replace(/\s*cs\.\d+\b/gi, '')
+    // the digits can carry a trailing unit annotation glued on with no space,
+    // e.g. "cs.50pk" -- match it too so \b (digit->letter isn't a boundary)
+    // doesn't leave it behind.
+    .replace(/\s*cs\.\d+[a-z]*\b/gi, '')
     // drop a now-dangling trailing separator, e.g. "... 10 inners/case ·"
     .replace(/[\s·•\-|,]+$/, '')
     .trim()

@@ -90,4 +90,10 @@ describe('stripCsSuffix', () => {
       '12 pcs/inner · 10 inners/case',
     )
   })
+
+  it('drops a cs.N marker with a unit annotation glued directly onto the digits', () => {
+    expect(stripCsSuffix('Christmas Crochet Pins - 12/pk 50bx/cs cs.50pk')).toBe(
+      'Christmas Crochet Pins - 12/pk 50bx/cs',
+    )
+  })
 })
