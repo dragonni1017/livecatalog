@@ -14,6 +14,7 @@ interface BarcodeScannerProps {
 
 export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
   const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -36,8 +37,10 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
   }
 
   async function handleOpen() {
+    setError(null)
+
     if (typeof window === 'undefined' || !('BarcodeDetector' in window)) {
-      alert('Barcode scanning is not supported in this browser')
+      setError('Barcode scanning is not supported in this browser.')
       return
     }
 
@@ -70,7 +73,7 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
     } catch {
       stopCamera()
       setOpen(false)
-      alert('Could not access camera. Please allow camera permissions and try again.')
+      setError('Could not access camera. Please allow camera permissions and try again.')
     }
   }
 
@@ -98,7 +101,7 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
   }
 
   return (
-    <>
+    <div className="relative">
       {/* Camera trigger button */}
       <button
         type="button"
@@ -128,6 +131,24 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
           <line x1="7" y1="16" x2="17" y2="16" strokeLinecap="round" />
         </svg>
       </button>
+
+      {/* Inline error, replaces a blocking native alert() */}
+      {error && (
+        <div
+          role="alert"
+          className="absolute right-0 top-full z-50 mt-1 flex w-56 items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-lg"
+        >
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
+            className="shrink-0 text-red-400 hover:text-red-600"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Fullscreen scanning overlay */}
       {open && (
@@ -168,6 +189,6 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
