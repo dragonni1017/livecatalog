@@ -187,8 +187,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       </aside>
 
       <div className="flex-1 min-w-0">
-        {/* Best Sellers */}
-        {bestSellers.length > 0 && (
+        {/* Best Sellers -- only on the unfiltered default view; hidden during
+            an active search or category filter so results aren't buried
+            below unrelated products */}
+        {!q && !category && bestSellers.length > 0 && (
           <section className="mb-10">
             <h2 className="mb-4 text-lg font-bold text-gray-900">Best Sellers</h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
