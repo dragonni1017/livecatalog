@@ -116,6 +116,8 @@ export default function SearchInput() {
     }
     params.delete('page')
     router.push(`/?${params.toString()}`)
+    // Query-string-only navigation doesn't trigger Next's scroll-to-top.
+    window.scrollTo({ top: 0 })
     setOpen(false)
     setHighlightIdx(-1)
 

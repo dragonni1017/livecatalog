@@ -25,6 +25,10 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
     }
     params.delete('page') // reset to page 1 on category change
     router.push(`/?${params.toString()}`)
+    // Query-string-only navigation (same pathname) doesn't trigger Next's
+    // scroll-to-top -- without this, switching category while scrolled deep
+    // into a grid leaves the user stranded mid-page on the new content.
+    window.scrollTo({ top: 0 })
   }
 
   const allActive = !activeSlug && !isNewArrivals

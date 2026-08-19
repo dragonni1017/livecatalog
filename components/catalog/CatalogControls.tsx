@@ -32,6 +32,8 @@ export default function CatalogControls({ sort, inStock, perPage }: Props) {
     params.delete('page') // any control change returns to the first page
     const qs = params.toString()
     router.push(qs ? `/?${qs}` : '/')
+    // Query-string-only navigation doesn't trigger Next's scroll-to-top.
+    window.scrollTo({ top: 0 })
   }
 
   return (
