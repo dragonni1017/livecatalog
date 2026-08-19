@@ -46,16 +46,29 @@ export default function BarcodeScanner({ onScan }: BarcodeScannerProps) {
 
     setOpen(true)
 
+    // Restrict to the symbologies this catalog's barcodes actually use
+    // (see components/catalog/Barcode.tsx: UPC-A/EAN-13/EAN-8, CODE128
+    // fallback) plus QR. Requesting every format the browser supports
+    // (via getSupportedFormats()) makes the on-device detector test more
+    // hypotheses per frame, which measurably hurts detection speed/
+    // accuracy on phones -- narrowing the list is the standard fix for
+    // "camera opens but never detects."
+    const WANTED_FORMATS = ['upc_a', 'upc_e', 'ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'codabar', 'qr_code']
     try {
-      const formats = await BarcodeDetector.getSupportedFormats()
-      detectorRef.current = new BarcodeDetector({ formats })
+      const supported = await BarcodeDetector.getSupportedFormats()
+      const formats = WANTED_FORMATS.filter(f => supported.includes(f))
+      detectorRef.current = new BarcodeDetector({ formats: formats.length > 0 ? formats : supported })
     } catch {
       detectorRef.current = new BarcodeDetector()
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        // "ideal" is a soft constraint -- never throws if unmet, just gets
+        // the closest available. Default (unconstrained) resolution on many
+        // phones is too low to resolve individual bars on a UPC/EAN barcode
+        // at normal scanning distance.
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
       })
       streamRef.current = stream
 
