@@ -119,9 +119,14 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                       >
                         {o.reference_code}
                       </Link>
-                      {o.notes?.startsWith('[RUSH') && (
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">RUSH</span>
-                      )}
+                      {(() => {
+                        const m = o.notes?.match(/^\[Needed by (\d{4}-\d{2}-\d{2})\]/)
+                        return m && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                            Needed {m[1]}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-800">

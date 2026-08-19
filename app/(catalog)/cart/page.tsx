@@ -27,7 +27,6 @@ export default function CartPage() {
   const [preFilled, setPreFilled] = useState(false)
   const [draftNames, setDraftNames] = useState<string[]>([])
   const [draftSaved, setDraftSaved] = useState(false)
-  const [rush, setRush] = useState(false)
   const [requiredShipDate, setRequiredShipDate] = useState('')
 
   // Load draft names from localStorage on mount. One-time hydration from an
@@ -137,10 +136,8 @@ export default function CartPage() {
     }
     setSubmitting(true)
     try {
-      const rushNote = rush
-        ? `[RUSH ORDER${requiredShipDate ? ` — needed by ${requiredShipDate}` : ''}]\n`
-        : ''
-      const finalNotes = rushNote + (contact.notes?.trim() ?? '')
+      const dateNote = requiredShipDate ? `[Needed by ${requiredShipDate}]\n` : ''
+      const finalNotes = dateNote + (contact.notes?.trim() ?? '')
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -359,27 +356,18 @@ export default function CartPage() {
                   className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
               </div>
-              <div className="flex items-start gap-3 pt-1">
-                <input
-                  type="checkbox"
-                  id="rush"
-                  checked={rush}
-                  onChange={(e) => setRush(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                />
-                <label htmlFor="rush" className="flex-1">
-                  <span className="text-sm font-medium text-gray-900">Rush order</span>
-                  <span className="ml-2 text-xs text-gray-500">Needed by a specific date?</span>
-                  {rush && (
-                    <input
-                      type="date"
-                      value={requiredShipDate}
-                      onChange={(e) => setRequiredShipDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="mt-1 block rounded-lg border border-gray-300 px-2 py-0.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                    />
-                  )}
+              <div>
+                <label htmlFor="requiredShipDate" className="mb-1 block text-xs font-medium text-gray-600">
+                  Order by date <span className="text-gray-400">(optional)</span>
                 </label>
+                <input
+                  type="date"
+                  id="requiredShipDate"
+                  value={requiredShipDate}
+                  onChange={(e) => setRequiredShipDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="block rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
               </div>
             </div>
 
