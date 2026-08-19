@@ -1,8 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { supabase, getAdminClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import ProductGrid from '@/components/catalog/ProductGrid'
-import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
@@ -11,10 +10,6 @@ export const dynamic = 'force-dynamic'
 
 const PER_PAGE_OPTIONS = [20, 50, 100]
 const DEFAULT_PER_PAGE = 20
-
-function daysAgoIso(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-}
 
 interface CatalogPageProps {
   searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string }>
@@ -32,51 +27,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
   const pageStart = (currentPage - 1) * pageSize
 
-  // Fetch best sellers (top viewed products in last 30 days) + categories in parallel
-  const thirtyDaysAgo = daysAgoIso(30)
-  const db = getAdminClient()
-
-  const [{ data: viewEvents }, { data: categoriesData }] = await Promise.all([
-    db
-      .from('analytics_events')
-      .select('product_id')
-      .eq('type', 'view')
-      .not('product_id', 'is', null)
-      .gte('created_at', thirtyDaysAgo)
-      .limit(500),
-    supabase.from('categories').select('*').order('name'),
-  ])
-
-  // Aggregate view counts in JS and take top 8 IDs
-  const viewCounts: Record<string, number> = {}
-  for (const row of viewEvents ?? []) {
-    if (row.product_id) viewCounts[row.product_id] = (viewCounts[row.product_id] ?? 0) + 1
-  }
-  const topIds = Object.entries(viewCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([id]) => id)
-
-  // Fetch the best-seller products (only if we have IDs)
-  let bestSellers: Product[] = []
-  if (topIds.length > 0) {
-    const { data: bsData } = await db
-      .from('products')
-      .select('id, sku, barcode, name, description, price_cents, category_id, image_url, image_urls, stock_qty, is_active, manually_hidden, volume_tiers, created_at, updated_at, category:categories(id, name, slug, display_order)')
-      .in('id', topIds)
-      .eq('is_active', true)
-      .gt('stock_qty', 0)
-    // Re-sort to match original rank order
-    const ranked = bsData ?? []
-    bestSellers = topIds
-      .map(id => ranked.find(p => p.id === id))
-      .filter((p): p is typeof ranked[number] => p !== undefined)
-      .map(p => ({
-        ...p,
-        category: (Array.isArray(p.category) ? p.category[0] : p.category) as Product['category'],
-      }))
-  }
-
+  const { data: categoriesData } = await supabase.from('categories').select('*').order('name')
   const categories = (categoriesData ?? []) as Category[]
 
   // Build product query
@@ -267,28 +218,6 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             <CatalogControls sort={sort} inStock={inStock} perPage={pageSize} />
           </Suspense>
         </div>
-
-        {/* Best Sellers -- only on the unfiltered default view; hidden during
-            an active search or category filter so results aren't buried
-            below unrelated products. Rendered below the price/sort/show
-            controls so those are visible immediately, same as every other
-            page, rather than pushed below this section. */}
-        {!q && !category && bestSellers.length > 0 && (
-          <section className="mb-10">
-            <h2 className="mb-4 text-lg font-bold text-gray-900">Best Sellers</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {bestSellers.map(p => <ProductCard key={p.id} product={p} />)}
-            </div>
-          </section>
-        )}
-
-        {/* Only needed when Best Sellers is also showing -- makes it visually
-            obvious that sort/filter results are a separate section below the
-            (intentionally sort-independent) Best Sellers picks, not a
-            continuation of them. */}
-        {!q && !category && bestSellers.length > 0 && (
-          <h2 className="mb-4 border-t border-gray-200 pt-8 text-lg font-bold text-gray-900">All Products</h2>
-        )}
 
         <ProductGrid products={pagedProducts} />
 

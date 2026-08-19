@@ -15,6 +15,7 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
   const pathname = usePathname()
 
   const isNewArrivals = pathname === '/new-arrivals'
+  const isBestSellers = pathname === '/best-sellers'
 
   function handleCategoryClick(slug: string | null) {
     const params = new URLSearchParams(searchParams.toString())
@@ -31,7 +32,7 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
     window.scrollTo({ top: 0 })
   }
 
-  const allActive = !activeSlug && !isNewArrivals
+  const allActive = !activeSlug && !isNewArrivals && !isBestSellers
 
   return (
     <>
@@ -48,6 +49,19 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
         >
           <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
           New
+        </Link>
+
+        {/* Best Sellers — special item, computed from view analytics rather
+            than a real category */}
+        <Link
+          href="/best-sellers"
+          className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            isBestSellers
+              ? 'bg-red-600 text-white'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-600'
+          }`}
+        >
+          Best Sellers
         </Link>
 
         <button
@@ -88,6 +102,19 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
         >
           <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
           New Arrivals
+        </Link>
+
+        {/* Best Sellers — special item, computed from view analytics rather
+            than a real category */}
+        <Link
+          href="/best-sellers"
+          className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+            isBestSellers
+              ? 'bg-red-50 text-red-700'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          }`}
+        >
+          Best Sellers
         </Link>
 
         <button
