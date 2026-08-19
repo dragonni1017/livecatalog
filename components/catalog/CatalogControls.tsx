@@ -9,11 +9,11 @@ interface Props {
 }
 
 const SORT_OPTIONS = [
+  { value: 'sku', label: 'SKU (A–Z)' },
   { value: 'name', label: 'Name (A–Z)' },
   { value: 'price_asc', label: 'Price (low → high)' },
   { value: 'price_desc', label: 'Price (high → low)' },
   { value: 'newest', label: 'Newest' },
-  { value: 'sku', label: 'SKU (A–Z)' },
 ]
 
 const PER_PAGE_OPTIONS = [20, 50, 100]
@@ -53,7 +53,7 @@ export default function CatalogControls({ sort, inStock, perPage }: Props) {
         <select
           value={sort}
           onChange={(e) =>
-            update((p) => (e.target.value === 'name' ? p.delete('sort') : p.set('sort', e.target.value)))
+            update((p) => (e.target.value === 'sku' ? p.delete('sort') : p.set('sort', e.target.value)))
           }
           className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
         >

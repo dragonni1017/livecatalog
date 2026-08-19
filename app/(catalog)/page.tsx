@@ -23,7 +23,7 @@ interface CatalogPageProps {
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const { q, category, page: pageParam, sort: sortParam, instock, per: perParam, minPrice, maxPrice } = await searchParams
 
-  const sort = sortParam ?? 'name'
+  const sort = sortParam ?? 'sku'
   const inStock = instock === '1'
   const minCents = minPrice ? Math.round(parseFloat(minPrice) * 100) : null
   const maxCents = maxPrice ? Math.round(parseFloat(maxPrice) * 100) : null
@@ -117,11 +117,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     case 'newest':
       query = query.order('created_at', { ascending: false })
       break
-    case 'sku':
-      query = query.order('sku', { ascending: true })
+    case 'name':
+      query = query.order('name', { ascending: true })
       break
     default:
-      query = query.order('name', { ascending: true })
+      query = query.order('sku', { ascending: true })
   }
 
   const { data: productsData, count } = await query.range(pageStart, pageStart + pageSize - 1)
@@ -134,7 +134,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (category) params.set('category', category)
-    if (sort !== 'name') params.set('sort', sort)
+    if (sort !== 'sku') params.set('sort', sort)
     if (inStock) params.set('instock', '1')
     if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
     if (minPrice) params.set('minPrice', minPrice)
@@ -149,7 +149,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (category) params.set('category', category)
-    if (sort !== 'name') params.set('sort', sort)
+    if (sort !== 'sku') params.set('sort', sort)
     if (inStock) params.set('instock', '1')
     if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
     const qs = params.toString()
@@ -201,7 +201,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         <form method="get" className="mb-3 flex flex-wrap items-center gap-3">
           {q && <input type="hidden" name="q" value={q} />}
           {category && <input type="hidden" name="category" value={category} />}
-          {sort !== 'name' && <input type="hidden" name="sort" value={sort} />}
+          {sort !== 'sku' && <input type="hidden" name="sort" value={sort} />}
           {inStock && <input type="hidden" name="instock" value="1" />}
           {pageSize !== DEFAULT_PER_PAGE && <input type="hidden" name="per" value={String(pageSize)} />}
           <span className="text-sm text-gray-500 font-medium">Price</span>
