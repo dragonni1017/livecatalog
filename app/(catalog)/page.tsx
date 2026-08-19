@@ -187,18 +187,6 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       </aside>
 
       <div className="flex-1 min-w-0">
-        {/* Best Sellers -- only on the unfiltered default view; hidden during
-            an active search or category filter so results aren't buried
-            below unrelated products */}
-        {!q && !category && bestSellers.length > 0 && (
-          <section className="mb-10">
-            <h2 className="mb-4 text-lg font-bold text-gray-900">Best Sellers</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {bestSellers.map(p => <ProductCard key={p.id} product={p} />)}
-            </div>
-          </section>
-        )}
-
         {/* Price range filter form */}
         <form method="get" className="mb-3 flex flex-wrap items-center gap-3">
           {q && <input type="hidden" name="q" value={q} />}
@@ -278,6 +266,20 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             <CatalogControls sort={sort} inStock={inStock} perPage={pageSize} />
           </Suspense>
         </div>
+
+        {/* Best Sellers -- only on the unfiltered default view; hidden during
+            an active search or category filter so results aren't buried
+            below unrelated products. Rendered below the price/sort/show
+            controls so those are visible immediately, same as every other
+            page, rather than pushed below this section. */}
+        {!q && !category && bestSellers.length > 0 && (
+          <section className="mb-10">
+            <h2 className="mb-4 text-lg font-bold text-gray-900">Best Sellers</h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {bestSellers.map(p => <ProductCard key={p.id} product={p} />)}
+            </div>
+          </section>
+        )}
 
         <ProductGrid products={pagedProducts} />
 
