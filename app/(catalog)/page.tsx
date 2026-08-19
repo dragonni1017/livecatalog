@@ -117,6 +117,9 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     case 'newest':
       query = query.order('created_at', { ascending: false })
       break
+    case 'sku':
+      query = query.order('sku', { ascending: true })
+      break
     default:
       query = query.order('name', { ascending: true })
   }

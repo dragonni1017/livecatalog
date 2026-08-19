@@ -13,6 +13,7 @@ const SORT_OPTIONS = [
   { value: 'price_asc', label: 'Price (low → high)' },
   { value: 'price_desc', label: 'Price (high → low)' },
   { value: 'newest', label: 'Newest' },
+  { value: 'sku', label: 'SKU (A–Z)' },
 ]
 
 const PER_PAGE_OPTIONS = [20, 50, 100]
