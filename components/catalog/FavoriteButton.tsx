@@ -4,11 +4,16 @@ import { useFavorites, type FavoriteItem } from '@/lib/favorites-context'
 
 interface FavoriteButtonProps {
   item: FavoriteItem
+  // 'card' (default) floats over the top-right corner of a ProductCard.
+  // 'detail' renders inline instead, for placement next to a heading on the
+  // product detail page (no absolute positioning, no parent card to float over).
+  variant?: 'card' | 'detail'
 }
 
-export default function FavoriteButton({ item }: FavoriteButtonProps) {
+export default function FavoriteButton({ item, variant = 'card' }: FavoriteButtonProps) {
   const { toggle, isFavorite } = useFavorites()
   const saved = isFavorite(item.id)
+  const detail = variant === 'detail'
 
   return (
     <button
@@ -18,12 +23,17 @@ export default function FavoriteButton({ item }: FavoriteButtonProps) {
         toggle(item)
       }}
       aria-label={saved ? 'Remove from favorites' : 'Save to favorites'}
-      className={`absolute top-2 right-2 rounded-full p-1.5 transition-colors ${
-        saved
+      className={
+        (detail
+          ? 'inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm font-medium '
+          : 'absolute top-2 right-2 rounded-full p-1.5 ') +
+        'transition-colors ' +
+        (saved
           ? 'text-red-500 hover:text-red-600'
-          : 'text-gray-300 hover:text-red-400'
-      }`}
+          : 'text-gray-400 hover:text-red-400')
+      }
     >
+      {detail && (saved ? 'Saved' : 'Save')}
       {saved ? (
         /* Filled heart */
         <svg

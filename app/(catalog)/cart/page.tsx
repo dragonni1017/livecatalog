@@ -358,7 +358,7 @@ export default function CartPage() {
               </div>
               <div>
                 <label htmlFor="requiredShipDate" className="mb-1 block text-xs font-medium text-gray-600">
-                  Order by date <span className="text-gray-400">(optional)</span>
+                  Order by date <span className="text-gray-400">(Needed by a specific date?)</span>
                 </label>
                 <input
                   type="date"

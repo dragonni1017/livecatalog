@@ -10,6 +10,7 @@ import { getDisplaySettings } from '@/lib/display-settings'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
+import FavoriteButton from '@/components/catalog/FavoriteButton'
 import ProductCard from '@/components/catalog/ProductCard'
 import TrackView from '@/components/catalog/TrackView'
 import BackInStockForm from '@/components/catalog/BackInStockForm'
@@ -170,7 +171,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </nav>
             )}
 
-            <h1 className="text-2xl font-bold text-gray-900 leading-snug">{displayName}</h1>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-2xl font-bold text-gray-900 leading-snug">{displayName}</h1>
+              <FavoriteButton
+                variant="detail"
+                item={{
+                  id: product.id,
+                  sku: product.sku,
+                  name: displayName,
+                  price_cents: product.price_cents,
+                  image_url: product.image_url,
+                  category: product.category?.name ?? '',
+                }}
+              />
+            </div>
 
             {settings.show_sku_barcode_detail && (
               <>
