@@ -4,7 +4,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const q = searchParams.get('q') ?? ''
+  const qRaw = searchParams.get('q') ?? ''
+  // Strip chars that would break PostgREST's filter syntax (same as the
+  // main catalog search in app/(catalog)/page.tsx).
+  const q = qRaw.replace(/[%,()]/g, '')
 
   if (q.length < 2) {
     return NextResponse.json({ results: [] }, { headers: { 'Cache-Control': 'no-store' } })
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await db
     .from('products')
     .select('id, sku, name, price_cents, image_url, category:categories(name)')
-    .or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
+    .or(`name.ilike.%${q}%,sku.ilike.%${q}%,barcode.ilike.%${q}%`)
     .eq('is_active', true)
     .limit(6)
 

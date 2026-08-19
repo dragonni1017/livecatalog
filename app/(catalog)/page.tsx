@@ -96,13 +96,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   if (minCents) query = query.gte('price_cents', minCents)
   if (maxCents) query = query.lte('price_cents', maxCents)
 
-  // Multi-word search: each word must appear in name, description, or SKU, so
-  // "blue widget" matches "Widget, Blue" regardless of word order. Strip chars
-  // that would break PostgREST's filter syntax.
+  // Multi-word search: each word must appear in name, description, SKU, or
+  // barcode, so "blue widget" matches "Widget, Blue" regardless of word
+  // order, and scanning/typing a barcode finds the product directly. Strip
+  // chars that would break PostgREST's filter syntax.
   if (q?.trim()) {
     for (const word of q.trim().split(/\s+/)) {
       const w = word.replace(/[%,()]/g, '')
-      if (w) query = query.or(`name.ilike.%${w}%,description.ilike.%${w}%,sku.ilike.%${w}%`)
+      if (w) query = query.or(`name.ilike.%${w}%,description.ilike.%${w}%,sku.ilike.%${w}%,barcode.ilike.%${w}%`)
     }
   }
 
