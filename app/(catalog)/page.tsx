@@ -282,6 +282,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </section>
         )}
 
+        {/* Only needed when Best Sellers is also showing -- makes it visually
+            obvious that sort/filter results are a separate section below the
+            (intentionally sort-independent) Best Sellers picks, not a
+            continuation of them. */}
+        {!q && !category && bestSellers.length > 0 && (
+          <h2 className="mb-4 border-t border-gray-200 pt-8 text-lg font-bold text-gray-900">All Products</h2>
+        )}
+
         <ProductGrid products={pagedProducts} />
 
         {/* Pagination controls */}
