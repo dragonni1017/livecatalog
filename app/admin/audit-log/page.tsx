@@ -33,6 +33,10 @@ function ActionBadge({ action }: { action: string }) {
     order_status_change: 'bg-purple-100 text-purple-700',
     order_qb_toggle: 'bg-gray-100 text-gray-600',
     order_qb_enqueued: 'bg-amber-100 text-amber-700',
+    rep_account_created: 'bg-green-100 text-green-700',
+    rep_account_deactivated: 'bg-orange-100 text-orange-700',
+    rep_account_reactivated: 'bg-green-100 text-green-700',
+    rep_account_deleted: 'bg-red-100 text-red-700',
   }
   const cls = styles[action] ?? 'bg-gray-100 text-gray-600'
   const label = action.replace(/_/g, ' ')
