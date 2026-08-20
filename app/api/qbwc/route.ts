@@ -22,7 +22,7 @@ import {
 // IncomeAccountRef in buildItemAddRq) — must exactly match an account name
 // in the target QuickBooks company file's Chart of Accounts. Update this if
 // pointing at a company file where that account is named differently.
-const QB_INCOME_ACCOUNT_NAME = 'Sales Orders'
+const QB_INCOME_ACCOUNT_NAME = 'Revenue'
 
 export const dynamic = 'force-dynamic'
 
