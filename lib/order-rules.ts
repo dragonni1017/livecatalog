@@ -35,14 +35,39 @@ export function getEffectivePrice(
   return match ? match.price_cents : baseCents
 }
 
-// Applies a flat percentage discount to a price in cents, rounding to the
-// nearest cent. Used for both the per-customer discount_percent on file
-// (app/api/orders/route.ts) and rep-selected price_tiers.discount_percent
-// (app/rep/api/orders/route.ts) -- same function on the client (for preview)
-// and the server (at submit time) so the two can never disagree.
+// Rounds a price in cents to the nearest quarter-dollar stop (.00/.25/.50/
+// next whole dollar), skipping .75 -- the storefront-wide pricing policy
+// decided 2026-08-06 (see lib/erply.ts's roundToQuarterSkip75, which
+// applies the same rule in dollars to the base synced price). Cents-based
+// here so tier/discount math -- already working in cents -- can round its
+// own result without a dollars round-trip.
+export function roundCentsToQuarterSkip75(cents: number): number {
+  const dollars = Math.floor(cents / 100)
+  const remainder = Math.round(cents - dollars * 100) // 0-99
+  const stops = [0, 25, 50, 100]
+  let nearest = stops[0]
+  let minDiff = Infinity
+  for (const stop of stops) {
+    const diff = Math.abs(remainder - stop)
+    if (diff < minDiff) {
+      minDiff = diff
+      nearest = stop
+    }
+  }
+  return nearest === 100 ? (dollars + 1) * 100 : dollars * 100 + nearest
+}
+
+// Applies a flat percentage discount to a price in cents, then rounds to
+// the nearest quarter (see roundCentsToQuarterSkip75) so discounted/marked-
+// up prices land on the same clean stops as the base price instead of
+// arbitrary cent amounts. Used for both the per-customer discount_percent
+// on file (app/api/orders/route.ts) and rep-selected
+// price_tiers.discount_percent -- same function on the client (for
+// preview) and the server (at submit time) so the two can never disagree.
 export function applyTierDiscount(cents: number, discountPercent: number): number {
   if (!discountPercent) return cents
-  return Math.round(cents * (1 - discountPercent / 100))
+  const adjusted = Math.round(cents * (1 - discountPercent / 100))
+  return roundCentsToQuarterSkip75(adjusted)
 }
 
 // price_tiers.code ('distribution_chain') -> display label ('Distribution Chain').
