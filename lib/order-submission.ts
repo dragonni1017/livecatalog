@@ -60,14 +60,15 @@ export async function buildLineItems(
 }
 
 // ── 2. Reference code ────────────────────────────────────────────────────
-// ORD-<year>-<4-digit sequence>[-<TIER>]. Sequence derived from this year's
+// ORD-<year>[-<TIER>]-<4-digit sequence>. Sequence derived from this year's
 // order count — the `like` filter only anchors the `ORD-<year>-` prefix, so
-// it still counts correctly regardless of any tier suffix. The
+// it still counts correctly regardless of any tier infix. The
 // reference_code unique constraint guards against concurrent collisions;
 // the caller retries with the next number on a 23505 violation. A rep order
-// gets its tier appended (e.g. ORD-2026-0011-WHOLESALE) so the tier is
-// visible anywhere the reference code alone is shown (emails, admin list,
-// order-status page) without needing to look up applied_tier_code.
+// gets its tier inserted as a 3-letter abbreviation (e.g. ORD-2026-WHO-0011,
+// distribution_chain -> DIS) so the tier is visible anywhere the reference
+// code alone is shown (emails, admin list, order-status page) without
+// needing to look up applied_tier_code.
 export async function nextReferenceCode(db: Db, attempt: number, tierCode?: string | null): Promise<string> {
   const year = new Date().getFullYear()
   const { count } = await db
@@ -75,9 +76,10 @@ export async function nextReferenceCode(db: Db, attempt: number, tierCode?: stri
     .select('id', { count: 'exact', head: true })
     .like('reference_code', `ORD-${year}-%`)
   const seq = (count ?? 0) + 1 + attempt
-  const base = `ORD-${year}-${String(seq).padStart(4, '0')}`
-  if (!tierCode) return base
-  return `${base}-${tierCode.toUpperCase().replace(/_/g, '-')}`
+  const seqStr = String(seq).padStart(4, '0')
+  if (!tierCode) return `ORD-${year}-${seqStr}`
+  const abbrev = tierCode.slice(0, 3).toUpperCase()
+  return `ORD-${year}-${abbrev}-${seqStr}`
 }
 
 // ── 3. Atomically insert order + items via the submit_order() RPC ──────────
