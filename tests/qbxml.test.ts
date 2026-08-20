@@ -5,6 +5,7 @@ import {
   buildItemAddRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
+  compactRefNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
   parseCustomerQueryRs,
@@ -41,10 +42,11 @@ describe('buildItemQueryRq', () => {
 })
 
 describe('buildSalesOrderAddRq', () => {
-  it('builds a SalesOrderAdd with customer ref, PO number, and one line per item', () => {
+  it('builds a SalesOrderAdd with customer ref, memo, PO number, and one line per item', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: '80000073-1234567890',
-      refNumber: 'ORD-2026-0011',
+      refNumber: '0011',
+      memo: 'ORD-2026-0011',
       poNumber: 'PO-999',
       lines: [
         { qbItemListId: '50000001-1111111111', desc: '3D Printed Snakes', qty: 4, rateCents: 125 },
@@ -53,7 +55,8 @@ describe('buildSalesOrderAddRq', () => {
     })
     expect(xml).toContain('<SalesOrderAddRq requestID="1">')
     expect(xml).toContain('<CustomerRef><ListID>80000073-1234567890</ListID></CustomerRef>')
-    expect(xml).toContain('<RefNumber>ORD-2026-0011</RefNumber>')
+    expect(xml).toContain('<RefNumber>0011</RefNumber>')
+    expect(xml).toContain('<Memo>ORD-2026-0011</Memo>')
     expect(xml).toContain('<PONumber>PO-999</PONumber>')
     expect(xml).toContain('<ItemRef><ListID>50000001-1111111111</ListID></ItemRef>')
     expect(xml).toContain('<Quantity>4</Quantity>')
@@ -65,11 +68,28 @@ describe('buildSalesOrderAddRq', () => {
   it('omits PONumber entirely when none is given', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: 'ORD-2026-0012',
+      refNumber: '0012',
+      memo: 'ORD-2026-0012',
       poNumber: null,
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
     })
     expect(xml).not.toContain('PONumber')
+  })
+})
+
+describe('compactRefNumber', () => {
+  it('keeps just the sequence number for a non-tier reference code', () => {
+    expect(compactRefNumber('ORD-2026-0012')).toBe('0012')
+  })
+
+  it('keeps tier + sequence for a rep-order reference code', () => {
+    expect(compactRefNumber('ORD-2026-WHO-0011')).toBe('WHO-0011')
+    expect(compactRefNumber('ORD-2026-DIS-0003')).toBe('DIS-0003')
+  })
+
+  it('never exceeds 11 characters (QuickBooks RefNumber cap)', () => {
+    expect(compactRefNumber('ORD-2026-WHO-0011').length).toBeLessThanOrEqual(11)
+    expect(compactRefNumber('ORD-2026-0012').length).toBeLessThanOrEqual(11)
   })
 })
 

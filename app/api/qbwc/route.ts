@@ -8,6 +8,7 @@ import {
   buildItemAddRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
+  compactRefNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
   parseCustomerQueryRs,
@@ -282,7 +283,8 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   }))
   const xml = buildSalesOrderAddRq({
     qbCustomerListId: customerLink.qb_customer_list_id,
-    refNumber: order.reference_code,
+    refNumber: compactRefNumber(order.reference_code),
+    memo: order.reference_code,
     poNumber: order.po_number,
     lines,
   })

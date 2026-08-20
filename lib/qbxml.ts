@@ -89,9 +89,15 @@ export interface SalesOrderLine {
   rateCents: number
 }
 
+// QuickBooks' RefNumber field is capped at 11 characters (confirmed live —
+// QuickBooks rejected a 13-char RefNumber with "too long"), too short for
+// our full ORD-<year>-<seq>[-<tier>] reference codes. refNumber here must
+// already be pre-shortened by the caller to fit; memo carries the full
+// reference code for traceability instead.
 export function buildSalesOrderAddRq(args: {
   qbCustomerListId: string
   refNumber: string
+  memo: string
   poNumber?: string | null
   lines: SalesOrderLine[]
 }): string {
@@ -112,9 +118,25 @@ export function buildSalesOrderAddRq(args: {
   return wrapQbxml(`<SalesOrderAddRq requestID="1">
   <SalesOrderAdd>
     <CustomerRef><ListID>${xmlEscape(args.qbCustomerListId)}</ListID></CustomerRef>
-    <RefNumber>${xmlEscape(args.refNumber)}</RefNumber>${poXml}${lineXml}
+    <RefNumber>${xmlEscape(args.refNumber)}</RefNumber>
+    <Memo>${xmlEscape(args.memo)}</Memo>${poXml}${lineXml}
   </SalesOrderAdd>
 </SalesOrderAddRq>`)
+}
+
+// Compacts a reference code (e.g. "ORD-2026-WHO-0011") to fit QuickBooks'
+// 11-char RefNumber cap: drops the constant "ORD-<year>-" portion, keeping
+// just "<tier>-<seq>" (e.g. "WHO-0011") or, for a non-rep order with no
+// tier, just "<seq>" (e.g. "0012"). Year-uniqueness is lost (sequence
+// numbers restart each year), but the full reference code still lives in
+// the SalesOrder's Memo for traceability — this is a display convenience,
+// not the lookup key.
+export function compactRefNumber(referenceCode: string): string {
+  const parts = referenceCode.split('-')
+  const seq = parts[parts.length - 1]
+  const tierParts = parts.slice(2, -1)
+  const compact = tierParts.length ? `${tierParts.join('-')}-${seq}` : seq
+  return compact.slice(0, 11)
 }
 
 // ── Response parsers ─────────────────────────────────────────────────────
