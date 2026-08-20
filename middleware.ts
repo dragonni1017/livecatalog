@@ -43,6 +43,21 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // ── Rep: Supabase Auth role gate ─────────────────────────────────────────
+  // Same pattern as admin above, distinct role value — see
+  // app/api/rep/auth/route.ts for how app_metadata.role='rep' gets checked
+  // at login. /rep/api/* inherits this gate too (checked before the /api
+  // bypass below), same as /admin/api/* inherits the admin gate.
+  if (pathname.startsWith('/rep')) {
+    if (pathname === '/rep/login') return response
+    if (!sessionUser || sessionUser.app_metadata?.role !== 'rep') {
+      const loginUrl = new URL('/rep/login', request.url)
+      loginUrl.searchParams.set('from', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+    return response
+  }
+
   // The gate page and its API must stay reachable; APIs are called by the
   // browser after entry and aren't gated here.
   if (pathname === '/enter' || pathname.startsWith('/api')) return response

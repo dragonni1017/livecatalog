@@ -34,3 +34,13 @@ export function getEffectivePrice(
     .find((t) => qty >= t.min_qty)
   return match ? match.price_cents : baseCents
 }
+
+// Applies a flat percentage discount to a price in cents, rounding to the
+// nearest cent. Used for both the per-customer discount_percent on file
+// (app/api/orders/route.ts) and rep-selected price_tiers.discount_percent
+// (app/rep/api/orders/route.ts) -- same function on the client (for preview)
+// and the server (at submit time) so the two can never disagree.
+export function applyTierDiscount(cents: number, discountPercent: number): number {
+  if (!discountPercent) return cents
+  return Math.round(cents * (1 - discountPercent / 100))
+}

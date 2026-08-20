@@ -150,6 +150,14 @@ function LoginForm() {
             Create one
           </Link>
         </p>
+
+        {/* Rep login link */}
+        <p className="text-xs text-center mt-3 text-gray-400">
+          Sales rep?{' '}
+          <Link href="/rep/login" className="text-gray-500 hover:text-red-600 underline">
+            Sign in here
+          </Link>
+        </p>
       </div>
     </div>
   )

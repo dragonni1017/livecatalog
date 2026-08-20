@@ -98,6 +98,11 @@ export interface OrderRequest {
   // to status — see migration 0005_entered_in_qb.sql.
   entered_in_qb: boolean
   entered_in_qb_at: string | null
+  // Set only when a rep account (not the free-text placed_by_rep) placed/priced
+  // this order — see migrations 0028-0030.
+  rep_user_id: string | null
+  applied_tier_code: string | null
+  applied_tier_discount_percent: number | null
   created_at: string
   updated_at: string
 }
