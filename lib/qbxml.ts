@@ -14,10 +14,12 @@
  *    keyed by email (our join key) — it's just populated via this
  *    name-based QuickBooks-side lookup.
  *  - QuickBooks item "Name" is assumed to equal our products.sku.
- *  - Auto-created items (buildItemAddRq) post to a hardcoded Income Account
- *    name (QB_INCOME_ACCOUNT_NAME in app/api/qbwc/route.ts) that must exist
- *    in the target company file's Chart of Accounts — verify/update it
- *    before pointing this at a different company file.
+ *  - Auto-created items (buildItemAddRq) are sale-only (SalesOrPurchase, not
+ *    SalesAndPurchase — the latter needs a separate expense account too)
+ *    and post to a hardcoded Income Account name (QB_INCOME_ACCOUNT_NAME in
+ *    app/api/qbwc/route.ts) that must exist in the target company file's
+ *    Chart of Accounts — verify/update it before pointing this at a
+ *    different company file.
  */
 import { XMLParser } from 'fast-xml-parser'
 
@@ -64,17 +66,18 @@ export function buildCustomerAddRq(name: string): string {
 }
 
 // Non-inventory part — no quantity/inventory tracking, just a sellable line
-// item. SalesAndPurchase/IncomeAccountRef is required for an item that will
-// appear on a Sales Order; incomeAccountName must match an existing Income
-// account in the QuickBooks company file's Chart of Accounts (varies per
-// company — passed in rather than hardcoded).
+// item. SalesOrPurchase (not SalesAndPurchase — that variant is for items
+// both bought AND sold and requires a separate expense account too) is the
+// single-sided "we only sell this" form; its AccountRef must match an
+// existing Income account in the QuickBooks company file's Chart of
+// Accounts (varies per company — passed in rather than hardcoded).
 export function buildItemAddRq(sku: string, incomeAccountName: string): string {
   return wrapQbxml(`<ItemNonInventoryAddRq requestID="1">
   <ItemNonInventoryAdd>
     <Name>${xmlEscape(sku)}</Name>
-    <SalesAndPurchase>
-      <IncomeAccountRef><FullName>${xmlEscape(incomeAccountName)}</FullName></IncomeAccountRef>
-    </SalesAndPurchase>
+    <SalesOrPurchase>
+      <AccountRef><FullName>${xmlEscape(incomeAccountName)}</FullName></AccountRef>
+    </SalesOrPurchase>
   </ItemNonInventoryAdd>
 </ItemNonInventoryAddRq>`)
 }

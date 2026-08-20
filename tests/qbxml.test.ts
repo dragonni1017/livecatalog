@@ -141,11 +141,13 @@ describe('buildCustomerAddRq', () => {
 })
 
 describe('buildItemAddRq', () => {
-  it('builds an ItemNonInventoryAddRq with the given SKU as Name and the income account', () => {
-    const xml = buildItemAddRq('3D801155', 'Sales Orders')
+  it('builds an ItemNonInventoryAddRq with the given SKU as Name and a sale-only (SalesOrPurchase) account ref', () => {
+    const xml = buildItemAddRq('3D801155', 'Revenue')
     expect(xml).toContain('<ItemNonInventoryAddRq requestID="1">')
     expect(xml).toContain('<Name>3D801155</Name>')
-    expect(xml).toContain('<IncomeAccountRef><FullName>Sales Orders</FullName></IncomeAccountRef>')
+    expect(xml).toContain('<SalesOrPurchase>')
+    expect(xml).toContain('<AccountRef><FullName>Revenue</FullName></AccountRef>')
+    expect(xml).not.toContain('SalesAndPurchase')
   })
 })
 
