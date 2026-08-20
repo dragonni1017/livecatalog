@@ -6,6 +6,7 @@ import {
   buildItemQueryRq,
   buildSalesOrderAddRq,
   compactRefNumber,
+  fallbackPoNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
   parseCustomerQueryRs,
@@ -90,6 +91,19 @@ describe('compactRefNumber', () => {
   it('never exceeds 11 characters (QuickBooks RefNumber cap)', () => {
     expect(compactRefNumber('ORD-2026-WHO-0011').length).toBeLessThanOrEqual(11)
     expect(compactRefNumber('ORD-2026-0012').length).toBeLessThanOrEqual(11)
+  })
+})
+
+describe('fallbackPoNumber', () => {
+  it('uses the full reference code when it fits within 25 characters', () => {
+    expect(fallbackPoNumber('ORD-2026-0012')).toBe('ORD-2026-0012')
+    expect(fallbackPoNumber('ORD-2026-WHO-0011')).toBe('ORD-2026-WHO-0011')
+  })
+
+  it('falls back to the compact tier-seq form when the reference code exceeds 25 characters', () => {
+    const longCode = 'ORD-2026-DISTRIBUTION-CHAIN-0011' // 32 chars
+    expect(fallbackPoNumber(longCode)).toBe(compactRefNumber(longCode))
+    expect(fallbackPoNumber(longCode).length).toBeLessThanOrEqual(25)
   })
 })
 

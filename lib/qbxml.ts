@@ -139,6 +139,17 @@ export function compactRefNumber(referenceCode: string): string {
   return compact.slice(0, 11)
 }
 
+// QuickBooks' PO Numbers field caps at 25 characters (confirmed via
+// Intuit's documented QuickBooks Desktop field-length table). Used when an
+// order has no real customer-supplied PO number — the full reference code
+// fits well within 25 for the current format, but falls back to the same
+// compact tier-<seq> form as compactRefNumber if it ever doesn't.
+export const QB_PO_NUMBER_MAX_CHARS = 25
+
+export function fallbackPoNumber(referenceCode: string): string {
+  return referenceCode.length <= QB_PO_NUMBER_MAX_CHARS ? referenceCode : compactRefNumber(referenceCode)
+}
+
 // ── Response parsers ─────────────────────────────────────────────────────
 // Every qbXML *Rs element carries statusCode/statusSeverity/statusMessage as
 // attributes (statusCode="0" = success) -- this convention is stable across

@@ -9,6 +9,7 @@ import {
   buildItemQueryRq,
   buildSalesOrderAddRq,
   compactRefNumber,
+  fallbackPoNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
   parseCustomerQueryRs,
@@ -285,7 +286,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
     qbCustomerListId: customerLink.qb_customer_list_id,
     refNumber: compactRefNumber(order.reference_code),
     memo: order.reference_code,
-    poNumber: order.po_number,
+    poNumber: order.po_number || fallbackPoNumber(order.reference_code),
     lines,
   })
 
