@@ -58,6 +58,15 @@ function xmlResponse(xml: string): NextResponse {
   return new NextResponse(xml, { status: 200, headers: { 'Content-Type': 'text/xml; charset=utf-8' } })
 }
 
+// Before adding the app, QBWC does a plain GET against AppURL just to check
+// the TLS cert is valid — unrelated to the real SOAP POST traffic below. A
+// 405 on that GET makes QBWC report the (misleading) QBWC1048 "could not
+// verify certificate" error, so this has to return 200 to something, not
+// reject non-POST requests.
+export async function GET(): Promise<NextResponse> {
+  return new NextResponse('QBWC SOAP endpoint', { status: 200 })
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const bodyXml = await request.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
