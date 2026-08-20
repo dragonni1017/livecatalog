@@ -120,10 +120,13 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                         {o.reference_code}
                       </Link>
                       {(() => {
-                        const m = o.notes?.match(/^\[Needed by (\d{4}-\d{2}-\d{2})\]/)
+                        // Matches both the current "[Ship by DATE]" prefix and
+                        // the older "[Needed by DATE]" one, for orders placed
+                        // before the field was relabeled.
+                        const m = o.notes?.match(/^\[(?:Ship by|Needed by) (\d{4}-\d{2}-\d{2})\]/)
                         return m && (
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                            Needed {m[1]}
+                            Ship by {m[1]}
                           </span>
                         )
                       })()}

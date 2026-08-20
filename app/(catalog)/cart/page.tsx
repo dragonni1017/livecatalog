@@ -136,7 +136,7 @@ export default function CartPage() {
     }
     setSubmitting(true)
     try {
-      const dateNote = requiredShipDate ? `[Needed by ${requiredShipDate}]\n` : ''
+      const dateNote = requiredShipDate ? `[Ship by ${requiredShipDate}]\n` : ''
       const finalNotes = dateNote + (contact.notes?.trim() ?? '')
       const res = await fetch('/api/orders', {
         method: 'POST',
@@ -358,7 +358,7 @@ export default function CartPage() {
               </div>
               <div>
                 <label htmlFor="requiredShipDate" className="mb-1 block text-xs font-medium text-gray-600">
-                  Order by date <span className="text-gray-400">(Needed by a specific date?)</span>
+                  Ship by date <span className="text-gray-400">(Needed by a specific date?)</span>
                 </label>
                 <input
                   type="date"
