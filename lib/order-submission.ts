@@ -60,17 +60,24 @@ export async function buildLineItems(
 }
 
 // ── 2. Reference code ────────────────────────────────────────────────────
-// ORD-<year>-<4-digit sequence>. Sequence derived from this year's order
-// count. The reference_code unique constraint guards against concurrent
-// collisions; the caller retries with the next number on a 23505 violation.
-export async function nextReferenceCode(db: Db, attempt: number): Promise<string> {
+// ORD-<year>-<4-digit sequence>[-<TIER>]. Sequence derived from this year's
+// order count — the `like` filter only anchors the `ORD-<year>-` prefix, so
+// it still counts correctly regardless of any tier suffix. The
+// reference_code unique constraint guards against concurrent collisions;
+// the caller retries with the next number on a 23505 violation. A rep order
+// gets its tier appended (e.g. ORD-2026-0011-WHOLESALE) so the tier is
+// visible anywhere the reference code alone is shown (emails, admin list,
+// order-status page) without needing to look up applied_tier_code.
+export async function nextReferenceCode(db: Db, attempt: number, tierCode?: string | null): Promise<string> {
   const year = new Date().getFullYear()
   const { count } = await db
     .from('order_requests')
     .select('id', { count: 'exact', head: true })
     .like('reference_code', `ORD-${year}-%`)
   const seq = (count ?? 0) + 1 + attempt
-  return `ORD-${year}-${String(seq).padStart(4, '0')}`
+  const base = `ORD-${year}-${String(seq).padStart(4, '0')}`
+  if (!tierCode) return base
+  return `${base}-${tierCode.toUpperCase().replace(/_/g, '-')}`
 }
 
 // ── 3. Atomically insert order + items via the submit_order() RPC ──────────
@@ -94,7 +101,7 @@ export async function insertOrder(args: InsertOrderArgs): Promise<InsertOrderRes
   let orderId: string | null = null
   let referenceCode = ''
   for (let attempt = 0; attempt < 3 && !orderId; attempt++) {
-    referenceCode = await nextReferenceCode(db, attempt)
+    referenceCode = await nextReferenceCode(db, attempt, appliedTierCode)
     const { data, error } = await db.rpc('submit_order', {
       p_reference_code:                referenceCode,
       p_customer_name:                 contact.name.trim(),
