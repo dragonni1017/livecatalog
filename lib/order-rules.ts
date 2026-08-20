@@ -52,3 +52,14 @@ export function tierLabel(code: string): string {
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
 }
+
+// price_tiers.discount_percent can be negative -- the stored base price is
+// Wholesale (see lib/erply.ts's WHOLESALE_DISCOUNT), so a tier priced above
+// Wholesale (e.g. Retail) is a markup, encoded as a negative "discount".
+// applyTierDiscount() already handles the sign correctly for the actual
+// price math; this just describes it in human terms for display.
+export function formatTierAdjustment(discountPercent: number): string {
+  if (discountPercent > 0) return `${discountPercent}% off`
+  if (discountPercent < 0) return `${Math.abs(discountPercent)}% markup`
+  return '—'
+}

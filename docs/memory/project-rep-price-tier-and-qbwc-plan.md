@@ -1,6 +1,6 @@
 ---
 name: project-rep-price-tier-and-qbwc-plan
-description: 2026-08-20 -- Feature 2 REARCHITECTED same day: reps now browse the regular storefront with a header tier dropdown instead of a separate order-builder (which was deleted) -- built + verified end-to-end incl. a real order through the shared public /cart; Feature 1 (QBWC) schema/qbXML/SOAP endpoint/.qwc file generator all built + verified, only QBWC env vars + real hardware remain
+description: 2026-08-20 -- Feature 2 rearchitected to header-dropdown tier browsing, THEN a critical price_tiers bug found+fixed same day (percentages were relative to Retail but the stored base price is actually Wholesale -- see the CRITICAL BUG section); Feature 1 (QBWC) all built + verified, only QBWC env vars + real hardware remain
 type: project
 ---
 
@@ -199,8 +199,72 @@ computed in-session from the known secret same as before):
 - Dragon asked separately whether 2FA could be turned off (not removed) —
   answer given: unset `REP_TOTP_SECRET` in `.env.local` + Vercel, the code
   already falls back to password-only automatically when that env var is
-  absent, same toggle mechanism as `ADMIN_TOTP_SECRET`. Not yet done as of
-  this note (2FA was still active during the verification above).
+  absent, same toggle mechanism as `ADMIN_TOTP_SECRET`. **Since resolved**
+  — confirmed working live (password-only login, no 2FA prompt) later the
+  same day.
+- Also since resolved: reference codes now carry the tier, e.g.
+  `ORD-2026-0011-WHOLESALE` (public/non-rep orders keep the plain
+  `ORD-2026-0011` format) — see `nextReferenceCode()` in
+  `lib/order-submission.ts`. And the admin orders list/detail/print pages
+  now show the applied tier (amber badge + "(X% off)"/"(X% markup)" line),
+  which they didn't originally.
+- Added `/admin/rep-accounts` (not `/admin/reps` — that path was already a
+  rep-performance analytics page keyed off the free-text `placed_by_rep`
+  field, a different concept) for listing/creating/deactivating/deleting
+  rep login accounts, since there was previously no in-app way to manage
+  them at all.
+
+**CRITICAL BUG FOUND + FIXED 2026-08-20, same day, after the feature had
+already shipped:** the `price_tiers` percentages from `0028_price_tiers.sql`
+were wrong. They were set assuming the app's displayed base price
+(`products.price_cents`) represents the **Retail** anchor (so Wholesale =
+50% off it, Retail = 0% off it, etc.) — but `lib/erply.ts`'s sync
+(`WHOLESALE_DISCOUNT = 0.5`, line ~58) already multiplies Erply's Retail
+price by 0.5 before writing it to Supabase. **The app's stored/displayed
+base price is already the Wholesale price, not Retail.** This was a
+pre-existing 2026-08-06 decision (see
+[[project-storefront-wholesale-quarter-rounding]]) that should have been
+re-checked before designing the tier feature, not assumed.
+
+Real-world impact before the fix: selecting "Wholesale" in the rep
+dropdown applied an *extra* 50% off an already-wholesale price (customers
+would've been quoted ~25% of real Retail); selecting "Retail" showed the
+Wholesale price unchanged (labeled as Retail, ~50% too cheap).
+Fixed via `supabase/migrations/0032_fix_price_tier_percentages.sql`,
+re-deriving each tier's percentage **relative to the stored Wholesale
+base** instead of relative to Retail:
+- Wholesale: 0% (the stored base already *is* Wholesale)
+- Retail: **−100%** (a 2× markup — `applyTierDiscount()` already handled
+  negative percentages as markups correctly, `lib/order-rules.ts`, this
+  was purely a stored-value bug, not a formula bug)
+- Distribution-Chain: **8% off** (was 54% off)
+- Exclusive: **−24%** (a 1.24× markup; was 38% off)
+- Base: **deactivated** (Dragon's choice) rather than guessed — it predates
+  the 2026-08-04 retail-anchor pricing flip and has 0 customers in Erply,
+  so there's no live reference price to derive a correct value from.
+  `getActivePriceTiers()` filters to `active=true`, so it no longer
+  appears in the rep dropdown at all.
+
+Also widened the `price_tiers.discount_percent` CHECK constraint from
+`0-100` to `-100-100` (was blocking negative/markup values entirely), and
+added `formatTierAdjustment()` to `lib/order-rules.ts` (used in the rep
+tiers table, admin order detail, and admin order print pages) so a markup
+displays as "X% markup" instead of the check silently omitting it or
+misreading as "X% off".
+
+**Verified live** with the real `sale@ly-usa.com` account against SKU
+`3D801158` (Mermaids, $3.50 stored base): Wholesale → $3.50 (no
+strikethrough, correct — it's the unadjusted base), Retail → $7.00 exactly
+(2×), Distribution-Chain → $3.22 exactly, Exclusive → $4.34 exactly. All
+four matched hand-calculated expected values precisely.
+
+**How to apply:** before ever changing `price_tiers` percentages again,
+re-derive them relative to what `products.price_cents` *actually* stores
+(currently Wholesale, per `lib/erply.ts`'s `WHOLESALE_DISCOUNT`), not
+relative to Erply's Retail anchor — those are two different bases and
+conflating them is exactly what caused this bug. If the 2026-08-06
+Wholesale-as-storefront-base decision is ever reversed, every value in
+`price_tiers` needs to be re-derived again from scratch.
 
 **Feature 1 (QBWC) — core built and verified 2026-08-20, real hardware
 still pending.** Built in this session, scoped deliberately to "everything

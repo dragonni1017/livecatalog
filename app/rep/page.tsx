@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getSessionUser } from '@/lib/auth-server'
 import { getAdminClient } from '@/lib/supabase'
+import { formatTierAdjustment } from '@/lib/order-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,7 +66,7 @@ export default async function RepHomePage() {
                 <tr key={t.code}>
                   <td className="py-2 text-gray-900">{t.label}</td>
                   <td className="py-2 text-right tabular-nums text-gray-700">
-                    {t.discount_percent > 0 ? `${t.discount_percent}% off` : '—'}
+                    {formatTierAdjustment(t.discount_percent)}
                   </td>
                   <td className="py-2 text-right">
                     {t.active ? (

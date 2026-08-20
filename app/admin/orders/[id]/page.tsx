@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { getAdminClient } from '@/lib/supabase'
 import OrderStatusControls from '@/components/admin/OrderStatusControls'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
-import { tierLabel } from '@/lib/order-rules'
+import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -191,9 +191,9 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
                   <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
                     {tierLabel(order.applied_tier_code)}
                   </span>
-                  {order.applied_tier_discount_percent != null && order.applied_tier_discount_percent > 0 && (
+                  {order.applied_tier_discount_percent != null && order.applied_tier_discount_percent !== 0 && (
                     <span className="text-xs text-gray-500">
-                      ({order.applied_tier_discount_percent}% off)
+                      ({formatTierAdjustment(order.applied_tier_discount_percent)})
                     </span>
                   )}
                 </span>
