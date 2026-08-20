@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAdminClient } from '@/lib/supabase'
 import PrintButton from '@/components/admin/PrintButton'
+import { tierLabel } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +70,14 @@ export default async function SalesOrderPrintPage({ params }: PrintPageProps) {
           <p className="text-sm text-gray-600">{formatDate(order.created_at)}</p>
           {order.po_number && <p className="text-sm text-gray-600">PO #: {order.po_number}</p>}
           {order.placed_by_rep && <p className="text-sm text-gray-600">Rep: {order.placed_by_rep}</p>}
+          {order.applied_tier_code && (
+            <p className="text-sm text-gray-600">
+              Price tier: {tierLabel(order.applied_tier_code)}
+              {order.applied_tier_discount_percent != null && order.applied_tier_discount_percent > 0
+                ? ` (${order.applied_tier_discount_percent}% off)`
+                : ''}
+            </p>
+          )}
         </div>
       </header>
 

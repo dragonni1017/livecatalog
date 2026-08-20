@@ -13,7 +13,7 @@ export default async function AdminOrdersPage({
   const db = getAdminClient()
   const { data } = await db
     .from('order_requests')
-    .select('id, reference_code, status, customer_name, customer_company, customer_email, subtotal_cents, created_at, entered_in_qb, notes, order_items(count)')
+    .select('id, reference_code, status, customer_name, customer_company, customer_email, subtotal_cents, created_at, entered_in_qb, notes, applied_tier_code, order_items(count)')
     .order('created_at', { ascending: false })
 
   const orders = (data ?? []) as OrderRow[]

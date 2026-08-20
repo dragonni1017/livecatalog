@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getAdminClient } from '@/lib/supabase'
 import OrderStatusControls from '@/components/admin/OrderStatusControls'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
+import { tierLabel } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -183,6 +184,23 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
             <dd className="col-span-2 text-gray-900">{order.customer_company || '—'}</dd>
             <dt className="text-gray-500">Placed by (rep)</dt>
             <dd className="col-span-2 text-gray-900">{order.placed_by_rep || '—'}</dd>
+            <dt className="text-gray-500">Price tier</dt>
+            <dd className="col-span-2 text-gray-900">
+              {order.applied_tier_code ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                    {tierLabel(order.applied_tier_code)}
+                  </span>
+                  {order.applied_tier_discount_percent != null && order.applied_tier_discount_percent > 0 && (
+                    <span className="text-xs text-gray-500">
+                      ({order.applied_tier_discount_percent}% off)
+                    </span>
+                  )}
+                </span>
+              ) : (
+                '—'
+              )}
+            </dd>
             <dt className="text-gray-500">PO number</dt>
             <dd className="col-span-2 text-gray-900">{order.po_number || '—'}</dd>
           </dl>

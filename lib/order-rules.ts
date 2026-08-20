@@ -44,3 +44,11 @@ export function applyTierDiscount(cents: number, discountPercent: number): numbe
   if (!discountPercent) return cents
   return Math.round(cents * (1 - discountPercent / 100))
 }
+
+// price_tiers.code ('distribution_chain') -> display label ('Distribution Chain').
+export function tierLabel(code: string): string {
+  return code
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import OrderStatusBadge from '@/components/admin/OrderStatusBadge'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
+import { tierLabel } from '@/lib/order-rules'
 import type { OrderStatus } from '@/lib/types'
 
 export interface OrderRow {
@@ -17,6 +18,7 @@ export interface OrderRow {
   created_at: string
   entered_in_qb: boolean
   notes: string | null
+  applied_tier_code: string | null
   order_items: { count: number }[]
 }
 
@@ -130,6 +132,11 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                           </span>
                         )
                       })()}
+                      {o.applied_tier_code && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          {tierLabel(o.applied_tier_code)}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-800">
