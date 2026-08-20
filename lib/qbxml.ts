@@ -61,8 +61,15 @@ export function isNotFoundStatus(status: QbxmlStatus): boolean {
   return status.code === 500
 }
 
-export function buildCustomerAddRq(name: string): string {
-  return wrapQbxml(`<CustomerAddRq requestID="1"><CustomerAdd><Name>${xmlEscape(name)}</Name></CustomerAdd></CustomerAddRq>`)
+// Phone/Email are simple optional CustomerAdd children, in schema order
+// (Phone before Email) directly after Name -- there's no address data
+// anywhere in this app's order model to populate BillAddress/ShipAddress.
+export function buildCustomerAddRq(name: string, phone?: string | null, email?: string | null): string {
+  const phoneXml = phone ? `<Phone>${xmlEscape(phone)}</Phone>` : ''
+  const emailXml = email ? `<Email>${xmlEscape(email)}</Email>` : ''
+  return wrapQbxml(
+    `<CustomerAddRq requestID="1"><CustomerAdd><Name>${xmlEscape(name)}</Name>${phoneXml}${emailXml}</CustomerAdd></CustomerAddRq>`,
+  )
 }
 
 // Non-inventory part — no quantity/inventory tracking, just a sellable line

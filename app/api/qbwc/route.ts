@@ -200,11 +200,15 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   if (session.pending_request_kind === 'customer_add' && session.pending_order_id) {
     const { data: order } = await db
       .from('order_requests')
-      .select('customer_name, customer_company')
+      .select('customer_name, customer_company, customer_phone, customer_email')
       .eq('id', session.pending_order_id)
       .single()
     const qbName = (order?.customer_company || order?.customer_name || '').trim()
-    return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerAddRq(qbName)))
+    return simpleResult(
+      'sendRequestXML',
+      'sendRequestXMLResult',
+      xmlEscape(buildCustomerAddRq(qbName, order?.customer_phone, order?.customer_email)),
+    )
   }
   if (session.pending_request_kind === 'item_add' && session.pending_ref) {
     return simpleResult(

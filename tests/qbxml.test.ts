@@ -168,9 +168,19 @@ describe('isNotFoundStatus', () => {
 })
 
 describe('buildCustomerAddRq', () => {
-  it('wraps the name in a qbXML CustomerAddRq', () => {
+  it('wraps just the name in a qbXML CustomerAddRq when no phone/email given', () => {
     const xml = buildCustomerAddRq('QBWC Test 1')
     expect(xml).toContain('<CustomerAddRq requestID="1"><CustomerAdd><Name>QBWC Test 1</Name></CustomerAdd></CustomerAddRq>')
+  })
+
+  it('includes Phone and Email, in that order, when given', () => {
+    const xml = buildCustomerAddRq('QBWC Test 1', '555-1234', 'test@example.com')
+    expect(xml).toContain('<Name>QBWC Test 1</Name><Phone>555-1234</Phone><Email>test@example.com</Email>')
+  })
+
+  it('omits Phone/Email individually when null', () => {
+    expect(buildCustomerAddRq('X', null, 'e@x.com')).not.toContain('<Phone>')
+    expect(buildCustomerAddRq('X', '555-0000', null)).not.toContain('<Email>')
   })
 })
 
