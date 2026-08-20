@@ -45,26 +45,27 @@ export default function TierSwitcher({ tiers }: { tiers: PriceTier[] }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5">
-      <span className="hidden text-xs font-medium text-amber-800 sm:inline">Rep pricing:</span>
+    <div
+      className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-1"
+      title="Rep pricing"
+    >
       <select
         value={current ?? ''}
         onChange={handleChange}
-        className="rounded border border-amber-300 bg-white px-1.5 py-1 text-xs font-medium text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+        className="w-24 rounded border border-amber-300 bg-white px-1 py-0.5 text-xs font-medium text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
       >
         <option value="" disabled>
-          Select tier…
+          Tier…
         </option>
         {tiers.map((t) => (
           <option key={t.code} value={t.code}>
             {t.label}
-            {t.discount_percent > 0 ? ` (${t.discount_percent}% off)` : ''}
           </option>
         ))}
       </select>
       <Link
         href="/rep"
-        className="hidden text-xs text-amber-700 hover:text-amber-900 underline sm:inline"
+        className="hidden text-[10px] text-amber-700 hover:text-amber-900 underline lg:inline"
         title="Rep account"
       >
         {repEmail}
