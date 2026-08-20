@@ -72,6 +72,21 @@ export async function PATCH(request: NextRequest) {
       await notifyOrderStatusChange({ orderId: id, status: body.status, db })
     }
 
+    // Converting an order automatically queues it for QuickBooks Web
+    // Connector sync (app/api/qbwc/route.ts drains qb_sync_queue). The
+    // unique constraint on order_id + ON CONFLICT DO NOTHING makes this
+    // idempotent — re-saving "converted" on an already-queued order never
+    // creates a duplicate sync attempt. Best-effort: a failure here must
+    // never fail the status-change response itself.
+    if (hasStatus && body.status === 'converted') {
+      const { error: queueError } = await db.from('qb_sync_queue').insert({ order_id: id })
+      if (queueError && queueError.code !== '23505') {
+        console.error('[admin/orders PATCH] qb_sync_queue enqueue failed:', queueError.message)
+      } else if (!queueError) {
+        await logAudit({ action: 'order_qb_enqueued', entity_type: 'order', entity_id: id })
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[admin/orders PATCH] error:', err)

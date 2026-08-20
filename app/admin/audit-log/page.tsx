@@ -32,6 +32,7 @@ function ActionBadge({ action }: { action: string }) {
     stock_adjust: 'bg-blue-100 text-blue-700',
     order_status_change: 'bg-purple-100 text-purple-700',
     order_qb_toggle: 'bg-gray-100 text-gray-600',
+    order_qb_enqueued: 'bg-amber-100 text-amber-700',
   }
   const cls = styles[action] ?? 'bg-gray-100 text-gray-600'
   const label = action.replace(/_/g, ' ')
