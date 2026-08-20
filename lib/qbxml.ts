@@ -14,6 +14,10 @@
  *    keyed by email (our join key) — it's just populated via this
  *    name-based QuickBooks-side lookup.
  *  - QuickBooks item "Name" is assumed to equal our products.sku.
+ *  - Auto-created items (buildItemAddRq) post to a hardcoded Income Account
+ *    name (QB_INCOME_ACCOUNT_NAME in app/api/qbwc/route.ts) that must exist
+ *    in the target company file's Chart of Accounts — verify/update it
+ *    before pointing this at a different company file.
  */
 import { XMLParser } from 'fast-xml-parser'
 
@@ -45,6 +49,34 @@ export function buildCustomerQueryRq(name: string): string {
 
 export function buildItemQueryRq(sku: string): string {
   return wrapQbxml(`<ItemQueryRq requestID="1"><FullName>${xmlEscape(sku)}</FullName></ItemQueryRq>`)
+}
+
+// A name-filtered CustomerQueryRq/ItemQueryRq that finds nothing returns
+// statusCode 500 (statusSeverity "Warn"), not an empty success result — the
+// signal callers use to fall back to CustomerAddRq/ItemNonInventoryAddRq
+// instead of treating it as a real lookup failure.
+export function isNotFoundStatus(status: QbxmlStatus): boolean {
+  return status.code === 500
+}
+
+export function buildCustomerAddRq(name: string): string {
+  return wrapQbxml(`<CustomerAddRq requestID="1"><CustomerAdd><Name>${xmlEscape(name)}</Name></CustomerAdd></CustomerAddRq>`)
+}
+
+// Non-inventory part — no quantity/inventory tracking, just a sellable line
+// item. SalesAndPurchase/IncomeAccountRef is required for an item that will
+// appear on a Sales Order; incomeAccountName must match an existing Income
+// account in the QuickBooks company file's Chart of Accounts (varies per
+// company — passed in rather than hardcoded).
+export function buildItemAddRq(sku: string, incomeAccountName: string): string {
+  return wrapQbxml(`<ItemNonInventoryAddRq requestID="1">
+  <ItemNonInventoryAdd>
+    <Name>${xmlEscape(sku)}</Name>
+    <SalesAndPurchase>
+      <IncomeAccountRef><FullName>${xmlEscape(incomeAccountName)}</FullName></IncomeAccountRef>
+    </SalesAndPurchase>
+  </ItemNonInventoryAdd>
+</ItemNonInventoryAddRq>`)
 }
 
 export interface SalesOrderLine {
@@ -137,6 +169,20 @@ export function parseItemQueryRs(xml: string): QbxmlLookupResult {
   const retRaw = retKey ? rs[retKey] : undefined
   const ret = Array.isArray(retRaw) ? retRaw[0] : retRaw
   return { status, listId: ret?.ListID, fullName: ret?.FullName }
+}
+
+export function parseCustomerAddRs(xml: string): QbxmlLookupResult {
+  const rs = firstRsNode(xml, 'CustomerAddRs')
+  const status = readStatus(rs)
+  if (!status.ok) return { status }
+  return { status, listId: rs?.CustomerRet?.ListID, fullName: rs?.CustomerRet?.FullName }
+}
+
+export function parseItemAddRs(xml: string): QbxmlLookupResult {
+  const rs = firstRsNode(xml, 'ItemNonInventoryAddRs')
+  const status = readStatus(rs)
+  if (!status.ok) return { status }
+  return { status, listId: rs?.ItemNonInventoryRet?.ListID, fullName: rs?.ItemNonInventoryRet?.FullName }
 }
 
 export interface SalesOrderAddResult {

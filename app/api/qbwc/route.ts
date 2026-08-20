@@ -3,15 +3,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { XMLParser } from 'fast-xml-parser'
 import { getAdminClient } from '@/lib/supabase'
 import {
+  buildCustomerAddRq,
   buildCustomerQueryRq,
+  buildItemAddRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
+  isNotFoundStatus,
+  parseCustomerAddRs,
   parseCustomerQueryRs,
+  parseItemAddRs,
   parseItemQueryRs,
   parseSalesOrderAddRs,
   xmlEscape,
   type SalesOrderLine,
 } from '@/lib/qbxml'
+
+// Income account new auto-created items post to (SalesAndPurchase/
+// IncomeAccountRef in buildItemAddRq) — must exactly match an account name
+// in the target QuickBooks company file's Chart of Accounts. Update this if
+// pointing at a company file where that account is named differently.
+const QB_INCOME_ACCOUNT_NAME = 'Sales Orders'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,7 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 interface QbSession {
   ticket: string
-  pending_request_kind: 'customer_query' | 'item_query' | 'sales_order_add' | null
+  pending_request_kind: 'customer_query' | 'customer_add' | 'item_query' | 'item_add' | 'sales_order_add' | null
   pending_order_id: string | null
   pending_ref: string | null
 }
@@ -179,6 +190,27 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   const ticket = String(params.ticket ?? '')
   const session = await getSession(db, ticket)
   if (!session) return simpleResult('sendRequestXML', 'sendRequestXMLResult', '')
+
+  // A prior query in this same lookup round found no match — send the
+  // corresponding Add request instead of re-running the queue/link
+  // resolution below (the queue row stays 'pending' throughout this whole
+  // lookup phase, so re-entering that logic here would just re-query).
+  if (session.pending_request_kind === 'customer_add' && session.pending_order_id) {
+    const { data: order } = await db
+      .from('order_requests')
+      .select('customer_name, customer_company')
+      .eq('id', session.pending_order_id)
+      .single()
+    const qbName = (order?.customer_company || order?.customer_name || '').trim()
+    return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerAddRq(qbName)))
+  }
+  if (session.pending_request_kind === 'item_add' && session.pending_ref) {
+    return simpleResult(
+      'sendRequestXML',
+      'sendRequestXMLResult',
+      xmlEscape(buildItemAddRq(session.pending_ref, QB_INCOME_ACCOUNT_NAME)),
+    )
+  }
 
   const { data: queueRow } = await db
     .from('qb_sync_queue')
@@ -270,6 +302,11 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
   const responseXml = String(params.response ?? '')
   const session = await getSession(db, ticket)
 
+  // Set false only when transitioning into an Add state — that leaves the
+  // session's pending_order_id/pending_ref in place so the next
+  // sendRequestXML call (see the short-circuit above) knows what to add.
+  let shouldClearPending = true
+
   if (session?.pending_request_kind === 'customer_query' && session.pending_order_id && session.pending_ref) {
     const result = parseCustomerQueryRs(responseXml)
     if (result.status.ok && result.listId) {
@@ -280,8 +317,24 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
         last_synced_at: new Date().toISOString(),
         last_sync_source: 'qbwc_pull',
       })
+    } else if (isNotFoundStatus(result.status)) {
+      await setPending(db, ticket, 'customer_add', session.pending_order_id, session.pending_ref)
+      shouldClearPending = false
     } else {
       await markQueueError(db, session.pending_order_id, `Customer lookup failed: ${result.status.message || 'no match in QuickBooks'}`, responseXml)
+    }
+  } else if (session?.pending_request_kind === 'customer_add' && session.pending_order_id && session.pending_ref) {
+    const result = parseCustomerAddRs(responseXml)
+    if (result.status.ok && result.listId) {
+      await db.from('qb_customer_links').upsert({
+        email: session.pending_ref,
+        qb_customer_list_id: result.listId,
+        qb_customer_full_name: result.fullName ?? null,
+        last_synced_at: new Date().toISOString(),
+        last_sync_source: 'qbwc_pull',
+      })
+    } else {
+      await markQueueError(db, session.pending_order_id, `Customer creation failed: ${result.status.message || 'unknown error'}`, responseXml)
     }
   } else if (session?.pending_request_kind === 'item_query' && session.pending_order_id && session.pending_ref) {
     const result = parseItemQueryRs(responseXml)
@@ -293,8 +346,24 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
         last_synced_at: new Date().toISOString(),
         last_sync_source: 'qbwc_pull',
       })
+    } else if (isNotFoundStatus(result.status)) {
+      await setPending(db, ticket, 'item_add', session.pending_order_id, session.pending_ref)
+      shouldClearPending = false
     } else {
       await markQueueError(db, session.pending_order_id, `Item lookup failed for SKU ${session.pending_ref}: ${result.status.message || 'no match in QuickBooks'}`, responseXml)
+    }
+  } else if (session?.pending_request_kind === 'item_add' && session.pending_order_id && session.pending_ref) {
+    const result = parseItemAddRs(responseXml)
+    if (result.status.ok && result.listId) {
+      await db.from('qb_item_links').upsert({
+        sku: session.pending_ref,
+        qb_item_list_id: result.listId,
+        qb_item_full_name: result.fullName ?? null,
+        last_synced_at: new Date().toISOString(),
+        last_sync_source: 'qbwc_pull',
+      })
+    } else {
+      await markQueueError(db, session.pending_order_id, `Item creation failed for SKU ${session.pending_ref}: ${result.status.message || 'unknown error'}`, responseXml)
     }
   } else if (session?.pending_request_kind === 'sales_order_add' && session.pending_order_id) {
     const result = parseSalesOrderAddRs(responseXml)
@@ -312,7 +381,7 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
     }
   }
 
-  if (session) await clearPending(db, ticket)
+  if (session && shouldClearPending) await clearPending(db, ticket)
 
   // Rough progress estimate for QBWC's UI only — not authoritative. The
   // session only actually ends when sendRequestXML next returns "".

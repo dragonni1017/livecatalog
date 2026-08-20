@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildCustomerAddRq,
   buildCustomerQueryRq,
+  buildItemAddRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
+  isNotFoundStatus,
+  parseCustomerAddRs,
   parseCustomerQueryRs,
+  parseItemAddRs,
   parseItemQueryRs,
   parseSalesOrderAddRs,
   xmlEscape,
@@ -117,6 +122,68 @@ describe('parseItemQueryRs', () => {
     expect(result.status.ok).toBe(true)
     expect(result.listId).toBe('50000001-1111111111')
     expect(result.fullName).toBe('ABC-123')
+  })
+})
+
+describe('isNotFoundStatus', () => {
+  it('is true only for statusCode 500 (qbXML "no match" on a name-filtered query)', () => {
+    expect(isNotFoundStatus({ code: 500, severity: 'Warn', message: '', ok: false })).toBe(true)
+    expect(isNotFoundStatus({ code: 0, severity: 'Info', message: '', ok: true })).toBe(false)
+    expect(isNotFoundStatus({ code: 3140, severity: 'Error', message: '', ok: false })).toBe(false)
+  })
+})
+
+describe('buildCustomerAddRq', () => {
+  it('wraps the name in a qbXML CustomerAddRq', () => {
+    const xml = buildCustomerAddRq('QBWC Test 1')
+    expect(xml).toContain('<CustomerAddRq requestID="1"><CustomerAdd><Name>QBWC Test 1</Name></CustomerAdd></CustomerAddRq>')
+  })
+})
+
+describe('buildItemAddRq', () => {
+  it('builds an ItemNonInventoryAddRq with the given SKU as Name and the income account', () => {
+    const xml = buildItemAddRq('3D801155', 'Sales Orders')
+    expect(xml).toContain('<ItemNonInventoryAddRq requestID="1">')
+    expect(xml).toContain('<Name>3D801155</Name>')
+    expect(xml).toContain('<IncomeAccountRef><FullName>Sales Orders</FullName></IncomeAccountRef>')
+  })
+})
+
+describe('parseCustomerAddRs', () => {
+  it('extracts ListID and FullName on success', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <CustomerAddRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <CustomerRet><ListID>80000099-1111111111</ListID><FullName>QBWC Test 1</FullName></CustomerRet>
+      </CustomerAddRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseCustomerAddRs(xml)
+    expect(result.status.ok).toBe(true)
+    expect(result.listId).toBe('80000099-1111111111')
+    expect(result.fullName).toBe('QBWC Test 1')
+  })
+})
+
+describe('parseItemAddRs', () => {
+  it('extracts ListID and FullName on success', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemNonInventoryAddRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <ItemNonInventoryRet><ListID>50000099-2222222222</ListID><FullName>3D801155</FullName></ItemNonInventoryRet>
+      </ItemNonInventoryAddRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseItemAddRs(xml)
+    expect(result.status.ok).toBe(true)
+    expect(result.listId).toBe('50000099-2222222222')
+    expect(result.fullName).toBe('3D801155')
+  })
+
+  it('reports failure when the account reference is invalid', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemNonInventoryAddRs requestID="1" statusCode="3210" statusSeverity="Error" statusMessage="Invalid account">
+      </ItemNonInventoryAddRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseItemAddRs(xml)
+    expect(result.status.ok).toBe(false)
+    expect(result.listId).toBeUndefined()
   })
 })
 
