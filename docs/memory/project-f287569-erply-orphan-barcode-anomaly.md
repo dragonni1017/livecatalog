@@ -1,6 +1,6 @@
 ---
 name: project-f287569-erply-orphan-barcode-anomaly
-description: F287569 doesn't exist in Erply under any identifier; its Supabase barcode belongs to a different, unrelated Erply product (D701113) -- needs a physical check, not a guessed fix
+description: F287569 doesn't exist in Erply under any identifier; its Supabase barcode is a duplicate of a different, unrelated product's (D701113) -- the bad data is in Supabase itself, needs a physical check not a guessed fix
 type: project
 ---
 
@@ -18,13 +18,27 @@ with leading-zero variants), by product-name search
 product in Erply's "Ribbons" group (productGroupID 47) by name. F287569
 does not exist in Erply under any identifier.
 
-**The barcode collision:** Supabase's F287569 row has barcode
-`737879096895`. Looking that barcode up in Erply (`code2` field) returns
-a completely unrelated product: **D701113, "3mm & 8mm Beige DIY Pearl
-Beads."** Not a shared-family/variant situation like the other 56
+**The barcode collision is inside Supabase itself, confirmed 2026-08-20
+— not an Erply-side issue.** Queried Supabase directly: two distinct
+rows share barcode `737879096895` --
+
+- `D701113` — "3mm & 8mm Beige DIY Pearl Beads"
+- `F287569` — "White Heart-Pattern Pull Flower Ribbon with Gold Edge"
+
+Erply's D701113 record correctly carries that same barcode, which means
+**F287569 is the one with the wrong barcode** (almost certainly
+copy-pasted from D701113 at some point), not a lookup mismatch on the
+Erply side. Not a shared-family/variant situation like the other 56
 documented cross-family collisions in
-[[reference-barcode-cross-family-collisions]] — different product
-category entirely, no plausible relation.
+[[reference-barcode-cross-family-collisions]] — completely unrelated
+product category, no plausible relation between the two items.
+
+F287569's other fields (checked live): `id: prod-02396`, price $5.50,
+stock 999, `is_active: true`, **`manually_hidden: true`** (not currently
+customer-facing on livecatalog), category "Bows", has a real photo
+(`F287569.webp`), `created_at` backfilled to 2026-08-19 (the
+products.created_at migration date, not a real creation date — see
+[[project-erply-sync-category-safety]]).
 
 **Best read of what happened:** F287569 looks like a genuine sibling of
 F287570 (already correctly in Erply: "White & Gold Heart-Pattern Pull
@@ -32,9 +46,9 @@ Flower Ribbon with Gold Edge," barcode `737879096901` — 6 higher than
 F287569's, consistent with sequential SKU/barcode assignment within a
 product family). F287568 also doesn't exist in Erply. Most likely:
 F287569 was created in Supabase/the catalog but never actually imported
-into Erply, and its barcode field was mistakenly filled with a value
-that belongs to an unrelated existing Erply product (D701113) rather
-than its own true barcode.
+into Erply, and at some point its barcode field was mistakenly set to a
+value that actually belongs to unrelated product D701113, rather than
+its own true barcode.
 
 **Not fixed — needs a physical/supplier check**, same category as the
 6 held-back duplicate-barcode price-mismatch candidates and the 56
