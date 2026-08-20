@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/auth-server'
 import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation'
 import { notifyReps, notifyCustomer } from '@/lib/order-emails'
 import { applyTierDiscount } from '@/lib/order-rules'
 import { buildLineItems, insertOrder } from '@/lib/order-submission'
+import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,13 +45,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── 2b. Apply customer discount if on file ───────────────────────────────
-    const { data: customer } = await db
-      .from('customers')
-      .select('discount_percent')
-      .eq('email', contact.email.trim().toLowerCase())
-      .maybeSingle()
-    const discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
+    // ── 2b. Apply pricing: a real rep's selected tier overrides any customer
+    // file discount for this order (never stacked) — mirrors the header
+    // TierSwitcher's display-only cookie, but re-verified here against the
+    // actual session and price_tiers table, never trusted from the client.
+    let discountPct = 0
+    let repUserId: string | null = null
+    let appliedTierCode: string | null = null
+
+    const sessionUser = await getSessionUser()
+    const isRep = sessionUser?.app_metadata?.role === 'rep'
+    if (isRep) {
+      const tierCode = request.cookies.get(TIER_COOKIE)?.value
+      if (tierCode) {
+        const { data: tier } = await db
+          .from('price_tiers')
+          .select('code, discount_percent, active')
+          .eq('code', tierCode)
+          .maybeSingle()
+        if (tier?.active) {
+          discountPct = Number(tier.discount_percent)
+          repUserId = sessionUser!.id
+          appliedTierCode = tier.code
+          // Attribution comes from the verified session, not client input.
+          contact.placedByRep = sessionUser!.email ?? contact.placedByRep
+        }
+      }
+    }
+
+    if (!appliedTierCode) {
+      const { data: customer } = await db
+        .from('customers')
+        .select('discount_percent')
+        .eq('email', contact.email.trim().toLowerCase())
+        .maybeSingle()
+      discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
+    }
+
     if (discountPct > 0) {
       for (const li of lineItems) {
         li.line_total_cents = applyTierDiscount(li.line_total_cents, discountPct)
@@ -65,7 +97,15 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 4. Atomically insert order + items via RPC (Django atomic() pattern) ─
-    const inserted = await insertOrder({ db, contact, lineItems, subtotalCents })
+    const inserted = await insertOrder({
+      db,
+      contact,
+      lineItems,
+      subtotalCents,
+      repUserId,
+      appliedTierCode,
+      appliedTierDiscountPercent: appliedTierCode ? discountPct : null,
+    })
     if (!inserted.ok) {
       return NextResponse.json({ error: inserted.error }, { status: inserted.status })
     }

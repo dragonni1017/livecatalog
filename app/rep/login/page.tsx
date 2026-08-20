@@ -32,7 +32,7 @@ function LoginForm() {
       })
 
       if (res.ok) {
-        router.push('/rep')
+        router.push('/')
         router.refresh()
         return
       }

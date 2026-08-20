@@ -3,13 +3,11 @@ import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
+import { getActivePriceTiers } from '@/lib/rep-tier'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
 import FavoriteButton from './FavoriteButton'
-
-function formatPrice(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`
-}
+import ProductCardPrice from './ProductCardPrice'
 
 interface ProductCardProps {
   product: Product
@@ -20,6 +18,9 @@ export default async function ProductCard({ product }: ProductCardProps) {
   const unitsPerCase = extractUnitsPerCase(product.name)
   const displayName = stripCsSuffix(product.name)
   const settings = await getDisplaySettings()
+  // Plain DB read (no cookies()/headers()) — safe under ISR. Which tier (if
+  // any) applies is resolved client-side; see ProductCardPrice/AddToCartButton.
+  const tiers = await getActivePriceTiers()
   const favoriteItem = {
     id: product.id,
     sku: product.sku,
@@ -90,9 +91,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
         <div className="mt-auto flex items-center justify-between pt-2">
           <div>
             {settings.show_price_listing && (
-              <span className="text-base font-bold text-gray-900">
-                {formatPrice(product.price_cents)}
-              </span>
+              <ProductCardPrice priceCents={product.price_cents} tiers={tiers} />
             )}
           </div>
           {settings.show_stock_listing && <StockBadge qty={product.stock_qty} />}
@@ -108,6 +107,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
               stockQty: product.stock_qty,
             }}
             unitsPerCase={unitsPerCase}
+            tiers={tiers}
           />
         </div>
       </div>

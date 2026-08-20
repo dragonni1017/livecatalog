@@ -1,6 +1,6 @@
 ---
 name: project-rep-price-tier-and-qbwc-plan
-description: 2026-08-20 -- Feature 2 (rep price-tier ordering) built + verified, real rep account sale@ly-usa.com provisioned with working login/2FA; Feature 1 (QBWC) schema/qbXML/SOAP endpoint/.qwc file generator all built + verified; only remaining work is QBWC env vars and real hardware
+description: 2026-08-20 -- Feature 2 REARCHITECTED same day: reps now browse the regular storefront with a header tier dropdown instead of a separate order-builder (which was deleted) -- built + verified end-to-end incl. a real order through the shared public /cart; Feature 1 (QBWC) schema/qbXML/SOAP endpoint/.qwc file generator all built + verified, only QBWC env vars + real hardware remain
 type: project
 ---
 
@@ -112,14 +112,95 @@ app was scanned in this session) — landed on `/rep` as
 "Signed in as sale@ly-usa.com". Login + 2FA are both confirmed genuinely
 working end-to-end, not just built.
 
-**Still open for Feature 2:**
-- No real order has been placed through `/rep/order` by the real
-  `sale@ly-usa.com` account yet — only login/2FA were verified just now.
-  The disposable-account order-placement test from earlier in this doc is
-  still the only proof the submit path works, on a since-deleted account.
+**Still open for Feature 2 (as of the original order-builder design):**
 - `customers` table RLS is still off entirely (pre-existing gap, migration
   0012) — flagged in the plan as an optional independent fix, deliberately
   not bundled into this work.
+
+---
+
+**REARCHITECTED same day, 2026-08-20, after real-account testing.** Dragon
+asked for a different UX: instead of a separate `/rep/order` page with
+manual SKU entry, reps should browse the *regular* public storefront (same
+product grid, category pages, product detail pages every shopper sees),
+with a tier dropdown in the header that changes displayed/charged prices
+live. Two decisions locked in when asked:
+- **Replaces** (not sits alongside) the old `/rep/order` quick-SKU tool —
+  that page, `components/rep/RepOrderBuilder.tsx`, `lib/rep-cart-context.tsx`,
+  and `app/rep/api/orders/route.ts` are all **deleted**.
+- Reps use the **same** `/cart` page and `AddToCartButton` as public
+  shoppers — `app/api/orders/route.ts` (the one public order-submit route)
+  became tier-aware itself, rather than keeping a second rep-only endpoint.
+
+**Critical design constraint discovered mid-build**: the product detail
+page has `export const revalidate = 600` (10-min ISR) and `ProductCard` is
+rendered on every catalog page — reading `cookies()`/`getSessionUser()`
+anywhere in that server-rendered tree (which was the first, wrong instinct)
+forces the **entire** route dynamic for **every visitor**, not just reps,
+since a dynamic API used in a layout/page opts the whole request out of
+static/ISR rendering in the Next.js App Router. Fixed by moving ALL
+rep-detection and tier-selection logic to the **client**:
+- `TierSwitcher` checks the session itself via `getAuthClient()` (same
+  pattern as `AccountNav`), not a server-side check in the layout — renders
+  nothing until it confirms `role==='rep'`.
+- The tier choice lives in a plain (non-httpOnly) cookie (`rep_tier`,
+  `lib/rep-tier-shared.ts`'s `TIER_COOKIE`), read **client-side only** by
+  `lib/use-tier-discount.ts`'s `useTierDiscount()` hook — used by
+  `ProductCardPrice`, `ProductDetailPrice`, and `AddToCartButton` (now
+  accepts an optional `tiers` prop).
+- Changing the tier dispatches a `window` custom event
+  (`TIER_CHANGE_EVENT`) rather than relying on `router.refresh()` — every
+  price on the page updates instantly, no server round trip.
+- `lib/rep-tier.ts`'s `getActivePriceTiers()` (a plain DB read, no
+  cookies()) is still called server-side in the layout/ProductCard/detail
+  page to fetch the tiers *list* — that's fine under ISR, since it's not a
+  dynamic API, just data.
+- The actual charged price is **still fully server-verified** in
+  `app/api/orders/route.ts`: reads `request.cookies.get('rep_tier')`
+  (Route Handlers are always dynamic already, no ISR concern there),
+  confirms a real `role==='rep'` session, looks the tier's discount up
+  fresh from `price_tiers`, and only then applies it — a forged cookie on
+  a non-rep browser can only mislead what that browser displays to itself,
+  never what an order is actually priced at.
+
+**Verified end-to-end 2026-08-20 in the browser** using the real
+`sale@ly-usa.com` account (password-only this time, 2FA still active since
+Dragon hadn't removed `REP_TOTP_SECRET` yet — a fresh TOTP code was
+computed in-session from the known secret same as before):
+- Anonymous/logged-out view: unchanged — no dropdown, base prices. Confirms
+  the client-side-only design doesn't affect non-rep traffic.
+- Logged in as rep → redirected straight to `/` (not `/rep` anymore).
+  Header shows "Rep pricing: Select tier…" + the rep's email (links to
+  `/rep`, now just an account/2FA-setup/sign-out page, not the order tool).
+- Selected Wholesale → **every product card's price updated instantly**
+  (e.g. $2.50→$1.25 with the original struck through), confirmed exactly
+  50% off across multiple products.
+- Product detail page (`/product/prod-00005`) showed the same tier-adjusted
+  price + strikethrough. (No live product currently has `volume_tiers` set,
+  so the volume-tier-table branch of `ProductDetailPrice` couldn't be
+  exercised live — code-reviewed instead, mirrors the already-verified
+  single-price branch closely.)
+- Added a tier-priced item to the **real public `/cart`**, submitted a real
+  order through it. **Confirmed via direct SQL** (not the UI's success
+  message): `subtotal_cents=175` (exactly 50% of $3.50),
+  `placed_by_rep='sale@ly-usa.com'` (server-overrode the blank form field
+  from the verified session), `rep_user_id` correctly linked,
+  `applied_tier_code='wholesale'`, `applied_tier_discount_percent=50.00`.
+  Test order deleted after.
+- `npm run build` production build completed clean with no client/server
+  boundary errors; confirmed via grep that `cookies()`/`next/headers` is
+  never invoked from any ISR-cached catalog file, only from
+  `app/api/orders/route.ts` (already `force-dynamic`).
+
+**Still open for Feature 2 (current design):**
+- `customers` table RLS is still off (same pre-existing gap as before).
+- The product-detail volume-tier-pricing branch is code-reviewed but not
+  live-verified (no product currently has `volume_tiers` set).
+- Dragon asked separately whether 2FA could be turned off (not removed) —
+  answer given: unset `REP_TOTP_SECRET` in `.env.local` + Vercel, the code
+  already falls back to password-only automatically when that env var is
+  absent, same toggle mechanism as `ADMIN_TOTP_SECRET`. Not yet done as of
+  this note (2FA was still active during the verification above).
 
 **Feature 1 (QBWC) — core built and verified 2026-08-20, real hardware
 still pending.** Built in this session, scoped deliberately to "everything

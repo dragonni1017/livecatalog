@@ -4,10 +4,11 @@ import { getAdminClient } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// Placeholder landing page for the /rep role — confirms login + the
-// price_tiers schema end-to-end. The actual order-builder (tier selection,
-// live price preview, submit) is the next phase of this feature; see
-// docs/memory (or the approved plan) for the full build sequence.
+// Rep account page — 2FA setup, sign out, and a reference table of the
+// tiers selectable from the header TierSwitcher on every catalog page.
+// Ordering itself happens on the regular storefront (reps browse the same
+// pages as everyone else, with a tier dropdown in the header changing
+// prices shown/charged), not on a separate rep-only page.
 export default async function RepHomePage() {
   const user = await getSessionUser()
   const db = getAdminClient()
@@ -21,15 +22,15 @@ export default async function RepHomePage() {
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Rep Portal</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Rep Account</h1>
             <p className="text-sm text-gray-500 mt-1">Signed in as {user?.email}</p>
           </div>
           <div className="flex items-center gap-4">
             <Link
-              href="/rep/order"
+              href="/"
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
             >
-              New order
+              Browse catalog
             </Link>
             <Link
               href="/rep/2fa-setup"
@@ -49,7 +50,7 @@ export default async function RepHomePage() {
         <div className="rounded-xl bg-white border border-gray-200 shadow-sm p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-1">Price tiers</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Reference for the tiers available in the order builder.
+            Selectable from the &quot;Rep pricing&quot; dropdown in the header while browsing.
           </p>
           <table className="w-full text-sm">
             <thead>

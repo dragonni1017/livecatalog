@@ -4,10 +4,17 @@ import SearchInput from '@/components/catalog/SearchInput'
 import CartIndicator from '@/components/catalog/CartIndicator'
 import FavoritesLink from '@/components/catalog/FavoritesLink'
 import AccountNav from '@/components/catalog/AccountNav'
+import TierSwitcher from '@/components/catalog/TierSwitcher'
 import Footer from '@/components/catalog/Footer'
 import { FavoritesProvider } from '@/lib/favorites-context'
+import { getActivePriceTiers } from '@/lib/rep-tier'
 
-export default function CatalogLayout({ children }: { children: React.ReactNode }) {
+// Fetching tiers here (a plain DB read, no cookies()/headers()) is safe for
+// ISR/static rendering — TierSwitcher decides client-side whether to show
+// itself at all, so this layout never needs to know if the visitor is a rep.
+export default async function CatalogLayout({ children }: { children: React.ReactNode }) {
+  const tiers = await getActivePriceTiers()
+
   return (
     <FavoritesProvider>
     <div className="min-h-screen bg-gray-50">
@@ -64,6 +71,7 @@ export default function CatalogLayout({ children }: { children: React.ReactNode 
               <p className="text-xs font-medium text-gray-900">626-552-4120</p>
               <p className="text-xs text-gray-400">www.ly-usa.com</p>
             </div>
+            <TierSwitcher tiers={tiers} />
             <FavoritesLink />
             <Link
               href="/quick-order"

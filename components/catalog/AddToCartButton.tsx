@@ -2,7 +2,10 @@
 
 import { useState } from 'react'
 import { useCart } from '@/lib/cart-context'
+import { useTierDiscount } from '@/lib/use-tier-discount'
+import { applyTierDiscount } from '@/lib/order-rules'
 import type { CartItem } from '@/lib/types'
+import type { PriceTier } from '@/lib/rep-tier-shared'
 
 interface AddToCartButtonProps {
   product: Omit<CartItem, 'qty'> & { stockQty: number }
@@ -13,10 +16,17 @@ interface AddToCartButtonProps {
   // "cs.144"). When set and stock covers at least one full case, shows a
   // "+1 case" quick-add shortcut next to the stepper.
   unitsPerCase?: number
+  // Active price tiers, when known — if a rep has one selected (via the
+  // header TierSwitcher), the tier discount is applied to product.priceCents
+  // before it's added to the cart, same as what's shown on the page. Omit
+  // entirely on pages with no tier concept — behaves exactly as before.
+  tiers?: PriceTier[]
 }
 
-export default function AddToCartButton({ product, variant = 'card', unitsPerCase }: AddToCartButtonProps) {
+export default function AddToCartButton({ product, variant = 'card', unitsPerCase, tiers }: AddToCartButtonProps) {
   const { addItem } = useCart()
+  const discountPercent = useTierDiscount(tiers ?? [])
+  const effectivePriceCents = applyTierDiscount(product.priceCents, discountPercent)
   const [qty, setQty] = useState(1)
   const [justAdded, setJustAdded] = useState(false)
   const outOfStock = product.stockQty <= 0
@@ -43,7 +53,7 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
         productId: product.productId,
         sku: product.sku,
         name: product.name,
-        priceCents: product.priceCents,
+        priceCents: effectivePriceCents,
         imageUrl: product.imageUrl,
       },
       qty,
@@ -60,7 +70,7 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
         productId: product.productId,
         sku: product.sku,
         name: product.name,
-        priceCents: product.priceCents,
+        priceCents: effectivePriceCents,
         imageUrl: product.imageUrl,
       },
       unitsPerCase,

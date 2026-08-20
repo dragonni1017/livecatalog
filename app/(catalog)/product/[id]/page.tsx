@@ -7,11 +7,13 @@ import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
+import { getActivePriceTiers } from '@/lib/rep-tier'
 import StockBadge from '@/components/catalog/StockBadge'
 import Barcode from '@/components/catalog/Barcode'
 import AddToCartButton from '@/components/catalog/AddToCartButton'
 import FavoriteButton from '@/components/catalog/FavoriteButton'
 import ProductCard from '@/components/catalog/ProductCard'
+import ProductDetailPrice from '@/components/catalog/ProductDetailPrice'
 import TrackView from '@/components/catalog/TrackView'
 import BackInStockForm from '@/components/catalog/BackInStockForm'
 import ImageGallery from '@/components/catalog/ImageGallery'
@@ -72,6 +74,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const settings = await getDisplaySettings()
   const unitsPerCase = extractUnitsPerCase(product.name)
   const displayName = stripCsSuffix(product.name)
+  // Plain DB read (no cookies()/headers()) — safe under this page's 10-min
+  // ISR cache. Which tier (if any) applies is resolved client-side; see
+  // ProductDetailPrice/AddToCartButton.
+  const tiers = await getActivePriceTiers()
 
   // "More in this category" — a few other in-catalog products from the same
   // category, so a product page isn't a dead end.
@@ -194,29 +200,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             )}
 
             {settings.show_price_detail && (
-              product.volume_tiers && product.volume_tiers.length > 0 ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Volume pricing</p>
-                  <table className="w-full text-sm">
-                    <tbody>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-1.5 text-gray-500">1+ units</td>
-                        <td className="py-1.5 text-right font-semibold text-gray-900">{formatPrice(product.price_cents)}</td>
-                      </tr>
-                      {[...product.volume_tiers]
-                        .sort((a, b) => a.min_qty - b.min_qty)
-                        .map((tier) => (
-                          <tr key={tier.min_qty} className="border-b border-gray-100 bg-green-50">
-                            <td className="py-1.5 font-medium text-green-800">{tier.min_qty}+ units</td>
-                            <td className="py-1.5 text-right font-bold text-green-800">{formatPrice(tier.price_cents)}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-3xl font-bold text-gray-900">{formatPrice(product.price_cents)}</p>
-              )
+              <ProductDetailPrice priceCents={product.price_cents} volumeTiers={product.volume_tiers} tiers={tiers} />
             )}
 
             {settings.show_stock_detail && (
@@ -243,6 +227,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 stockQty: product.stock_qty,
               }}
               unitsPerCase={unitsPerCase}
+              tiers={tiers}
             />
 
             <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
