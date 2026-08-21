@@ -25,7 +25,17 @@ export function useTierDiscount(tiers: PriceTier[]): number {
     }
     sync()
     window.addEventListener(TIER_CHANGE_EVENT, sync)
-    return () => window.removeEventListener(TIER_CHANGE_EVENT, sync)
+    // Also re-sync on pageshow (fires on bfcache restores, e.g. pressing
+    // Back after signing out) — this hook has no session check of its own
+    // (see the comment above), so it depends entirely on the cookie being
+    // current. A mount-only effect would keep serving whatever
+    // discountPercent it computed before a bfcache restore even after the
+    // cookie was cleared server-side on logout.
+    window.addEventListener('pageshow', sync)
+    return () => {
+      window.removeEventListener(TIER_CHANGE_EVENT, sync)
+      window.removeEventListener('pageshow', sync)
+    }
   }, [tiers])
 
   return discountPercent

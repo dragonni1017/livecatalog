@@ -23,16 +23,32 @@ export default function TierSwitcher({ tiers }: { tiers: PriceTier[] }) {
   const [current, setCurrent] = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = getAuthClient()
-    supabase.auth.getSession().then(({ data }) => {
-      const isRep = data.session?.user.app_metadata?.role === 'rep'
-      setRepEmail(isRep ? (data.session!.user.email ?? '') : null)
-    })
-    // One-time hydration from an external store (cookies can't be read on
-    // the server), not a reactive setState loop — same pattern as
-    // lib/cart-context.tsx's initial localStorage read.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrent(readTierCookie())
+    function checkSession() {
+      const supabase = getAuthClient()
+      supabase.auth.getSession().then(({ data }) => {
+        const isRep = data.session?.user.app_metadata?.role === 'rep'
+        setRepEmail(isRep ? (data.session!.user.email ?? '') : null)
+        setCurrent(readTierCookie())
+        if (!isRep) {
+          // Belt-and-suspenders: the logout route already clears this
+          // cookie server-side, but if this component is still mounted
+          // from before sign-out (see the pageshow listener below), clear
+          // it here too so useTierDiscount() stops applying a stale tier
+          // to prices immediately rather than waiting on its own re-sync.
+          document.cookie = `${TIER_COOKIE}=; path=/; max-age=0`
+          window.dispatchEvent(new Event(TIER_CHANGE_EVENT))
+        }
+      })
+    }
+    checkSession()
+    // Next.js's App Router persists a shared layout's component tree across
+    // client-side and back/forward navigation instead of remounting it, so
+    // a plain mount-only effect never re-checks the session after sign-out
+    // if this component survives that navigation. `pageshow` fires on a
+    // fresh load *and* on a bfcache restore (e.g. pressing Back after
+    // logging out), which a mount effect alone would miss.
+    window.addEventListener('pageshow', checkSession)
+    return () => window.removeEventListener('pageshow', checkSession)
   }, [])
 
   if (!repEmail) return null

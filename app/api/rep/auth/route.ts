@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { verifyTotp } from '@/lib/totp'
+import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 
 function makeSupabase(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return createServerClient(
@@ -75,7 +76,16 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies()
     const supabase = makeSupabase(cookieStore)
     await supabase.auth.signOut()
-    return NextResponse.redirect(new URL('/rep/login', request.url), { status: 303 })
+    const response = NextResponse.redirect(new URL('/rep/login', request.url), { status: 303 })
+    // The tier cookie is plain (non-httpOnly, set client-side by
+    // TierSwitcher) and outlives the Supabase session by design (30 days,
+    // so a rep doesn't re-pick their tier every visit) — signOut() above
+    // never touches it. Without clearing it here explicitly, a signed-out
+    // browser keeps applying that tier's discount to every visitor on it
+    // (useTierDiscount() reads the cookie unconditionally, no session
+    // check) until the cookie expires on its own.
+    response.cookies.set(TIER_COOKIE, '', { path: '/', maxAge: 0 })
+    return response
   }
   return NextResponse.redirect(new URL('/rep', request.url), { status: 303 })
 }
