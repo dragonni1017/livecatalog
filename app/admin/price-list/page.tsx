@@ -29,7 +29,7 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
   for (let from = 0; ; from += PAGE) {
     let q = supabase
       .from('products')
-      .select('*, category:categories(*)')
+      .select('*, category:categories!products_category_id_fkey(*)')
       .eq('is_active', true)
       .eq('manually_hidden', false)
     if (activeCat) q = q.eq('category_id', activeCat.id)

@@ -39,7 +39,7 @@ export default async function AdminProductsPage({
 
   let query = db
     .from('products')
-    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories(id, name)')
+    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories!products_category_id_fkey(id, name)')
     .order('name')
     .limit(10000)
 

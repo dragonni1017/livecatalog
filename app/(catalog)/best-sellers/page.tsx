@@ -39,7 +39,7 @@ export default async function BestSellersPage() {
   if (topIds.length > 0) {
     const { data } = await db
       .from('products')
-      .select('id, sku, barcode, name, description, price_cents, category_id, image_url, image_urls, stock_qty, is_active, manually_hidden, volume_tiers, created_at, updated_at, category:categories(id, name, slug, display_order)')
+      .select('id, sku, barcode, name, description, price_cents, category_id, image_url, image_urls, stock_qty, is_active, manually_hidden, volume_tiers, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)')
       .in('id', topIds)
       .eq('is_active', true)
       .gt('stock_qty', 0)

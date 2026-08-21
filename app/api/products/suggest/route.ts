@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await db
     .from('products')
-    .select('id, sku, name, price_cents, image_url, category:categories(name)')
+    .select('id, sku, name, price_cents, image_url, category:categories!products_category_id_fkey(name)')
     .or(`name.ilike.%${q}%,sku.ilike.%${q}%,barcode.ilike.%${q}%`)
     .eq('is_active', true)
     .limit(6)

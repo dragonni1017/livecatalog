@@ -48,7 +48,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   // Build product query
   let query = supabase
     .from('products')
-    .select('*, category:categories(*)', { count: 'exact' })
+    .select('*, category:categories!products_category_id_fkey(*)', { count: 'exact' })
     .eq('is_active', true)
     .eq('manually_hidden', false)
 

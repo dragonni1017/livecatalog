@@ -32,7 +32,7 @@ function formatPrice(cents: number): string {
 const getProduct = cache(async (id: string) => {
   const { data } = await supabase
     .from('products')
-    .select('*, category:categories(*)')
+    .select('*, category:categories!products_category_id_fkey(*)')
     .eq('id', id)
     .eq('manually_hidden', false)
     .single()
@@ -85,7 +85,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   if (product.category_id) {
     const { data } = await supabase
       .from('products')
-      .select('*, category:categories(*)')
+      .select('*, category:categories!products_category_id_fkey(*)')
       .eq('is_active', true)
       .eq('manually_hidden', false)
       .eq('category_id', product.category_id)
@@ -125,7 +125,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     if (topIds.length > 0) {
       const { data: coProducts } = await supabase
         .from('products')
-        .select('*, category:categories(*)')
+        .select('*, category:categories!products_category_id_fkey(*)')
         .in('id', topIds)
         .eq('is_active', true)
         .eq('manually_hidden', false)
