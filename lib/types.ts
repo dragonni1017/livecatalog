@@ -62,6 +62,13 @@ export interface CartItem {
   priceCents: number
   qty: number
   imageUrl: string | null
+  // Set when a rep manually overrode this item's price at add-time (see
+  // AddToCartButton). priceCents above already holds that override value --
+  // this flag exists so the cart's live re-sync (POST /api/cart/reprice,
+  // see app/(catalog)/cart/page.tsx) knows to leave it alone instead of
+  // silently replacing it with the computed tier price, and so the server
+  // knows to honor priceCents for this line instead of recomputing it.
+  isCustomPrice?: boolean
 }
 
 // Contact details collected on the checkout form. No payment fields.

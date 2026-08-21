@@ -82,8 +82,27 @@ export async function POST(request: NextRequest) {
       discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
     }
 
+    // Rep-only per-line price override ("Custom price for this order" on
+    // AddToCartButton) -- re-verified against isRep here, never trusted from
+    // the client. An overridden line becomes its own final price and is
+    // excluded from the tier-discount loop below (the discount doesn't
+    // stack on top of a price the rep already set directly).
+    const overriddenProductIds = new Set<string>()
+    if (isRep) {
+      for (const item of items) {
+        const override = item.unitPriceOverrideCents
+        if (typeof override !== 'number') continue
+        const li = lineItems.find((l) => l.product_id === item.productId)
+        if (!li) continue
+        li.unit_price_cents = override
+        li.line_total_cents = override * li.qty
+        overriddenProductIds.add(li.product_id)
+      }
+    }
+
     if (discountPct > 0) {
       for (const li of lineItems) {
+        if (overriddenProductIds.has(li.product_id)) continue
         li.line_total_cents = applyTierDiscount(li.line_total_cents, discountPct)
       }
     }

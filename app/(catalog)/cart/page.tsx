@@ -111,7 +111,10 @@ export default function CartPage() {
 
   useEffect(() => {
     function reprice() {
-      const current = itemsRef.current
+      // Rep custom-priced lines are excluded from the request entirely --
+      // the server only ever returns prices for productIds it was asked
+      // about, so this keeps updatePrices() from touching them at all.
+      const current = itemsRef.current.filter((i) => !i.isCustomPrice)
       if (current.length === 0) return
       fetch('/api/cart/reprice', {
         method: 'POST',
@@ -209,7 +212,11 @@ export default function CartPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
+          items: items.map((i) => ({
+            productId: i.productId,
+            qty: i.qty,
+            ...(i.isCustomPrice ? { unitPriceOverrideCents: i.priceCents } : {}),
+          })),
           contact: { ...contact, notes: finalNotes || undefined },
         }),
       })
@@ -339,7 +346,14 @@ export default function CartPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
                   <p className="font-mono text-xs text-gray-400">{item.sku}</p>
-                  <p className="text-sm text-gray-700">{formatPrice(item.priceCents)} each</p>
+                  <p className="text-sm text-gray-700">
+                    {formatPrice(item.priceCents)} each
+                    {item.isCustomPrice && (
+                      <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        Custom price
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

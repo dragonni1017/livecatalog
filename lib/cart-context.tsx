@@ -83,8 +83,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === item.productId)
       if (existing) {
+        // Merge in the latest item fields (not just qty) so re-adding the
+        // same product with a freshly-set rep custom price (or any other
+        // updated field) actually takes effect instead of silently keeping
+        // whatever was there from the first add.
         return prev.map((i) =>
-          i.productId === item.productId ? { ...i, qty: i.qty + qty } : i,
+          i.productId === item.productId ? { ...i, ...item, qty: i.qty + qty } : i,
         )
       }
       return [...prev, { ...item, qty }]

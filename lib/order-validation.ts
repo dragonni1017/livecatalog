@@ -6,6 +6,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export interface IncomingItem {
   productId: string
   qty: number
+  // Rep-only one-off price override for this line, this order only (see
+  // AddToCartButton's "Custom price for this order"). Only ever honored in
+  // app/api/orders/route.ts when the session is independently re-verified
+  // as a rep -- never trusted here, this is just shape validation.
+  unitPriceOverrideCents?: number
 }
 
 type Valid = { ok: true; contact: CheckoutContact; items: IncomingItem[] }
@@ -34,9 +39,13 @@ export function validateOrderInput(body: unknown): OrderInputResult {
     return { ok: false, error: 'A shipping address (street, city, state, ZIP) is required.', status: 400 }
   }
 
-  const items = rawItems.filter(
-    (i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0,
-  )
+  const items = rawItems
+    .filter((i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0)
+    .map((i) => {
+      const override = i.unitPriceOverrideCents
+      const validOverride = typeof override === 'number' && Number.isFinite(override) && override >= 0
+      return validOverride ? i : { productId: i.productId, qty: i.qty }
+    })
   if (items.length === 0) {
     return { ok: false, error: 'Your cart is empty.', status: 400 }
   }

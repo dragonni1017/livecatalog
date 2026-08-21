@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useCart } from '@/lib/cart-context'
 import { useTierDiscount } from '@/lib/use-tier-discount'
+import { useIsRep } from '@/lib/use-is-rep'
 import { applyTierDiscount } from '@/lib/order-rules'
 import type { CartItem } from '@/lib/types'
 import type { PriceTier } from '@/lib/rep-tier-shared'
@@ -25,6 +26,7 @@ interface AddToCartButtonProps {
 
 export default function AddToCartButton({ product, variant = 'card', unitsPerCase, tiers }: AddToCartButtonProps) {
   const { addItem } = useCart()
+  const { isRep } = useIsRep()
   const discountPercent = useTierDiscount(tiers ?? [])
   const effectivePriceCents = applyTierDiscount(product.priceCents, discountPercent)
   const [qty, setQty] = useState(1)
@@ -32,6 +34,24 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
   const outOfStock = product.stockQty <= 0
   const max = product.stockQty > 0 ? product.stockQty : 1
   const canAddCase = !outOfStock && !!unitsPerCase && unitsPerCase > 1 && max >= unitsPerCase
+
+  // Rep-only: override this line's unit price for just this order (see
+  // lib/order-submission.ts -- the server only honors this for a verified
+  // rep session, same trust boundary as the tier discount above; never
+  // trusted from a non-rep client). Blank = use the computed tier price.
+  const [showCustomPrice, setShowCustomPrice] = useState(false)
+  const [customPrice, setCustomPrice] = useState('')
+  const customPriceCents = (() => {
+    if (!customPrice.trim()) return null
+    const cents = Math.round(parseFloat(customPrice) * 100)
+    return Number.isFinite(cents) && cents >= 0 ? cents : null
+  })()
+  const finalPriceCents = isRep && customPriceCents !== null ? customPriceCents : effectivePriceCents
+
+  function resetCustomPrice() {
+    setShowCustomPrice(false)
+    setCustomPrice('')
+  }
 
   // ProductCard wraps the whole card in a <Link>; keep clicks on these controls
   // from navigating to the product page.
@@ -53,12 +73,14 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
         productId: product.productId,
         sku: product.sku,
         name: product.name,
-        priceCents: effectivePriceCents,
+        priceCents: finalPriceCents,
         imageUrl: product.imageUrl,
+        isCustomPrice: isRep && customPriceCents !== null,
       },
       qty,
     )
     setJustAdded(true)
+    resetCustomPrice()
     window.setTimeout(() => setJustAdded(false), 1500)
   }
 
@@ -70,12 +92,14 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
         productId: product.productId,
         sku: product.sku,
         name: product.name,
-        priceCents: effectivePriceCents,
+        priceCents: finalPriceCents,
         imageUrl: product.imageUrl,
+        isCustomPrice: isRep && customPriceCents !== null,
       },
       unitsPerCase,
     )
     setJustAdded(true)
+    resetCustomPrice()
     window.setTimeout(() => setJustAdded(false), 1500)
   }
 
@@ -149,31 +173,72 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
   )
 
   return (
-    <div className={detail ? 'flex flex-wrap items-center gap-3' : 'flex flex-wrap items-center gap-1.5'}>
-      {stepper}
-      <button
-        type="button"
-        onClick={handleAdd}
-        aria-label={`Add ${qty} ${product.name} to cart`}
-        className={
-          'rounded-md bg-red-600 font-semibold text-white transition-colors hover:bg-red-700 ' +
-          (detail ? 'h-11 flex-1 px-4 text-sm' : 'px-3 py-2 text-xs sm:py-1.5')
-        }
-      >
-        {justAdded ? (detail ? 'Added to cart ✓' : 'Added ✓') : detail ? 'Add to Cart' : 'Add'}
-      </button>
-      {canAddCase && (
+    <div>
+      <div className={detail ? 'flex flex-wrap items-center gap-3' : 'flex flex-wrap items-center gap-1.5'}>
+        {stepper}
         <button
           type="button"
-          onClick={handleAddCase}
-          aria-label={`Add 1 case (${unitsPerCase} units) of ${product.name} to cart`}
+          onClick={handleAdd}
+          aria-label={`Add ${qty} ${product.name} to cart`}
           className={
-            'rounded-md border border-red-600 font-semibold text-red-600 transition-colors hover:bg-red-50 ' +
-            (detail ? 'h-11 px-4 text-sm' : 'px-2 py-2 text-xs sm:py-1.5')
+            'rounded-md bg-red-600 font-semibold text-white transition-colors hover:bg-red-700 ' +
+            (detail ? 'h-11 flex-1 px-4 text-sm' : 'px-3 py-2 text-xs sm:py-1.5')
           }
         >
-          + 1 case ({unitsPerCase})
+          {justAdded ? (detail ? 'Added to cart ✓' : 'Added ✓') : detail ? 'Add to Cart' : 'Add'}
         </button>
+        {canAddCase && (
+          <button
+            type="button"
+            onClick={handleAddCase}
+            aria-label={`Add 1 case (${unitsPerCase} units) of ${product.name} to cart`}
+            className={
+              'rounded-md border border-red-600 font-semibold text-red-600 transition-colors hover:bg-red-50 ' +
+              (detail ? 'h-11 px-4 text-sm' : 'px-2 py-2 text-xs sm:py-1.5')
+            }
+          >
+            + 1 case ({unitsPerCase})
+          </button>
+        )}
+      </div>
+
+      {/* Rep-only: set a one-off price for this line, this order only --
+          never changes the product's real price or the selected tier. */}
+      {isRep && (
+        <div className={detail ? 'mt-2' : 'mt-1'} onClick={stop}>
+          {showCustomPrice ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Custom price $</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                autoFocus
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                onClick={stop}
+                placeholder={(effectivePriceCents / 100).toFixed(2)}
+                className="w-20 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <button
+                type="button"
+                onClick={(e) => { stop(e); resetCustomPrice() }}
+                className="text-xs text-gray-400 hover:text-gray-600"
+                aria-label="Cancel custom price"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { stop(e); setShowCustomPrice(true) }}
+              className="text-xs text-amber-700 hover:text-amber-900 underline"
+            >
+              Custom price for this order
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
