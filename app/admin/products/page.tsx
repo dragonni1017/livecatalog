@@ -21,6 +21,7 @@ interface AdminProduct {
   price_cents: number
   unit_type: 'pc' | 'case' | 'box' | 'pack'
   category: { id: string; name: string } | null
+  categoryIds: string[]
 }
 
 export default async function AdminProductsPage({
@@ -45,7 +46,14 @@ export default async function AdminProductsPage({
   if (q) query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
   if (category) {
     const cat = (categories ?? []).find((c) => c.slug === category)
-    if (cat) query = query.eq('category_id', cat.id)
+    if (cat) {
+      const { data: memberRows } = await db
+        .from('product_categories')
+        .select('product_id')
+        .eq('category_id', cat.id)
+      const memberIds = (memberRows ?? []).map((r) => r.product_id)
+      query = query.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
+    }
   }
   if (visibility === 'hidden') query = query.eq('manually_hidden', true)
   if (visibility === 'visible') query = query.eq('manually_hidden', false)
@@ -53,7 +61,22 @@ export default async function AdminProductsPage({
   if (active === 'inactive') query = query.eq('is_active', false)
 
   const { data } = await query
-  const products = (data ?? []) as unknown as AdminProduct[]
+  const baseProducts = (data ?? []) as unknown as Omit<AdminProduct, 'categoryIds'>[]
+
+  // Full category membership per product (product_categories can now hold
+  // more than one row per product) -- fetched once for the whole visible
+  // set rather than per-row, then grouped in memory.
+  const { data: allMemberRows } = await db.from('product_categories').select('product_id, category_id')
+  const categoryIdsByProduct = new Map<string, string[]>()
+  for (const row of allMemberRows ?? []) {
+    const list = categoryIdsByProduct.get(row.product_id) ?? []
+    list.push(row.category_id)
+    categoryIdsByProduct.set(row.product_id, list)
+  }
+  const products: AdminProduct[] = baseProducts.map((p) => ({
+    ...p,
+    categoryIds: categoryIdsByProduct.get(p.id) ?? [],
+  }))
   const total = products.length
   const hiddenCount = products.filter((p) => p.manually_hidden).length
   const noImageCount = products.filter((p) => !p.image_url || p.image_url.trim() === '').length

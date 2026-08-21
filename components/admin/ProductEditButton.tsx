@@ -23,11 +23,11 @@ interface Props {
   volumeTiers?: VolumeTier[]
   priceCents: number
   unitType: UnitType
-  categoryId: string | null
+  categoryIds: string[]
   categories: Category[]
 }
 
-export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [], priceCents, unitType, categoryId, categories }: Props) {
+export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [], priceCents, unitType, categoryIds, categories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
@@ -37,8 +37,8 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
     image_urls_text: imageUrls.join('\n'),
     price: (priceCents / 100).toFixed(2),
     unit_type: unitType,
-    category_id: categoryId ?? '',
   })
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(categoryIds)
   const [tiers, setTiers] = useState<VolumeTier[]>(volumeTiers)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,11 +51,17 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
       image_urls_text: imageUrls.join('\n'),
       price: (priceCents / 100).toFixed(2),
       unit_type: unitType,
-      category_id: categoryId ?? '',
     })
+    setSelectedCategoryIds(categoryIds)
     setTiers(volumeTiers)
     setError(null)
     setOpen(true)
+  }
+
+  function toggleCategory(catId: string) {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(catId) ? prev.filter((c) => c !== catId) : [...prev, catId],
+    )
   }
 
   function addTier() {
@@ -102,7 +108,7 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
           volume_tiers: tiers.length > 0 ? tiers : null,
           price_cents: priceCents,
           unit_type: form.unit_type,
-          category_id: form.category_id || null,
+          category_ids: selectedCategoryIds,
         }),
       })
       const data = await res.json()
@@ -150,17 +156,29 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Category</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                >
-                  <option value="">— Uncategorized —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Categories <span className="font-normal text-gray-400">(a product can belong to more than one)</span>
+                </label>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-gray-300 bg-white p-2">
+                  {categories.length === 0 ? (
+                    <p className="text-xs text-gray-400">No categories exist yet.</p>
+                  ) : (
+                    categories.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 py-0.5 text-sm text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={selectedCategoryIds.includes(c.id)}
+                          onChange={() => toggleCategory(c.id)}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                        />
+                        {c.name}
+                      </label>
+                    ))
+                  )}
+                </div>
+                {selectedCategoryIds.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-400">Uncategorized — won&apos;t appear under any category browse.</p>
+                )}
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">

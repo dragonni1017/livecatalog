@@ -54,7 +54,17 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
   const categoryMatch = category ? categories.find(c => c.slug === category) : undefined
   const categoryNotFound = !!category && !categoryMatch
-  if (categoryMatch) query = query.eq('category_id', categoryMatch.id)
+  if (categoryMatch) {
+    // A product can now belong to more than one category (product_categories
+    // join table) -- match any product carrying this category, not just
+    // whichever one happens to be its "primary" categories.category_id.
+    const { data: memberRows } = await supabase
+      .from('product_categories')
+      .select('product_id')
+      .eq('category_id', categoryMatch.id)
+    const memberIds = (memberRows ?? []).map((r) => r.product_id)
+    query = query.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
+  }
 
   if (inStock) query = query.gt('stock_qty', 0)
 

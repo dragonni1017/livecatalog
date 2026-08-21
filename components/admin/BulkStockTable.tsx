@@ -25,6 +25,7 @@ interface Product {
   price_cents: number
   unit_type: 'pc' | 'case' | 'box' | 'pack'
   category: { id: string; name: string } | null
+  categoryIds: string[]
 }
 
 interface Category {
@@ -162,7 +163,14 @@ export default function BulkStockTable({ products, categories }: Props) {
                     </td>
                     <td className="px-4 py-3 text-gray-800 max-w-[220px] truncate">{p.name}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.sku || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{p.category?.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {p.categoryIds.length > 0
+                        ? p.categoryIds
+                            .map((id) => categories.find((c) => c.id === id)?.name)
+                            .filter(Boolean)
+                            .join(', ')
+                        : '—'}
+                    </td>
                     <td className="px-4 py-3">
                       {p.is_active ? (
                         <span className="text-xs font-medium text-green-600">Active</span>
@@ -189,7 +197,7 @@ export default function BulkStockTable({ products, categories }: Props) {
                         volumeTiers={p.volume_tiers ?? []}
                         priceCents={p.price_cents}
                         unitType={p.unit_type}
-                        categoryId={p.category?.id ?? null}
+                        categoryIds={p.categoryIds}
                         categories={categories}
                       />
                     </td>

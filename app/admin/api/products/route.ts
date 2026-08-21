@@ -102,15 +102,21 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'volume_tiers must be an array or null' }, { status: 400 })
       }
     }
-    if ('category_id' in body) {
-      const val = body.category_id
-      if (val === null) {
-        updates.category_id = null
-      } else if (typeof val === 'string' && val.trim()) {
-        updates.category_id = val.trim()
-      } else {
-        return NextResponse.json({ error: 'category_id must be a string or null' }, { status: 400 })
+    // category_ids replaces the product's full category set (a product can
+    // now belong to more than one -- see product_categories, migration
+    // 0038). products.category_id is kept in sync as the first of the
+    // selected categories, "primary" -- Erply sync / Excel import still
+    // read/write only that single column and never touch product_categories
+    // on update, so this is the one write path responsible for keeping both
+    // in agreement once an admin edits a product's categories.
+    let newCategoryIds: string[] | null = null
+    if ('category_ids' in body) {
+      const raw = body.category_ids
+      if (!Array.isArray(raw) || !raw.every((v) => typeof v === 'string' && v.trim())) {
+        return NextResponse.json({ error: 'category_ids must be an array of strings' }, { status: 400 })
       }
+      newCategoryIds = [...new Set(raw.map((v) => v.trim()))]
+      updates.category_id = newCategoryIds[0] ?? null
     }
     if ('low_stock_threshold' in body) {
       const val = body.low_stock_threshold
@@ -137,6 +143,17 @@ export async function PATCH(request: NextRequest) {
     updates.updated_at = new Date().toISOString()
     const { error } = await db.from('products').update(updates).eq('id', id)
     if (error) throw error
+
+    if (newCategoryIds !== null) {
+      const { error: deleteError } = await db.from('product_categories').delete().eq('product_id', id)
+      if (deleteError) throw deleteError
+      if (newCategoryIds.length > 0) {
+        const { error: insertError } = await db
+          .from('product_categories')
+          .insert(newCategoryIds.map((categoryId) => ({ product_id: id, category_id: categoryId })))
+        if (insertError) throw insertError
+      }
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
