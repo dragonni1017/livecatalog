@@ -104,6 +104,10 @@ export interface OrderRequest {
   // to status — see migration 0005_entered_in_qb.sql.
   entered_in_qb: boolean
   entered_in_qb_at: string | null
+  // Set once stock has been decremented for this order's fulfillment.
+  // Orthogonal to status for the same reason as entered_in_qb above — see
+  // migration 0037_order_stock_decremented.sql.
+  stock_decremented_at: string | null
   // Set only when a rep account (not the free-text placed_by_rep) placed/priced
   // this order — see migrations 0028-0030.
   rep_user_id: string | null

@@ -40,9 +40,20 @@ export async function PATCH(request: NextRequest) {
     // Fetch current values before updating so we can record old_value in the audit log
     const { data: current } = await db
       .from('order_requests')
-      .select('status, entered_in_qb, reference_code')
+      .select('status, entered_in_qb, reference_code, stock_decremented_at')
       .eq('id', id)
       .single()
+
+    // Whether to decrement stock this call — decided from `current` (fetched
+    // above), before the update below changes it. Tracked as its own
+    // one-way fact (stock_decremented_at, migration 0037), NOT by comparing
+    // against the previous status: status can be flipped back and forth
+    // (converted -> contacted -> converted again is a real admin workflow),
+    // and comparing old/new status only blocks an exact repeated PATCH while
+    // already 'converted' — confirmed live that a converted -> contacted ->
+    // converted round trip slips past that check and double-decrements the
+    // same order's stock.
+    const shouldDecrementStock = hasStatus && body.status === 'converted' && !current?.stock_decremented_at
 
     const patch: Record<string, unknown> = { updated_at: now }
     if (hasStatus) {
@@ -54,6 +65,12 @@ export async function PATCH(request: NextRequest) {
     if (hasEntered) {
       patch.entered_in_qb = Boolean(body.enteredInQb)
       patch.entered_in_qb_at = body.enteredInQb ? now : null
+    }
+    // Set atomically with the status write (not after attempting the RPC
+    // calls below) so a partial adjust_stock() failure can never leave the
+    // guard open for a retry to double-count the items that did succeed.
+    if (shouldDecrementStock) {
+      patch.stock_decremented_at = now
     }
 
     const { error } = await db.from('order_requests').update(patch).eq('id', id)
@@ -91,13 +108,8 @@ export async function PATCH(request: NextRequest) {
     // docs/LIVE-INVENTORY-COUNT-HANDOFF.md) — decrement each line item via
     // adjust_stock() (atomic delta + its own stock_adjustments audit row,
     // migration 0018), same primitive the single/bulk stock-edit endpoints
-    // already use. Guarded on the *transition* into 'converted' (current
-    // status wasn't already 'converted'), not just the target status, so
-    // re-saving an already-converted order never double-decrements — the
-    // qb_sync_queue guard above uses a unique constraint for the same
-    // reason, this uses the old/new status comparison instead since
-    // adjust_stock() has no natural per-order uniqueness key to conflict on.
-    if (hasStatus && body.status === 'converted' && current?.status !== 'converted') {
+    // already use.
+    if (shouldDecrementStock) {
       const { data: items } = await db
         .from('order_items')
         .select('sku, qty')
