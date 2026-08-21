@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useCart, formatPrice } from '@/lib/cart-context'
 import { resolveCdnImage } from '@/lib/image'
@@ -24,7 +24,7 @@ const LS_CONTACT_KEY = 'lyu_contact'
 const LS_DRAFTS_KEY = 'lyu_drafts'
 
 export default function CartPage() {
-  const { items, subtotalCents, count, setQty, removeItem, clear, addItem, hydrated } = useCart()
+  const { items, subtotalCents, count, setQty, removeItem, clear, addItem, updatePrices, hydrated } = useCart()
   const [contact, setContact] = useState<CheckoutContact>({ name: '', email: '' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +96,38 @@ export default function CartPage() {
       /* localStorage unavailable */
     }
   }
+
+  // Re-syncs displayed prices against the current session on cart mount and
+  // on pageshow (fires on bfcache restores too, e.g. pressing Back after
+  // signing out) — priceCents is frozen at add-time (see lib/cart-context),
+  // so without this, an item added at a rep's tier discount kept showing
+  // that discounted price in the cart indefinitely, even after logout. Uses
+  // a ref so the effect (mount + pageshow only) always reads the latest
+  // items without re-firing every time the cart itself changes.
+  const itemsRef = useRef(items)
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+
+  useEffect(() => {
+    function reprice() {
+      const current = itemsRef.current
+      if (current.length === 0) return
+      fetch('/api/cart/reprice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: current.map((i) => ({ productId: i.productId, qty: i.qty })) }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.prices) updatePrices(data.prices)
+        })
+        .catch(() => {})
+    }
+    if (hydrated) reprice()
+    window.addEventListener('pageshow', reprice)
+    return () => window.removeEventListener('pageshow', reprice)
+  }, [hydrated, updatePrices])
 
   // "Placed by (rep)" is a dropdown of real rep accounts, not free text —
   // fetch the list once. Public/unauthenticated endpoint, same as the

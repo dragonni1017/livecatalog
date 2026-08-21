@@ -27,6 +27,7 @@ interface CartContextValue {
   addItem: (item: Omit<CartItem, 'qty'>, qty?: number) => void
   removeItem: (productId: string) => void
   setQty: (productId: string, qty: number) => void
+  updatePrices: (prices: Record<string, number>) => void
   clear: () => void
   hydrated: boolean
 }
@@ -102,6 +103,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  // Re-syncs stored priceCents against a fresh authoritative quote (see
+  // POST /api/cart/reprice) without touching qty or any other field. Bails
+  // out to the same `prev` reference when nothing actually changed, so a
+  // no-op reprice (the common case) doesn't trigger a re-render or an
+  // unnecessary localStorage write.
+  const updatePrices = useCallback((prices: Record<string, number>) => {
+    setItems((prev) => {
+      let changed = false
+      const next = prev.map((i) => {
+        const p = prices[i.productId]
+        if (p !== undefined && p !== i.priceCents) {
+          changed = true
+          return { ...i, priceCents: p }
+        }
+        return i
+      })
+      return changed ? next : prev
+    })
+  }, [])
+
   const clear = useCallback(() => setItems([]), [])
 
   const { count, subtotalCents } = useMemo(() => {
@@ -115,8 +136,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items])
 
   const value = useMemo<CartContextValue>(
-    () => ({ items, count, subtotalCents, addItem, removeItem, setQty, clear, hydrated }),
-    [items, count, subtotalCents, addItem, removeItem, setQty, clear, hydrated],
+    () => ({ items, count, subtotalCents, addItem, removeItem, setQty, updatePrices, clear, hydrated }),
+    [items, count, subtotalCents, addItem, removeItem, setQty, updatePrices, clear, hydrated],
   )
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
