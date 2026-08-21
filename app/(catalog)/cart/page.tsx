@@ -442,7 +442,7 @@ export default function CartPage() {
                 value={contact.shipAddress2 ?? ''}
                 onChange={(v) => setContact({ ...contact, shipAddress2: v })}
               />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Field label="City *" value={contact.shipCity ?? ''} onChange={(v) => setContact({ ...contact, shipCity: v })} required />
                 <Field label="State *" value={contact.shipState ?? ''} onChange={(v) => setContact({ ...contact, shipState: v })} required />
                 <Field label="ZIP *" value={contact.shipZip ?? ''} onChange={(v) => setContact({ ...contact, shipZip: v })} required />
