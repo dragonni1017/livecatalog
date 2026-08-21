@@ -373,7 +373,8 @@ export default function AccountsTable({
                             </button>
                             <button
                               onClick={() => handleDelete(account)}
-                              disabled={busy}
+                              disabled={busy || isSelf}
+                              title={isSelf ? "You can't delete your own account." : undefined}
                               className="rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
                             >
                               Delete

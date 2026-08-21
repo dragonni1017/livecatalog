@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
@@ -129,6 +130,19 @@ export async function PATCH(request: NextRequest) {
     }
     const before = existing.user
 
+    // Only one admin exists today (confirmed live) — letting that account
+    // demote or deactivate itself would lock everyone out of /admin with no
+    // in-app recovery path. Block self-targeting for the two changes that
+    // could do that, regardless of how many other admins exist later.
+    const sessionUser = await getSessionUser()
+    const isSelf = sessionUser?.id === id
+    if (isSelf && typeof body.role === 'string' && body.role !== before.app_metadata?.role) {
+      return NextResponse.json({ error: 'You cannot change your own role.' }, { status: 400 })
+    }
+    if (isSelf && body.active === false) {
+      return NextResponse.json({ error: 'You cannot deactivate your own account.' }, { status: 400 })
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updates: any = {}
     const auditEntries: Array<{ action: string; old_value?: string; new_value?: string }> = []
@@ -195,6 +209,11 @@ export async function DELETE(request: NextRequest) {
     const { data: existing } = await db.auth.admin.getUserById(id)
     if (!existing?.user || !KNOWN_ROLES.has(existing.user.app_metadata?.role)) {
       return NextResponse.json({ error: 'Not a staff account.' }, { status: 404 })
+    }
+
+    const sessionUser = await getSessionUser()
+    if (sessionUser?.id === id) {
+      return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 })
     }
 
     const { error } = await db.auth.admin.deleteUser(id)
