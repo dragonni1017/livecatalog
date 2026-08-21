@@ -33,6 +33,7 @@ export default function CartPage() {
   const [draftNames, setDraftNames] = useState<string[]>([])
   const [draftSaved, setDraftSaved] = useState(false)
   const [requiredShipDate, setRequiredShipDate] = useState('')
+  const [reps, setReps] = useState<string[]>([])
 
   // Load draft names from localStorage on mount. One-time hydration from an
   // external store (can't read on the server), not a reactive setState loop.
@@ -95,6 +96,26 @@ export default function CartPage() {
       /* localStorage unavailable */
     }
   }
+
+  // "Placed by (rep)" is a dropdown of real rep accounts, not free text —
+  // fetch the list once. Public/unauthenticated endpoint, same as the
+  // ?rep= link and "CC sales rep" field already expose rep emails.
+  useEffect(() => {
+    fetch('/api/reps')
+      .then((res) => res.json())
+      .then((data) => setReps(Array.isArray(data.reps) ? data.reps : []))
+      .catch(() => {})
+  }, [])
+
+  // A ?rep= link (or a saved value from a prior order) only pre-selects the
+  // dropdown if it exactly matches a real, currently active rep — otherwise
+  // it's cleared rather than silently submitting an unlisted value.
+  useEffect(() => {
+    if (reps.length === 0) return
+    setContact((c) =>
+      c.placedByRep && !reps.includes(c.placedByRep) ? { ...c, placedByRep: '' } : c,
+    )
+  }, [reps])
 
   // Prefill the rep from a per-rep link: a ?rep= visit is stashed in
   // localStorage by RepCapture, so it survives navigation to the cart.
@@ -363,7 +384,19 @@ export default function CartPage() {
               />
               <Field label="Phone" type="tel" value={contact.phone ?? ''} onChange={(v) => setContact({ ...contact, phone: v })} />
               <Field label="Company" value={contact.company ?? ''} onChange={(v) => setContact({ ...contact, company: v })} />
-              <Field label="Placed by (rep)" value={contact.placedByRep ?? ''} onChange={(v) => setContact({ ...contact, placedByRep: v })} />
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Placed by (rep)</label>
+                <select
+                  value={contact.placedByRep ?? ''}
+                  onChange={(e) => setContact({ ...contact, placedByRep: e.target.value })}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                >
+                  <option value="">— None —</option>
+                  {reps.map((rep) => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </select>
+              </div>
               <Field label="CC sales rep (email)" type="email" value={contact.ccEmail ?? ''} onChange={(v) => setContact({ ...contact, ccEmail: v })} />
               <Field label="PO number" value={contact.poNumber ?? ''} onChange={(v) => setContact({ ...contact, poNumber: v })} />
               <Field
