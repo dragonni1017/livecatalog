@@ -435,6 +435,58 @@ code is broken — given how many company-file-specific rejections (account
 names, field length caps, item type) already turned up, the next failure
 is more likely another QuickBooks-company-file quirk than a code bug.
 
+---
+
+**SHIP-TO ADDRESS + PONumber ORDERING FIX, 2026-08-21.** Dragon reported
+the last sync was missing address/ship-to info, and wanted to confirm PO
+Number (the reference-code fallback) actually makes it into the Sales
+Order. Two real findings:
+1. **No address existed anywhere in the order model at all** — not the
+   checkout form, not any customer record. Added `ship_address1/2/city/
+   state/zip/country` to `order_requests` (migration
+   `0034_order_ship_address.sql`, threaded through `submit_order()` the
+   same way 0030 threaded rep/tier — old 13-arg signature dropped, new
+   19-arg one created, lock-down re-applied), required fields on the
+   public checkout form (`app/(catalog)/cart/page.tsx`), and displayed on
+   the admin order detail/packing-slip/sales-order-print pages.
+2. **A real latent bug caught before it could break the next sync**:
+   `buildSalesOrderAddRq` placed `PONumber` *after* `Memo`. Checked
+   `qb_sync_queue.qbxml_request` on the actual last-synced order first —
+   it had no `PONumber` at all, because that order synced 6 minutes
+   *before* the PONumber-fallback fix was even committed, so the
+   fallback logic had never actually been exercised live. Verified the
+   correct qbXML `SalesOrderAdd` OSR element order via the
+   consolibyte/quickbooks-php schema source (CustomerRef, ClassRef,
+   TemplateRef, TxnDate, RefNumber, BillAddress, **ShipAddress**,
+   **PONumber**, TermsRef, ..., **Memo**, ..., line items) — Memo must
+   come *after* PONumber, not before. Fixed the element order and added
+   `tests/qbxml.test.ts` coverage asserting the exact sequence, so this
+   can't silently regress again.
+
+**Verified end-to-end 2026-08-21**, two ways:
+- Inserted a disposable order directly (customer email/SKU chosen to
+  match existing real `qb_customer_links`/`qb_item_links` rows so the
+  probe reaches the real `SalesOrderAdd` branch, not a customer/item
+  lookup branch), forged a `qb_sessions` ticket, then POSTed a real
+  `sendRequestXML` SOAP envelope to the actual `/api/qbwc` route (not a
+  reimplementation) — the returned qbXML had the correct order:
+  `CustomerRef → RefNumber → ShipAddress → PONumber → Memo →
+  SalesOrderLineAdd`, with the real address and real PO Number populated
+  correctly. All test rows deleted after (`qb_sessions`, `qb_sync_queue`,
+  `order_items`, `order_requests`).
+- Separately, placed a real order through the actual public `/cart`
+  checkout UI in a browser (added a product, filled the new address
+  fields, submitted) — confirmed via direct SQL that
+  `ship_address1/city/state/zip/country` landed correctly on the new
+  order via `submit_order()`. Test order deleted after.
+
+**How to apply:** any future qbXML element added to `SalesOrderAdd` (or
+any other `*Add` request) must be checked against the real OSR child
+order before assuming `toContain`-style tests are sufficient — qbXML is
+strict about sequence, and a wrong-order element can go completely
+unnoticed by tests that don't assert relative position, exactly like this
+bug did for weeks.
+
 **Why:** so a future session picking this up doesn't have to re-derive the
 override-vs-stack decision, the 2FA/secret split, or why `submit_order()`
 needed an explicit `drop function` — none of that is visible from reading
