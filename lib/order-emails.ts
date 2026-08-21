@@ -2,6 +2,22 @@ import { isSmtpConfigured, sendMail } from '@/lib/email'
 import { formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Combines the manually-typed "CC sales rep" field with whichever rep was
+// picked from the "Placed by (rep)" dropdown, so a rep is automatically on
+// the email chain for any order attributed to them — not just when someone
+// remembers to also fill in the separate CC field. Dedupes and validates
+// both as email addresses (placedByRep is a dropdown of real rep accounts
+// today, but this stays defensive against a malformed direct API call).
+function buildRepCcList(contact: CheckoutContact): string | undefined {
+  const candidates = [contact.ccEmail, contact.placedByRep]
+    .map((v) => v?.trim().toLowerCase())
+    .filter((v): v is string => !!v && EMAIL_RE.test(v))
+  const unique = [...new Set(candidates)]
+  return unique.length > 0 ? unique.join(', ') : undefined
+}
+
 type LineItem = {
   sku: string
   name: string
@@ -28,8 +44,7 @@ export async function notifyReps(args: {
   const who = contact.company?.trim() || contact.name.trim()
   const subject = `New order request ${referenceCode} — ${who} (${formatPriceCents(subtotalCents)})`
 
-  const ccRaw = contact.ccEmail?.trim()
-  const cc = ccRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccRaw) ? ccRaw : undefined
+  const cc = buildRepCcList(contact)
 
   const itemLines = lineItems
     .map((li) => `  ${li.qty} × ${li.sku} — ${li.name} @ ${formatPriceCents(li.unit_price_cents)} = ${formatPriceCents(li.line_total_cents)}`)
@@ -143,5 +158,8 @@ export async function notifyCustomer(args: {
     text,
     replyTo: process.env.SALES_ALERT_TO || undefined,
     from: process.env.SALES_ALERT_FROM || undefined,
+    // Puts the rep on the actual customer-facing thread (not just the
+    // internal alert) so they see any reply the customer sends here too.
+    cc: buildRepCcList(contact),
   })
 }
