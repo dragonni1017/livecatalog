@@ -16,7 +16,22 @@ interface CatalogPageProps {
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const { q, category, page: pageParam, sort: sortParam, instock, per: perParam, minPrice, maxPrice } = await searchParams
+  const {
+    q,
+    category,
+    page: pageParam,
+    sort: sortParam,
+    instock,
+    per: perParam,
+    minPrice: minPriceRaw,
+    maxPrice: maxPriceRaw,
+  } = await searchParams
+
+  // Reject non-numeric price params outright rather than letting them fall
+  // through to a silently-skipped filter that still gets echoed verbatim in
+  // the "Price: $x – $y" label below (e.g. ?maxPrice=abc rendering as "$abc").
+  const minPrice = minPriceRaw !== undefined && Number.isFinite(parseFloat(minPriceRaw)) ? minPriceRaw : undefined
+  const maxPrice = maxPriceRaw !== undefined && Number.isFinite(parseFloat(maxPriceRaw)) ? maxPriceRaw : undefined
 
   const sort = sortParam ?? 'sku'
   const inStock = instock === '1'
@@ -37,10 +52,9 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     .eq('is_active', true)
     .eq('manually_hidden', false)
 
-  if (category) {
-    const cat = categories.find(c => c.slug === category)
-    if (cat) query = query.eq('category_id', cat.id)
-  }
+  const categoryMatch = category ? categories.find(c => c.slug === category) : undefined
+  const categoryNotFound = !!category && !categoryMatch
+  if (categoryMatch) query = query.eq('category_id', categoryMatch.id)
 
   if (inStock) query = query.gt('stock_qty', 0)
 
@@ -108,7 +122,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     return qs ? `/?${qs}` : '/'
   })()
 
-  const activeCategory = category ?? undefined
+  const activeCategory = categoryMatch?.slug
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
@@ -192,6 +206,12 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
               Clear price filter
             </Link>
           </div>
+        )}
+
+        {categoryNotFound && (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            We couldn&apos;t find that category — showing all products instead.
+          </p>
         )}
 
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
