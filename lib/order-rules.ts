@@ -57,17 +57,41 @@ export function roundCentsToQuarterSkip75(cents: number): number {
   return nearest === 100 ? (dollars + 1) * 100 : dollars * 100 + nearest
 }
 
+// Rounds a price in cents to the nearest quarter-dollar stop, including
+// .75 -- unlike roundCentsToQuarterSkip75 above (the base list-price sync
+// policy, which deliberately skips .75), discount/markup math needs .75
+// available as a landing stop. Skipping it here meant a modest discount on
+// an already-clean price could round straight back to the original: 8% off
+// a $3.00 item is 276 cents, whose nearest *skip-75* stop is the next whole
+// dollar -- $3.00 again, making an active discount invisible. Confirmed
+// live 2026-08-21 (Distribution Chain, 8% off, on $3.00 SKUs).
+export function roundCentsToQuarter(cents: number): number {
+  const dollars = Math.floor(cents / 100)
+  const remainder = Math.round(cents - dollars * 100) // 0-99
+  const stops = [0, 25, 50, 75, 100]
+  let nearest = stops[0]
+  let minDiff = Infinity
+  for (const stop of stops) {
+    const diff = Math.abs(remainder - stop)
+    if (diff < minDiff) {
+      minDiff = diff
+      nearest = stop
+    }
+  }
+  return nearest === 100 ? (dollars + 1) * 100 : dollars * 100 + nearest
+}
+
 // Applies a flat percentage discount to a price in cents, then rounds to
-// the nearest quarter (see roundCentsToQuarterSkip75) so discounted/marked-
-// up prices land on the same clean stops as the base price instead of
-// arbitrary cent amounts. Used for both the per-customer discount_percent
-// on file (app/api/orders/route.ts) and rep-selected
-// price_tiers.discount_percent -- same function on the client (for
-// preview) and the server (at submit time) so the two can never disagree.
+// the nearest quarter (see roundCentsToQuarter) so discounted/marked-up
+// prices land on clean stops instead of arbitrary cent amounts. Used for
+// both the per-customer discount_percent on file (app/api/orders/route.ts)
+// and rep-selected price_tiers.discount_percent -- same function on the
+// client (for preview) and the server (at submit time) so the two can
+// never disagree.
 export function applyTierDiscount(cents: number, discountPercent: number): number {
   if (!discountPercent) return cents
   const adjusted = Math.round(cents * (1 - discountPercent / 100))
-  return roundCentsToQuarterSkip75(adjusted)
+  return roundCentsToQuarter(adjusted)
 }
 
 // price_tiers.code ('distribution_chain') -> display label ('Distribution Chain').

@@ -4,6 +4,7 @@ import {
   formatPriceCents,
   MIN_ORDER_SUBTOTAL_CENTS,
   roundCentsToQuarterSkip75,
+  roundCentsToQuarter,
   applyTierDiscount,
   formatTierAdjustment,
 } from '@/lib/order-rules'
@@ -75,6 +76,19 @@ describe('roundCentsToQuarterSkip75', () => {
   })
 })
 
+describe('roundCentsToQuarter', () => {
+  it('leaves an already-clean quarter stop unchanged', () => {
+    expect(roundCentsToQuarter(350)).toBe(350) // $3.50
+    expect(roundCentsToQuarter(375)).toBe(375) // $3.75 -- unlike the skip-75 version, this is a valid stop
+  })
+
+  it('rounds to the nearest of .00/.25/.50/.75/next-dollar', () => {
+    expect(roundCentsToQuarter(322)).toBe(325) // $3.22 -> $3.25
+    expect(roundCentsToQuarter(276)).toBe(275) // $2.76 -> $2.75 (would be $3.00 under skip-75)
+    expect(roundCentsToQuarter(388)).toBe(400) // $3.88 is nearer the next dollar than .75
+  })
+})
+
 describe('applyTierDiscount', () => {
   it('returns the input unchanged when there is no adjustment', () => {
     expect(applyTierDiscount(350, 0)).toBe(350)
@@ -83,6 +97,14 @@ describe('applyTierDiscount', () => {
   it('applies a discount and rounds the result to the nearest quarter', () => {
     // 350 * (1 - 8/100) = 322 -> quarter-rounds to 325
     expect(applyTierDiscount(350, 8)).toBe(325)
+  })
+
+  it('never erases a discount by rounding a cheap item back to its original price', () => {
+    // Regression: 300 * (1 - 8/100) = 276, whose nearest *skip-75* stop was
+    // the next whole dollar (300 again) -- an 8% discount on a $3.00 item
+    // was completely invisible. Confirmed live 2026-08-21 (Distribution
+    // Chain tier, $3.00 SKUs).
+    expect(applyTierDiscount(300, 8)).toBe(275)
   })
 
   it('applies a markup (negative percent) and rounds to the nearest quarter', () => {
