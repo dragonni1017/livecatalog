@@ -50,12 +50,18 @@ interface ErplyProduct {
   warehouses?: Record<string, { warehouseID: number; totalInStock: number; reserved: number }>
 }
 
-// Public catalog price (decided 2026-08-06): the livecatalog storefront now
-// shows Erply's actual Wholesale tier price -- 50% off the retail-anchored
-// price, matching the live Wholesale price list's discountPercent (see
-// docs/memory/project-retail-anchor-pricing-flip.md) -- rather than the
-// retail+20% markup used before. Superseded WHOLESALE_MARKUP=1.2.
-const WHOLESALE_DISCOUNT = 0.5
+// Public catalog price (decided 2026-08-21, supersedes the 2026-08-06
+// decision this constant used to implement): the livecatalog storefront now
+// shows Erply's Retail-anchored price directly -- Erply's raw price/netPrice
+// already IS the retail price as of the 2026-08-04 pricing flip (see
+// docs/memory/project-retail-anchor-pricing-flip.md), so no multiplier is
+// needed here anymore. price_tiers.discount_percent (Wholesale 50%,
+// Distribution Chain 54%, Exclusive 38%, Retail 0%) now expresses each
+// tier as a real discount off this stored price, mirrored from the same
+// numbers already live in Erply's own price lists. All 3,029 products'
+// price_cents were doubled to match on 2026-08-21 (see
+// price_rebase_backup_20260821 in Supabase for the pre-migration values).
+const RETAIL_MULTIPLIER = 1
 
 // Storefront prices are rounded to quarters, skipping .75: a price lands on
 // x.00, x.25, x.50, or rounds up to the next whole dollar (whichever of
@@ -217,7 +223,7 @@ function normalizeProduct(p: ErplyProduct): ErplySyncProduct {
     sku: (p.code || String(p.productID)).trim(),
     barcode: p.code2?.trim() || null,
     name: p.name,
-    price: roundToQuarterSkip75((p.price ?? p.netPrice ?? 0) * WHOLESALE_DISCOUNT),
+    price: roundToQuarterSkip75((p.price ?? p.netPrice ?? 0) * RETAIL_MULTIPLIER),
     categoryName: p.groupName ?? '',
     description: p.description ?? '',
     imageUrl: primaryImage?.fullURL ?? primaryImage?.largeURL ?? null,
