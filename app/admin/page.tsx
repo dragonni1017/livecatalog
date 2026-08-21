@@ -361,15 +361,15 @@ export default async function AdminDashboard() {
           </div>
 
           <Link
-            href="/admin/rep-accounts"
+            href="/admin/accounts"
             className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
           >
             <div>
               <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
-                Rep Accounts
+                Accounts
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Add, deactivate, or remove /rep login accounts
+                Add, edit, or remove /admin and /rep login accounts
               </p>
             </div>
             <svg
