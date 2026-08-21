@@ -234,3 +234,19 @@ blind read.
     questions above (fulfillment trigger, count granularity) that weren't
     settled this pass. Today, `stock_qty` still only moves via manual admin
     adjustment (single or bulk) or a full Excel/Erply re-import/sync.
+
+- **2026-08-21:** Shipped step 3 (order → stock decrement hook). Dragon
+  confirmed the fulfillment trigger question above: decrement at the
+  "Converted" status change. `app/admin/api/orders/route.ts`'s PATCH
+  handler now calls `adjust_stock()` per line item on that transition.
+  Found and fixed a real double-decrement bug live during verification
+  (comparing against the *previous* status let a converted → contacted →
+  converted round trip decrement twice) — fixed with a dedicated
+  `order_requests.stock_decremented_at` column (migration `0037`),
+  decoupled from status the same way `entered_in_qb` already is. Verified
+  live twice against a real SKU/disposable test order, both bugged and
+  fixed behavior confirmed via direct queries. Full detail:
+  [[project-order-fulfillment-stock-decrement]] in `docs/memory/`.
+  **Not done, still open:** the cycle-count reconciliation screen (step 2)
+  and `/admin/api/stock/bulk` still not routed through `adjust_stock()`
+  (step 5) — neither touched this pass.
