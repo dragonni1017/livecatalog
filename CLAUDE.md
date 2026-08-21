@@ -24,6 +24,21 @@ code, not the file itself).
   question, not the whole folder. Sequentially numbered — check the highest
   existing number to pick the next one instead of listing/reading the whole
   folder. Applied manually in the Supabase SQL editor, not via CLI.
+- New table read by the public catalog (not just admin): `enable row level
+  security` alone leaves it unreadable by the anon-key client with no error,
+  just silent empty results — add an explicit public SELECT policy (mirror
+  `products`/`categories`'s `Public can read ... (roles: public, qual:
+  true)`). Bitten twice (`display_settings` 2026-08-14, `product_categories`
+  2026-08-21) — after any such migration, load the actual public homepage
+  and confirm real product counts before considering it done, not just a
+  clean migration apply + typecheck.
+- New table with FKs to two tables that PostgREST already auto-embeds
+  elsewhere via shorthand (e.g. `category:categories(...)`): grep the whole
+  codebase for that shorthand and disambiguate every hit with
+  `!<fk_constraint_name>` *before* deploying — a second valid relationship
+  path makes every existing embed error with PGRST201 ("more than one
+  relationship was found"), breaking every query using it, not just new
+  code. Caused a brief live outage on `product_categories` (2026-08-21).
 - Bulk product/data work (import, sync, backfill): run the matching script in
   `scripts/*.mjs` via Bash instead of inlining/iterating the data yourself.
 - `docs/*.md` (ROADMAP, handoff notes, plans): grep for the relevant heading
