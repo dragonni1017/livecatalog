@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildCustomerAddRq,
+  buildCustomerFullQueryRq,
   buildCustomerQueryRq,
   buildItemAddRq,
   buildItemQueryRq,
@@ -9,6 +10,7 @@ import {
   fallbackPoNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
+  parseCustomerFullQueryRs,
   parseCustomerQueryRs,
   parseItemAddRs,
   parseItemQueryRs,
@@ -201,6 +203,73 @@ describe('parseCustomerQueryRs', () => {
     expect(result.status.code).toBe(500)
     expect(result.status.message).toBe('Nothing was returned')
     expect(result.listId).toBeUndefined()
+  })
+})
+
+describe('buildCustomerFullQueryRq', () => {
+  it('builds an unfiltered CustomerQueryRq with iterator="Start" and MaxReturned', () => {
+    const xml = buildCustomerFullQueryRq({ iterator: 'Start', maxReturned: 100 })
+    expect(xml).toContain('<CustomerQueryRq requestID="1" iterator="Start"><MaxReturned>100</MaxReturned></CustomerQueryRq>')
+    expect(xml).not.toContain('<FullName>')
+  })
+
+  it('builds a CustomerQueryRq with iterator="Continue" and iteratorID when resuming', () => {
+    const xml = buildCustomerFullQueryRq({ iterator: 'Continue', iteratorID: '{abc-123}', maxReturned: 100 })
+    expect(xml).toContain('<CustomerQueryRq requestID="1" iterator="Continue" iteratorID="{abc-123}">')
+  })
+
+  it('falls back to iterator="Start" if Continue is requested without an iteratorID', () => {
+    const xml = buildCustomerFullQueryRq({ iterator: 'Continue' })
+    expect(xml).toContain('iterator="Start"')
+    expect(xml).not.toContain('iterator="Continue"')
+  })
+})
+
+describe('parseCustomerFullQueryRs', () => {
+  it('extracts every CustomerRet, not just the first', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <CustomerQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <CustomerRet><ListID>ID-1</ListID><FullName>Acme A</FullName><CompanyName>Acme Co</CompanyName><Email>a@acme.com</Email></CustomerRet>
+        <CustomerRet><ListID>ID-2</ListID><FullName>Acme B</FullName></CustomerRet>
+      </CustomerQueryRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseCustomerFullQueryRs(xml)
+    expect(result.status.ok).toBe(true)
+    expect(result.customers).toHaveLength(2)
+    expect(result.customers[0]).toEqual({ listId: 'ID-1', fullName: 'Acme A', companyName: 'Acme Co', email: 'a@acme.com', phone: undefined })
+    expect(result.customers[1]).toEqual({ listId: 'ID-2', fullName: 'Acme B', companyName: undefined, email: undefined, phone: undefined })
+  })
+
+  it('reads iteratorID and iteratorRemainingCount off CustomerQueryRs when more pages remain', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <CustomerQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorID="{iter-1}" iteratorRemainingCount="42">
+        <CustomerRet><ListID>ID-1</ListID><FullName>Acme A</FullName></CustomerRet>
+      </CustomerQueryRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseCustomerFullQueryRs(xml)
+    expect(result.iteratorId).toBe('{iter-1}')
+    expect(result.remainingCount).toBe(42)
+  })
+
+  it('handles a single CustomerRet (not wrapped in an array)', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <CustomerQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorRemainingCount="0">
+        <CustomerRet><ListID>ID-1</ListID><FullName>Acme A</FullName></CustomerRet>
+      </CustomerQueryRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseCustomerFullQueryRs(xml)
+    expect(result.customers).toHaveLength(1)
+    expect(result.remainingCount).toBe(0)
+  })
+
+  it('returns an empty customer list and no crash on a non-ok status', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <CustomerQueryRs requestID="1" statusCode="3000" statusSeverity="Error" statusMessage="Bad request">
+      </CustomerQueryRs>
+    </QBXMLMsgsRs></QBXML>`
+    const result = parseCustomerFullQueryRs(xml)
+    expect(result.status.ok).toBe(false)
+    expect(result.customers).toEqual([])
   })
 })
 

@@ -4,6 +4,7 @@ import { XMLParser } from 'fast-xml-parser'
 import { getAdminClient } from '@/lib/supabase'
 import {
   buildCustomerAddRq,
+  buildCustomerFullQueryRq,
   buildCustomerQueryRq,
   buildItemAddRq,
   buildItemQueryRq,
@@ -12,6 +13,7 @@ import {
   fallbackPoNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
+  parseCustomerFullQueryRs,
   parseCustomerQueryRs,
   parseItemAddRs,
   parseItemQueryRs,
@@ -19,6 +21,8 @@ import {
   xmlEscape,
   type SalesOrderLine,
 } from '@/lib/qbxml'
+
+const CUSTOMER_PULL_PAGE_SIZE = 100
 
 // Income account new auto-created items post to (SalesAndPurchase/
 // IncomeAccountRef in buildItemAddRq) — must exactly match an account name
@@ -122,9 +126,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 // ── Session / link helpers ──────────────────────────────────────────────
 
+type PendingRequestKind =
+  | 'customer_query'
+  | 'customer_add'
+  | 'item_query'
+  | 'item_add'
+  | 'sales_order_add'
+  // Not tied to a single order — pending_order_id/pending_ref stay null;
+  // continuation state (the iterator) lives in qb_customer_pull_state
+  // instead, since it must survive across separate authenticate() tickets.
+  | 'customer_full_query'
+
 interface QbSession {
   ticket: string
-  pending_request_kind: 'customer_query' | 'customer_add' | 'item_query' | 'item_add' | 'sales_order_add' | null
+  pending_request_kind: PendingRequestKind | null
   pending_order_id: string | null
   pending_ref: string | null
 }
@@ -135,11 +150,45 @@ async function getSession(db: Db, ticket: string): Promise<QbSession | null> {
   return data as QbSession | null
 }
 
-async function setPending(db: Db, ticket: string, kind: QbSession['pending_request_kind'], orderId: string, ref: string) {
+async function setPending(
+  db: Db,
+  ticket: string,
+  kind: PendingRequestKind,
+  orderId: string | null,
+  ref: string | null,
+) {
   await db
     .from('qb_sessions')
     .update({ pending_request_kind: kind, pending_order_id: orderId, pending_ref: ref })
     .eq('ticket', ticket)
+}
+
+interface QbCustomerPullState {
+  status: 'idle' | 'requested' | 'in_progress' | 'done' | 'error'
+  iterator_id: string | null
+  pulled_count: number
+}
+
+async function getCustomerPullState(db: Db): Promise<QbCustomerPullState | null> {
+  const { data } = await db
+    .from('qb_customer_pull_state')
+    .select('status, iterator_id, pulled_count')
+    .eq('id', 1)
+    .maybeSingle()
+  return data as QbCustomerPullState | null
+}
+
+async function updateCustomerPullState(db: Db, patch: Record<string, unknown>) {
+  await db
+    .from('qb_customer_pull_state')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+}
+
+function buildCustomerPullRequest(pull: { iterator_id: string | null }): string {
+  return pull.iterator_id
+    ? buildCustomerFullQueryRq({ iterator: 'Continue', iteratorID: pull.iterator_id, maxReturned: CUSTOMER_PULL_PAGE_SIZE })
+    : buildCustomerFullQueryRq({ iterator: 'Start', maxReturned: CUSTOMER_PULL_PAGE_SIZE })
 }
 
 async function clearPending(db: Db, ticket: string) {
@@ -216,6 +265,28 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
       'sendRequestXMLResult',
       xmlEscape(buildItemAddRq(session.pending_ref, QB_INCOME_ACCOUNT_NAME)),
     )
+  }
+
+  // Continue an admin-triggered full customer-list pull already in progress
+  // in this same session (see receiveResponseXML's customer_full_query
+  // branch). Runs to completion (across as many sendRequestXML/
+  // receiveResponseXML round trips as QuickBooks' iterator needs) before any
+  // per-order sync work below, since it's a rare, admin-initiated operation
+  // rather than routine traffic.
+  if (session.pending_request_kind === 'customer_full_query') {
+    const pull = await getCustomerPullState(db)
+    if (pull && pull.status === 'in_progress') {
+      return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerPullRequest(pull)))
+    }
+    await clearPending(db, ticket)
+  } else if (!session.pending_request_kind) {
+    // Not mid any other flow — check whether admin has requested a pull.
+    const pull = await getCustomerPullState(db)
+    if (pull && (pull.status === 'requested' || pull.status === 'in_progress')) {
+      if (pull.status === 'requested') await updateCustomerPullState(db, { status: 'in_progress' })
+      await setPending(db, ticket, 'customer_full_query', null, null)
+      return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerPullRequest(pull)))
+    }
   }
 
   const { data: queueRow } = await db
@@ -395,6 +466,39 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
         .eq('id', session.pending_order_id)
     } else {
       await markQueueError(db, session.pending_order_id, result.status.message || 'SalesOrderAdd failed', responseXml)
+    }
+  } else if (session?.pending_request_kind === 'customer_full_query') {
+    const result = parseCustomerFullQueryRs(responseXml)
+    const pull = await getCustomerPullState(db)
+    const pulledSoFar = (pull?.pulled_count ?? 0) + result.customers.length
+    if (!result.status.ok) {
+      await updateCustomerPullState(db, { status: 'error', error_message: result.status.message || 'Customer pull failed' })
+    } else {
+      if (result.customers.length > 0) {
+        await db.from('qb_customer_directory').upsert(
+          result.customers.map((c) => ({
+            qb_customer_list_id: c.listId,
+            full_name: c.fullName,
+            company_name: c.companyName ?? null,
+            email: c.email ?? null,
+            phone: c.phone ?? null,
+            pulled_at: new Date().toISOString(),
+          })),
+        )
+      }
+      if (result.iteratorId && (result.remainingCount ?? 0) > 0) {
+        // More pages remain — stay in customer_full_query so the next
+        // sendRequestXML (still in this same session) continues the iterator.
+        await updateCustomerPullState(db, { status: 'in_progress', iterator_id: result.iteratorId, pulled_count: pulledSoFar })
+        shouldClearPending = false
+      } else {
+        await updateCustomerPullState(db, {
+          status: 'done',
+          iterator_id: null,
+          pulled_count: pulledSoFar,
+          completed_at: new Date().toISOString(),
+        })
+      }
     }
   }
 

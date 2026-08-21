@@ -112,6 +112,20 @@ export default function QuickBooksSetupPage() {
                 .qwc file — the file ID is stable, so QuickBooks recognizes it as the same
                 connection rather than a new one.
               </div>
+
+              <a
+                href="/admin/quickbooks/customers"
+                className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 hover:border-red-300 hover:shadow-sm transition-all"
+              >
+                <div>
+                  <p className="font-semibold text-gray-900">Link existing QuickBooks customers</p>
+                  <p className="text-gray-500">
+                    Match a buyer&apos;s email to their existing QuickBooks record before their first
+                    order syncs — avoids creating a duplicate customer.
+                  </p>
+                </div>
+                <span className="text-gray-400">&rarr;</span>
+              </a>
             </div>
           )}
         </div>

@@ -487,6 +487,96 @@ strict about sequence, and a wrong-order element can go completely
 unnoticed by tests that don't assert relative position, exactly like this
 bug did for weeks.
 
+---
+
+**CUSTOMER-MATCHING GAP + FIX, 2026-08-21.** Dragon asked whether order
+info gets matched to *existing* QuickBooks customers or whether everyone
+gets created new. The honest answer: `CustomerQueryRq` has no email
+filter at all (name-only), so a first-time name mismatch between our
+order's company/customer-name text and however that person is already
+filed in QuickBooks silently creates a duplicate customer — the
+`qb_customer_links` cache only protects *repeat* orders from the same
+email, not the first one. Dragon chose the recommended fix: pull
+QuickBooks' full existing customer list and let admin manually pre-link
+real buyers before their first order ever syncs.
+
+**Built (migration `0035_qb_customer_directory.sql`, applied live):**
+- `qb_customer_directory` — every QuickBooks customer pulled (ListID,
+  FullName, CompanyName, Email, Phone).
+- `qb_customer_pull_state` — singleton job tracker (same pattern as
+  `display_settings`), since the pull can span many iterator pages across
+  separate QBWC `authenticate()` tickets (Web Connector opens a new
+  session each poll) — the iterator ID is persisted here, not in
+  `qb_sessions`, so it survives across tickets.
+- `qb_sessions.pending_request_kind` widened to add `customer_full_query`.
+- `lib/qbxml.ts`: `buildCustomerFullQueryRq` (unfiltered `CustomerQueryRq`
+  with `iterator="Start"`/`"Continue"` + `iteratorID`) and
+  `parseCustomerFullQueryRs` (all `CustomerRet` entries, plus the
+  `iteratorID`/`iteratorRemainingCount` attributes off `CustomerQueryRs`
+  itself — verified via a web search of the actual qbXML iterator
+  protocol, not assumed).
+- `app/api/qbwc/route.ts`: `handleSendRequestXML` checks for a
+  requested/in-progress pull (only when the session isn't already mid
+  some other flow) and runs it to completion — across as many
+  `sendRequestXML`/`receiveResponseXML` round trips as needed — before any
+  per-order sync work, since it's a rare admin-triggered operation, not
+  routine traffic.
+- Admin UI: `/admin/quickbooks/customers` (`components/admin/
+  QbCustomerMatcher.tsx`) — "Pull from QuickBooks" button (just flips
+  `qb_customer_pull_state` to `requested`; the actual pull only runs on
+  Web Connector's next poll, or its own "Update Selected"), a live buyer
+  list (every distinct `order_requests.customer_email`, newest order
+  first) showing link status, and a per-row search-and-link UI against
+  `qb_customer_directory`. Linked from `/admin/quickbooks`.
+- `app/admin/api/qbwc/{customer-pull,customer-directory,customer-links}`
+  — the three supporting API routes; all three admin mutations
+  (`qb_customer_pull_requested`, `qb_customer_link_created`,
+  `qb_customer_link_removed`) are audit-logged.
+
+**Verified end-to-end 2026-08-21** against the real server code (no real
+QuickBooks hardware available in-session, so the QuickBooks side was
+simulated with hand-built response XML, same method as the original QBWC
+verification): clicked the real "Pull from QuickBooks" button in the
+browser, forged a `qb_sessions` ticket, then drove two full
+`sendRequestXML`/`receiveResponseXML` round trips against the actual
+`/api/qbwc` route — first response had `iteratorRemainingCount="1"` (2
+fake customers), confirmed `qb_customer_pull_state` went to `in_progress`
+with the real `iteratorID` stored and the next `sendRequestXML`
+correctly emitted `iterator="Continue" iteratorID="{...}"`; second/final
+response had `iteratorRemainingCount="0"` (1 more fake customer),
+confirmed the job completed (`status='done'`, `pulled_count=3`,
+`iterator_id` cleared) and the session then cleanly returned to normal
+(next `sendRequestXML` returned empty — no infinite loop). Reloaded the
+real admin UI and confirmed the 3 fake customers showed up correctly.
+Used a disposable test order (not any of the 7 real buyers already in the
+system) to verify the link flow via the real UI's search-and-link — POST
+worked and showed "Linked" correctly. The **Unlink** button uses
+`confirm()` like the Accounts page's role-change/delete buttons — clicking
+it through browser automation froze that tab's CDP channel for real (not
+just a theoretical risk this time); recovered by closing the tab and
+opening a fresh one (session cookies persist), then verified/cleaned up
+the delete via direct SQL instead of forcing the dialog again. All test
+rows (`qb_customer_directory`, `qb_customer_links`, the disposable order,
+the forged `qb_sessions` ticket) deleted after, and
+`qb_customer_pull_state` reset to `idle`/0 so the UI doesn't imply a real
+pull ever ran.
+
+**Still open:** the actual real-hardware pull (does QuickBooks itself
+accept an unfiltered iterator `CustomerQueryRq` the way I've built it,
+and does the real customer list come back in the expected shape) has
+*not* been confirmed against real QuickBooks yet — only the server-side
+state machine and UI were verified, with QuickBooks' responses simulated.
+That confirmation needs Dragon to click "Pull from QuickBooks" for real
+and let Web Connector's next poll (or a manual "Update Selected") run it.
+
+**How to apply:** never click a button that calls `confirm()`/`alert()`
+through browser automation — verify the underlying mutation via direct
+SQL or a forged request instead, exactly as already done for the Accounts
+page's role-change/delete buttons. If a tab does freeze from one, close
+it and open a fresh one rather than fighting it — session cookies persist
+at the browser-profile level, so a new tab picks up right where the old
+one left off.
+
 **Why:** so a future session picking this up doesn't have to re-derive the
 override-vs-stack decision, the 2FA/secret split, or why `submit_order()`
 needed an explicit `drop function` — none of that is visible from reading

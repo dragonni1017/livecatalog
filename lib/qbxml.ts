@@ -53,6 +53,25 @@ export function buildItemQueryRq(sku: string): string {
   return wrapQbxml(`<ItemQueryRq requestID="1"><FullName>${xmlEscape(sku)}</FullName></ItemQueryRq>`)
 }
 
+// Unfiltered CustomerQueryRq (no <FullName> filter) — pulls QuickBooks'
+// entire existing customer list, paged via the iterator protocol: the first
+// call uses iterator="Start"; the response carries an iteratorID and an
+// iteratorRemainingCount attribute on CustomerQueryRs (see
+// parseCustomerFullQueryRs) — if remaining > 0, the next call passes that
+// same iteratorID back with iterator="Continue" to resume where it left off.
+export function buildCustomerFullQueryRq(args: {
+  iterator: 'Start' | 'Continue'
+  iteratorID?: string | null
+  maxReturned?: number
+}): string {
+  const iterAttr =
+    args.iterator === 'Continue' && args.iteratorID
+      ? ` iterator="Continue" iteratorID="${xmlEscape(args.iteratorID)}"`
+      : ` iterator="Start"`
+  const maxReturnedXml = args.maxReturned ? `<MaxReturned>${args.maxReturned}</MaxReturned>` : ''
+  return wrapQbxml(`<CustomerQueryRq requestID="1"${iterAttr}>${maxReturnedXml}</CustomerQueryRq>`)
+}
+
 // A name-filtered CustomerQueryRq/ItemQueryRq that finds nothing returns
 // statusCode 500 (statusSeverity "Warn"), not an empty success result — the
 // signal callers use to fall back to CustomerAddRq/ItemNonInventoryAddRq
@@ -225,6 +244,47 @@ export function parseCustomerQueryRs(xml: string): QbxmlLookupResult {
   if (!status.ok) return { status }
   const ret = Array.isArray(rs?.CustomerRet) ? rs.CustomerRet[0] : rs?.CustomerRet
   return { status, listId: ret?.ListID, fullName: ret?.FullName }
+}
+
+export interface QbCustomerDirectoryEntry {
+  listId: string
+  fullName: string
+  companyName?: string
+  email?: string
+  phone?: string
+}
+
+export interface CustomerFullQueryResult {
+  status: QbxmlStatus
+  customers: QbCustomerDirectoryEntry[]
+  // Present only while more pages remain — see buildCustomerFullQueryRq.
+  iteratorId?: string
+  remainingCount?: number
+}
+
+export function parseCustomerFullQueryRs(xml: string): CustomerFullQueryResult {
+  const rs = firstRsNode(xml, 'CustomerQueryRs')
+  const status = readStatus(rs)
+  if (!status.ok) return { status, customers: [] }
+
+  const rawRets = rs?.CustomerRet
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rets: any[] = Array.isArray(rawRets) ? rawRets : rawRets ? [rawRets] : []
+  const customers: QbCustomerDirectoryEntry[] = rets
+    .filter((r) => r?.ListID && r?.FullName)
+    .map((r) => ({
+      listId: String(r.ListID),
+      fullName: String(r.FullName),
+      companyName: r.CompanyName ? String(r.CompanyName) : undefined,
+      email: r.Email ? String(r.Email) : undefined,
+      phone: r.Phone ? String(r.Phone) : undefined,
+    }))
+
+  const iteratorId = rs?.['@_iteratorID'] ? String(rs['@_iteratorID']) : undefined
+  const remainingRaw = rs?.['@_iteratorRemainingCount']
+  const remainingCount = remainingRaw !== undefined ? Number(remainingRaw) : undefined
+
+  return { status, customers, iteratorId, remainingCount }
 }
 
 export function parseItemQueryRs(xml: string): QbxmlLookupResult {
