@@ -1,6 +1,6 @@
 ---
 name: project-rep-price-tier-and-qbwc-plan
-description: 2026-08-20 -- Feature 2 rearchitected to header-dropdown tier browsing, THEN a critical price_tiers bug found+fixed same day (percentages were relative to Retail but the stored base price is actually Wholesale -- see the CRITICAL BUG section); Feature 1 (QBWC) all built + verified, only QBWC env vars + real hardware remain
+description: 2026-08-20 -- Feature 2 rearchitected to header-dropdown tier browsing, THEN a critical price_tiers bug found+fixed same day (percentages were relative to Retail but the stored base price is actually Wholesale -- see the CRITICAL BUG section); Feature 1 (QBWC) real hardware test done 2026-08-20/21, several live QuickBooks rejections found+fixed iteratively, now confirmed working end-to-end via qb_sync_queue -- see the REAL HARDWARE TEST RESULTS section
 type: project
 ---
 
@@ -379,6 +379,61 @@ building the `.qwc` file + doing a live hardware test in the same pass):
 
 All code-level work for Feature 1 is done — everything left is
 configuration (env vars) and the physical hardware step.
+
+---
+
+**REAL HARDWARE TEST RESULTS, 2026-08-20/21.** Env vars got set and Dragon
+ran the real QBWC hardware test against his live company file (not a sample
+file — deviates from the plan's original recommendation). It immediately
+surfaced a string of live QuickBooks rejections, fixed one at a time, each
+confirmed against real QuickBooks responses (not simulated):
+1. QBWC1048 cert-check 405 — QBWC does an unauthenticated `GET` against
+   `AppURL` before any real SOAP traffic, to verify the TLS cert; the route
+   only handled `POST`. Fixed by adding a `GET` handler.
+2. `CustomerQueryRq`/`ItemQueryRq` returning "not found" (qbXML status 500)
+   was treated as a hard sync error — now transitions the session to
+   `customer_add`/`item_add` state and issues a `CustomerAddRq`/
+   `ItemNonInventoryAddRq` instead, auto-creating the missing customer/item
+   in QuickBooks on first sync.
+3. Auto-created items posted to a hardcoded income account name
+   (`QB_INCOME_ACCOUNT_NAME`) that didn't exist in the company file as an
+   Income-type account ("Sales Orders" isn't real) — Dragon confirmed the
+   correct account name is "Revenue".
+4. `ItemNonInventoryAddRq` used `SalesAndPurchase` (items both bought and
+   sold, requires a separate `ExpenseAccountRef`) — these auto-created items
+   are sale-only, so QuickBooks rejected with "An expense account must be
+   specified." Fixed to `SalesOrPurchase` (single `AccountRef`).
+5. SalesOrder `RefNumber` has an **11-char cap** in this QuickBooks company
+   file — a 13-char value (`ORD-2026-0012`) was rejected as "too long."
+   `compactRefNumber()` now shortens to `<tier>-<seq>` (e.g. `WHO-0011`) or
+   just `<seq>` for non-rep orders; the full reference code still goes in
+   the SalesOrder's `Memo` field.
+6. `PONumber` falls back to the reference code (or the same compact form if
+   the full code doesn't fit QuickBooks' 25-char field) when no real
+   customer-supplied `po_number` exists — most orders don't have one.
+7. `CustomerAdd` wasn't sending `Phone`/`Email` even though
+   `order_requests.customer_phone`/`customer_email` were always available on
+   every order — added both as optional fields (schema order preserved).
+
+**Confirmed working end-to-end via direct DB query 2026-08-21** (not just
+trusting the fixes): all 4 `converted` orders in `qb_sync_queue` show
+`status='acked'`, `attempt_count=1` (succeeded on the first try, no
+retries needed), `error_message=null`, and `order_requests.entered_in_qb=
+true` for all 4. The remaining "11 orders not yet entered in QB" shown on
+the admin dashboard are orders still sitting in `status='new'` — never
+approved/converted by admin, so never enqueued — **not** sync failures.
+`qb_customer_links` has 1 row, `qb_item_links` has 4 rows, matching the
+scope of what's actually been converted so far.
+
+**Still open:** duplicate-send handling (item 3 above) still hasn't been
+exercised under an actual dropped QBWC connection — the highest-risk
+untested path, now that everything else is confirmed live.
+
+**How to apply:** if a new order fails to sync, check `qb_sync_queue.
+error_message` and `attempt_count` first via direct SQL before assuming
+code is broken — given how many company-file-specific rejections (account
+names, field length caps, item type) already turned up, the next failure
+is more likely another QuickBooks-company-file quirk than a code bug.
 
 **Why:** so a future session picking this up doesn't have to re-derive the
 override-vs-stack decision, the 2FA/secret split, or why `submit_order()`

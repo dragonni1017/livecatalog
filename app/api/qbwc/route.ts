@@ -231,7 +231,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const { data: order, error: orderError } = await db
     .from('order_requests')
-    .select('id, reference_code, customer_name, customer_company, customer_email, po_number')
+    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
     .eq('id', queueRow.order_id)
     .single()
   const { data: items, error: itemsError } = await db
@@ -291,6 +291,16 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
     refNumber: compactRefNumber(order.reference_code),
     memo: order.reference_code,
     poNumber: order.po_number || fallbackPoNumber(order.reference_code),
+    shipAddress: order.ship_address1
+      ? {
+          addr1: order.ship_address1,
+          addr2: order.ship_address2,
+          city: order.ship_city ?? '',
+          state: order.ship_state ?? '',
+          zip: order.ship_zip ?? '',
+          country: order.ship_country,
+        }
+      : null,
     lines,
   })
 

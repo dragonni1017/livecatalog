@@ -77,6 +77,12 @@ export interface CheckoutContact {
   poNumber?: string
   // Optional sales-rep email to CC on the order notification.
   ccEmail?: string
+  // Ship-to address, sent to QuickBooks as the Sales Order's ShipAddress.
+  shipAddress1?: string
+  shipAddress2?: string
+  shipCity?: string
+  shipState?: string
+  shipZip?: string
 }
 
 export interface OrderRequest {
@@ -103,6 +109,14 @@ export interface OrderRequest {
   rep_user_id: string | null
   applied_tier_code: string | null
   applied_tier_discount_percent: number | null
+  // Ship-to address — see migration 0034_order_ship_address.sql. Sent to
+  // QuickBooks as the Sales Order's ShipAddress.
+  ship_address1: string | null
+  ship_address2: string | null
+  ship_city: string | null
+  ship_state: string | null
+  ship_zip: string | null
+  ship_country: string | null
   created_at: string
   updated_at: string
 }

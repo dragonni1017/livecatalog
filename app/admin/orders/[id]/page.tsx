@@ -203,6 +203,19 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
             </dd>
             <dt className="text-gray-500">PO number</dt>
             <dd className="col-span-2 text-gray-900">{order.po_number || '—'}</dd>
+            <dt className="text-gray-500">Ship to</dt>
+            <dd className="col-span-2 text-gray-900">
+              {order.ship_address1 ? (
+                <>
+                  {order.ship_address1}
+                  {order.ship_address2 ? <>, {order.ship_address2}</> : null}
+                  <br />
+                  {order.ship_city}, {order.ship_state} {order.ship_zip}
+                </>
+              ) : (
+                '—'
+              )}
+            </dd>
           </dl>
           {order.notes && (
             <div className="mt-4 border-t border-gray-100 pt-3">

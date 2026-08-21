@@ -82,12 +82,23 @@ export default async function SalesOrderPrintPage({ params }: PrintPageProps) {
       </header>
 
       {/* Customer */}
-      <section className="mt-6">
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Customer</h3>
-        <p className="font-semibold">{order.customer_name}</p>
-        {order.customer_company && <p className="text-sm">{order.customer_company}</p>}
-        <p className="text-sm">{order.customer_email}</p>
-        {order.customer_phone && <p className="text-sm">{order.customer_phone}</p>}
+      <section className="mt-6 grid grid-cols-2 gap-6">
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Customer</h3>
+          <p className="font-semibold">{order.customer_name}</p>
+          {order.customer_company && <p className="text-sm">{order.customer_company}</p>}
+          <p className="text-sm">{order.customer_email}</p>
+          {order.customer_phone && <p className="text-sm">{order.customer_phone}</p>}
+        </div>
+        {order.ship_address1 && (
+          <div>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Ship To</h3>
+            <p className="text-sm">
+              {order.ship_address1}{order.ship_address2 ? `, ${order.ship_address2}` : ''}
+            </p>
+            <p className="text-sm">{order.ship_city}, {order.ship_state} {order.ship_zip}</p>
+          </div>
+        )}
       </section>
 
       {/* Items */}

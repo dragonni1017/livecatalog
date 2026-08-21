@@ -13,6 +13,11 @@ interface SavedContact {
   phone: string
   company: string
   po_number: string
+  ship_address1: string
+  ship_address2: string
+  ship_city: string
+  ship_state: string
+  ship_zip: string
 }
 
 const LS_CONTACT_KEY = 'lyu_contact'
@@ -109,6 +114,11 @@ export default function CartPage() {
         if (saved.phone) { next.phone = saved.phone; didPrefill = true }
         if (saved.company) { next.company = saved.company; didPrefill = true }
         if (saved.po_number) { next.poNumber = saved.po_number; didPrefill = true }
+        if (saved.ship_address1) { next.shipAddress1 = saved.ship_address1; didPrefill = true }
+        if (saved.ship_address2) { next.shipAddress2 = saved.ship_address2; didPrefill = true }
+        if (saved.ship_city) { next.shipCity = saved.ship_city; didPrefill = true }
+        if (saved.ship_state) { next.shipState = saved.ship_state; didPrefill = true }
+        if (saved.ship_zip) { next.shipZip = saved.ship_zip; didPrefill = true }
         return next
       })
       if (didPrefill) setPreFilled(true)
@@ -124,6 +134,10 @@ export default function CartPage() {
     setError(null)
     if (!contact.name.trim() || !contact.email.trim()) {
       setError('Name and email are required.')
+      return
+    }
+    if (!contact.shipAddress1?.trim() || !contact.shipCity?.trim() || !contact.shipState?.trim() || !contact.shipZip?.trim()) {
+      setError('A shipping address (street, city, state, ZIP) is required.')
       return
     }
     if (items.length === 0) {
@@ -155,6 +169,11 @@ export default function CartPage() {
           phone: contact.phone ?? '',
           company: contact.company ?? '',
           po_number: contact.poNumber ?? '',
+          ship_address1: contact.shipAddress1 ?? '',
+          ship_address2: contact.shipAddress2 ?? '',
+          ship_city: contact.shipCity ?? '',
+          ship_state: contact.shipState ?? '',
+          ship_zip: contact.shipZip ?? '',
         } satisfies SavedContact))
       } catch {
         /* localStorage unavailable */
@@ -347,6 +366,22 @@ export default function CartPage() {
               <Field label="Placed by (rep)" value={contact.placedByRep ?? ''} onChange={(v) => setContact({ ...contact, placedByRep: v })} />
               <Field label="CC sales rep (email)" type="email" value={contact.ccEmail ?? ''} onChange={(v) => setContact({ ...contact, ccEmail: v })} />
               <Field label="PO number" value={contact.poNumber ?? ''} onChange={(v) => setContact({ ...contact, poNumber: v })} />
+              <Field
+                label="Ship to — address *"
+                value={contact.shipAddress1 ?? ''}
+                onChange={(v) => setContact({ ...contact, shipAddress1: v })}
+                required
+              />
+              <Field
+                label="Address line 2"
+                value={contact.shipAddress2 ?? ''}
+                onChange={(v) => setContact({ ...contact, shipAddress2: v })}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="City *" value={contact.shipCity ?? ''} onChange={(v) => setContact({ ...contact, shipCity: v })} required />
+                <Field label="State *" value={contact.shipState ?? ''} onChange={(v) => setContact({ ...contact, shipState: v })} required />
+                <Field label="ZIP *" value={contact.shipZip ?? ''} onChange={(v) => setContact({ ...contact, shipZip: v })} required />
+              </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
                 <textarea
@@ -378,7 +413,11 @@ export default function CartPage() {
                   type="button"
                   onClick={() => {
                     try { localStorage.removeItem(LS_CONTACT_KEY) } catch {}
-                    setContact({ name: '', email: '', phone: '', company: '', poNumber: '', placedByRep: contact.placedByRep })
+                    setContact({
+                      name: '', email: '', phone: '', company: '', poNumber: '',
+                      shipAddress1: '', shipAddress2: '', shipCity: '', shipState: '', shipZip: '',
+                      placedByRep: contact.placedByRep,
+                    })
                     setPreFilled(false)
                   }}
                   className="underline hover:text-gray-600"

@@ -118,6 +118,11 @@ export async function insertOrder(args: InsertOrderArgs): Promise<InsertOrderRes
       p_rep_user_id:                   repUserId ?? null,
       p_applied_tier_code:             appliedTierCode ?? null,
       p_applied_tier_discount_percent: appliedTierDiscountPercent ?? null,
+      p_ship_address1:                 contact.shipAddress1?.trim() || null,
+      p_ship_address2:                 contact.shipAddress2?.trim() || null,
+      p_ship_city:                     contact.shipCity?.trim() || null,
+      p_ship_state:                    contact.shipState?.trim() || null,
+      p_ship_zip:                      contact.shipZip?.trim() || null,
     })
     if (!error) {
       orderId = data as string

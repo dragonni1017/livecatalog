@@ -20,6 +20,14 @@ export function validateOrderInput(body: unknown): OrderInputResult {
   if (!contact.name?.trim() || !contact.email?.trim()) {
     return { ok: false, error: 'Name and email are required.', status: 400 }
   }
+  if (
+    !contact.shipAddress1?.trim() ||
+    !contact.shipCity?.trim() ||
+    !contact.shipState?.trim() ||
+    !contact.shipZip?.trim()
+  ) {
+    return { ok: false, error: 'A shipping address (street, city, state, ZIP) is required.', status: 400 }
+  }
 
   const items = rawItems.filter(
     (i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0,

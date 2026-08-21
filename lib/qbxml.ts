@@ -96,16 +96,41 @@ export interface SalesOrderLine {
   rateCents: number
 }
 
+export interface QbAddress {
+  addr1: string
+  addr2?: string | null
+  city: string
+  state: string
+  zip: string
+  country?: string | null
+}
+
+function buildAddressXml(tag: string, addr: QbAddress): string {
+  const addr2Xml = addr.addr2 ? `\n      <Addr2>${xmlEscape(addr.addr2)}</Addr2>` : ''
+  const countryXml = addr.country ? `\n      <Country>${xmlEscape(addr.country)}</Country>` : ''
+  return `\n    <${tag}>
+      <Addr1>${xmlEscape(addr.addr1)}</Addr1>${addr2Xml}
+      <City>${xmlEscape(addr.city)}</City>
+      <State>${xmlEscape(addr.state)}</State>
+      <PostalCode>${xmlEscape(addr.zip)}</PostalCode>${countryXml}
+    </${tag}>`
+}
+
 // QuickBooks' RefNumber field is capped at 11 characters (confirmed live —
 // QuickBooks rejected a 13-char RefNumber with "too long"), too short for
 // our full ORD-<year>-<seq>[-<tier>] reference codes. refNumber here must
 // already be pre-shortened by the caller to fit; memo carries the full
 // reference code for traceability instead.
+//
+// Element order below (CustomerRef, RefNumber, ShipAddress, PONumber, Memo,
+// then line items) matches qbXML's SalesOrderAdd OSR schema order exactly —
+// QuickBooks rejects out-of-order elements, it's not just cosmetic.
 export function buildSalesOrderAddRq(args: {
   qbCustomerListId: string
   refNumber: string
   memo: string
   poNumber?: string | null
+  shipAddress?: QbAddress | null
   lines: SalesOrderLine[]
 }): string {
   const lineXml = args.lines
@@ -120,13 +145,14 @@ export function buildSalesOrderAddRq(args: {
     )
     .join('')
 
+  const shipXml = args.shipAddress ? buildAddressXml('ShipAddress', args.shipAddress) : ''
   const poXml = args.poNumber ? `\n    <PONumber>${xmlEscape(args.poNumber)}</PONumber>` : ''
 
   return wrapQbxml(`<SalesOrderAddRq requestID="1">
   <SalesOrderAdd>
     <CustomerRef><ListID>${xmlEscape(args.qbCustomerListId)}</ListID></CustomerRef>
-    <RefNumber>${xmlEscape(args.refNumber)}</RefNumber>
-    <Memo>${xmlEscape(args.memo)}</Memo>${poXml}${lineXml}
+    <RefNumber>${xmlEscape(args.refNumber)}</RefNumber>${shipXml}${poXml}
+    <Memo>${xmlEscape(args.memo)}</Memo>${lineXml}
   </SalesOrderAdd>
 </SalesOrderAddRq>`)
 }

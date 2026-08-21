@@ -76,6 +76,65 @@ describe('buildSalesOrderAddRq', () => {
     })
     expect(xml).not.toContain('PONumber')
   })
+
+  it('includes ShipAddress with Addr2/Country omitted when not given', () => {
+    const xml = buildSalesOrderAddRq({
+      qbCustomerListId: 'X',
+      refNumber: '0013',
+      memo: 'ORD-2026-0013',
+      shipAddress: { addr1: '123 Main St', city: 'Vernon', state: 'CA', zip: '90058' },
+      lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
+    })
+    expect(xml).toContain('<ShipAddress>')
+    expect(xml).toContain('<Addr1>123 Main St</Addr1>')
+    expect(xml).toContain('<City>Vernon</City>')
+    expect(xml).toContain('<State>CA</State>')
+    expect(xml).toContain('<PostalCode>90058</PostalCode>')
+    expect(xml).not.toContain('<Addr2>')
+    expect(xml).not.toContain('<Country>')
+  })
+
+  it('includes Addr2 and Country when given', () => {
+    const xml = buildSalesOrderAddRq({
+      qbCustomerListId: 'X',
+      refNumber: '0013',
+      memo: 'ORD-2026-0013',
+      shipAddress: { addr1: '123 Main St', addr2: 'Suite 4', city: 'Vernon', state: 'CA', zip: '90058', country: 'US' },
+      lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
+    })
+    expect(xml).toContain('<Addr2>Suite 4</Addr2>')
+    expect(xml).toContain('<Country>US</Country>')
+  })
+
+  it('omits ShipAddress entirely when none is given', () => {
+    const xml = buildSalesOrderAddRq({
+      qbCustomerListId: 'X',
+      refNumber: '0013',
+      memo: 'ORD-2026-0013',
+      lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
+    })
+    expect(xml).not.toContain('ShipAddress')
+  })
+
+  it('orders elements per the qbXML SalesOrderAdd OSR schema: RefNumber, ShipAddress, PONumber, Memo, line items', () => {
+    const xml = buildSalesOrderAddRq({
+      qbCustomerListId: 'X',
+      refNumber: '0014',
+      memo: 'ORD-2026-0014',
+      poNumber: 'PO-1',
+      shipAddress: { addr1: '123 Main St', city: 'Vernon', state: 'CA', zip: '90058' },
+      lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
+    })
+    const refIdx = xml.indexOf('<RefNumber>')
+    const shipIdx = xml.indexOf('<ShipAddress>')
+    const poIdx = xml.indexOf('<PONumber>')
+    const memoIdx = xml.indexOf('<Memo>')
+    const lineIdx = xml.indexOf('<SalesOrderLineAdd>')
+    expect(refIdx).toBeLessThan(shipIdx)
+    expect(shipIdx).toBeLessThan(poIdx)
+    expect(poIdx).toBeLessThan(memoIdx)
+    expect(memoIdx).toBeLessThan(lineIdx)
+  })
 })
 
 describe('compactRefNumber', () => {

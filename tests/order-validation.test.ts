@@ -6,6 +6,10 @@ const validContact = {
   email: 'jane@example.com',
   phone: '555-1234',
   company: 'Acme Co',
+  shipAddress1: '123 Main St',
+  shipCity: 'Vernon',
+  shipState: 'CA',
+  shipZip: '90058',
 }
 
 const validItems = [{ productId: 'abc-123', qty: 2 }]
@@ -30,6 +34,14 @@ describe('validateOrderInput', () => {
     const result = validateOrderInput({ contact: { ...validContact, email: '' }, items: validItems })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.status).toBe(400)
+  })
+
+  it('rejects when the shipping address is incomplete', () => {
+    for (const field of ['shipAddress1', 'shipCity', 'shipState', 'shipZip'] as const) {
+      const result = validateOrderInput({ contact: { ...validContact, [field]: '' }, items: validItems })
+      expect(result.ok, `expected rejection when ${field} is missing`).toBe(false)
+      if (!result.ok) expect(result.status).toBe(400)
+    }
   })
 
   it('rejects when name is whitespace only', () => {
