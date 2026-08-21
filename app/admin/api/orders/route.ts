@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest) {
     // Fetch current values before updating so we can record old_value in the audit log
     const { data: current } = await db
       .from('order_requests')
-      .select('status, entered_in_qb')
+      .select('status, entered_in_qb, reference_code')
       .eq('id', id)
       .single()
 
@@ -84,6 +84,38 @@ export async function PATCH(request: NextRequest) {
         console.error('[admin/orders PATCH] qb_sync_queue enqueue failed:', queueError.message)
       } else if (!queueError) {
         await logAudit({ action: 'order_qb_enqueued', entity_type: 'order', entity_id: id })
+      }
+    }
+
+    // Converting is also the moment stock actually leaves the building (see
+    // docs/LIVE-INVENTORY-COUNT-HANDOFF.md) — decrement each line item via
+    // adjust_stock() (atomic delta + its own stock_adjustments audit row,
+    // migration 0018), same primitive the single/bulk stock-edit endpoints
+    // already use. Guarded on the *transition* into 'converted' (current
+    // status wasn't already 'converted'), not just the target status, so
+    // re-saving an already-converted order never double-decrements — the
+    // qb_sync_queue guard above uses a unique constraint for the same
+    // reason, this uses the old/new status comparison instead since
+    // adjust_stock() has no natural per-order uniqueness key to conflict on.
+    if (hasStatus && body.status === 'converted' && current?.status !== 'converted') {
+      const { data: items } = await db
+        .from('order_items')
+        .select('sku, qty')
+        .eq('order_id', id)
+      const reason = `order fulfilled: ${current?.reference_code ?? id}`
+      const results = await Promise.allSettled(
+        (items ?? []).map((item) =>
+          db.rpc('adjust_stock', {
+            p_sku: item.sku,
+            p_delta: -item.qty,
+            p_reason: reason,
+            p_changed_by_email: 'admin',
+          }),
+        ),
+      )
+      const failed = results.filter((r) => r.status === 'rejected')
+      if (failed.length > 0) {
+        console.error('[admin/orders PATCH] stock decrement failed for some items:', failed)
       }
     }
 
