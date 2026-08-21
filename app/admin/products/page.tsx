@@ -146,7 +146,7 @@ export default async function AdminProductsPage({
         </form>
 
         {/* Table with bulk selection */}
-        <BulkStockTable products={products} />
+        <BulkStockTable products={products} categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name }))} />
       </div>
     </div>
   )

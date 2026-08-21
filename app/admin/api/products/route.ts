@@ -102,6 +102,16 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'volume_tiers must be an array or null' }, { status: 400 })
       }
     }
+    if ('category_id' in body) {
+      const val = body.category_id
+      if (val === null) {
+        updates.category_id = null
+      } else if (typeof val === 'string' && val.trim()) {
+        updates.category_id = val.trim()
+      } else {
+        return NextResponse.json({ error: 'category_id must be a string or null' }, { status: 400 })
+      }
+    }
     if ('low_stock_threshold' in body) {
       const val = body.low_stock_threshold
       if (val === null) {

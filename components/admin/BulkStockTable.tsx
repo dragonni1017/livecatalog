@@ -27,11 +27,17 @@ interface Product {
   category: { id: string; name: string } | null
 }
 
-interface Props {
-  products: Product[]
+interface Category {
+  id: string
+  name: string
 }
 
-export default function BulkStockTable({ products }: Props) {
+interface Props {
+  products: Product[]
+  categories: Category[]
+}
+
+export default function BulkStockTable({ products, categories }: Props) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [mode, setMode] = useState<'adjust' | 'set'>('adjust')
@@ -183,6 +189,8 @@ export default function BulkStockTable({ products }: Props) {
                         volumeTiers={p.volume_tiers ?? []}
                         priceCents={p.price_cents}
                         unitType={p.unit_type}
+                        categoryId={p.category?.id ?? null}
+                        categories={categories}
                       />
                     </td>
                   </tr>

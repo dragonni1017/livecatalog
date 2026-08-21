@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface VolumeTier { min_qty: number; price_cents: number }
+interface Category { id: string; name: string }
 type UnitType = 'pc' | 'case' | 'box' | 'pack'
 
 const UNIT_TYPE_LABELS: Record<UnitType, string> = {
@@ -22,9 +23,11 @@ interface Props {
   volumeTiers?: VolumeTier[]
   priceCents: number
   unitType: UnitType
+  categoryId: string | null
+  categories: Category[]
 }
 
-export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [], priceCents, unitType }: Props) {
+export default function ProductEditButton({ id, name, description, imageUrl, imageUrls = [], volumeTiers = [], priceCents, unitType, categoryId, categories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
@@ -34,6 +37,7 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
     image_urls_text: imageUrls.join('\n'),
     price: (priceCents / 100).toFixed(2),
     unit_type: unitType,
+    category_id: categoryId ?? '',
   })
   const [tiers, setTiers] = useState<VolumeTier[]>(volumeTiers)
   const [saving, setSaving] = useState(false)
@@ -47,6 +51,7 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
       image_urls_text: imageUrls.join('\n'),
       price: (priceCents / 100).toFixed(2),
       unit_type: unitType,
+      category_id: categoryId ?? '',
     })
     setTiers(volumeTiers)
     setError(null)
@@ -97,6 +102,7 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
           volume_tiers: tiers.length > 0 ? tiers : null,
           price_cents: priceCents,
           unit_type: form.unit_type,
+          category_id: form.category_id || null,
         }),
       })
       const data = await res.json()
@@ -142,6 +148,19 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Category</label>
+                <select
+                  value={form.category_id}
+                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                >
+                  <option value="">— Uncategorized —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
