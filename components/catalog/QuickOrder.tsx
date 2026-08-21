@@ -39,7 +39,7 @@ export default function QuickOrder() {
 
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ added: number; lines: number; notFound: string[] } | null>(null)
+  const [result, setResult] = useState<{ added: number; lines: number; notFound: string[]; outOfStock: string[] } | null>(null)
 
   async function submit() {
     const parsed = parseLines(text)
@@ -58,10 +58,17 @@ export default function QuickOrder() {
 
       let added = 0
       const notFound: string[] = []
+      const outOfStock: string[] = []
       for (const { sku, qty } of parsed) {
         const p = bySku.get(sku)
         if (!p) {
           notFound.push(sku)
+          continue
+        }
+        // Same threshold as AddToCartButton — never add what the normal
+        // per-product flow would block.
+        if (p.stock_qty <= 0) {
+          outOfStock.push(sku)
           continue
         }
         addItem(
@@ -70,9 +77,9 @@ export default function QuickOrder() {
         )
         added += qty
       }
-      setResult({ added, lines: parsed.length, notFound })
+      setResult({ added, lines: parsed.length, notFound, outOfStock })
     } catch {
-      setResult({ added: 0, lines: parsed.length, notFound: [] })
+      setResult({ added: 0, lines: parsed.length, notFound: [], outOfStock: [] })
     } finally {
       setBusy(false)
     }
@@ -128,6 +135,12 @@ export default function QuickOrder() {
               <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">
                 Not found ({result.notFound.length}):{' '}
                 <span className="font-mono">{result.notFound.join(', ')}</span>
+              </p>
+            )}
+            {result.outOfStock.length > 0 && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">
+                Out of stock, not added ({result.outOfStock.length}):{' '}
+                <span className="font-mono">{result.outOfStock.join(', ')}</span>
               </p>
             )}
           </div>

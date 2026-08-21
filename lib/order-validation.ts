@@ -1,6 +1,8 @@
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS, formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export interface IncomingItem {
   productId: string
   qty: number
@@ -19,6 +21,9 @@ export function validateOrderInput(body: unknown): OrderInputResult {
 
   if (!contact.name?.trim() || !contact.email?.trim()) {
     return { ok: false, error: 'Name and email are required.', status: 400 }
+  }
+  if (!EMAIL_RE.test(contact.email.trim())) {
+    return { ok: false, error: 'Please enter a valid email address.', status: 400 }
   }
   if (
     !contact.shipAddress1?.trim() ||

@@ -15,7 +15,7 @@ interface LookupProduct {
 type CsvRow = {
   sku: string
   qty: number
-  status: 'pending' | 'valid' | 'invalid'
+  status: 'pending' | 'valid' | 'invalid' | 'outOfStock'
   productName?: string
 }
 
@@ -68,9 +68,11 @@ export default function CsvUploadPanel({ addItem }: CsvUploadPanelProps) {
       setCsvRows(
         parsed.map((p) => {
           const match = bySku.get(p.sku)
-          return match
-            ? { ...p, status: 'valid', productName: match.name }
-            : { ...p, status: 'invalid' }
+          if (!match) return { ...p, status: 'invalid' }
+          // Same threshold as AddToCartButton — never add what the normal
+          // per-product flow would block.
+          if (match.stock_qty <= 0) return { ...p, status: 'outOfStock', productName: match.name }
+          return { ...p, status: 'valid', productName: match.name }
         }),
       )
     } catch {
@@ -121,6 +123,7 @@ export default function CsvUploadPanel({ addItem }: CsvUploadPanelProps) {
 
   const validCount = csvRows.filter((r) => r.status === 'valid').length
   const invalidCount = csvRows.filter((r) => r.status === 'invalid').length
+  const outOfStockCount = csvRows.filter((r) => r.status === 'outOfStock').length
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -172,6 +175,8 @@ export default function CsvUploadPanel({ addItem }: CsvUploadPanelProps) {
                     <td className="px-3 py-2">
                       {row.status === 'valid' ? (
                         <span className="text-green-700">{row.productName}</span>
+                      ) : row.status === 'outOfStock' ? (
+                        <span className="text-amber-600">Out of stock — {row.productName}</span>
                       ) : row.status === 'invalid' ? (
                         <span className="text-red-600">Not found</span>
                       ) : (
@@ -203,6 +208,11 @@ export default function CsvUploadPanel({ addItem }: CsvUploadPanelProps) {
             {invalidCount > 0 && (
               <span className="text-sm text-red-600">
                 {invalidCount} SKU{invalidCount === 1 ? '' : 's'} not found
+              </span>
+            )}
+            {outOfStockCount > 0 && (
+              <span className="text-sm text-amber-600">
+                {outOfStockCount} out of stock, not added
               </span>
             )}
             <button
