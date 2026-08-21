@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getSessionUser } from '@/lib/auth-server'
 import { getAdminClient } from '@/lib/supabase'
 import { formatTierAdjustment } from '@/lib/order-rules'
+import SignOutButton from '@/components/rep/SignOutButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,12 +40,7 @@ export default async function RepHomePage() {
             >
               2FA setup
             </Link>
-            <a
-              href="/api/rep/auth?action=logout"
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              Sign out
-            </a>
+            <SignOutButton />
           </div>
         </div>
 
