@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import BulkStockTable from '@/components/admin/BulkStockTable'
+import ProductCreateButton from '@/components/admin/ProductCreateButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,7 @@ export default async function AdminProductsPage({
             </Link>
             <h1 className="mt-2 text-2xl font-bold text-gray-900">Products &amp; Stock</h1>
           </div>
+          <ProductCreateButton categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name }))} />
         </div>
 
         {/* Counts */}
