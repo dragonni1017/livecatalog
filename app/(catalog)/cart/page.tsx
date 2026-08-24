@@ -22,6 +22,11 @@ interface SavedContact {
 
 const LS_CONTACT_KEY = 'lyu_contact'
 const LS_DRAFTS_KEY = 'lyu_drafts'
+// Separate from LS_CONTACT_KEY (which only stores reusable contact/shipping
+// fields, written at submit time): this is a live draft of the order-specific
+// notes + ship-by date, saved on every keystroke so they survive the customer
+// navigating away to keep shopping and coming back before submitting.
+const LS_NOTES_DRAFT_KEY = 'lyu_order_notes_draft'
 
 export default function CartPage() {
   const { items, subtotalCents, count, setQty, removeItem, clear, addItem, updatePrices, hydrated } = useCart()
@@ -34,6 +39,7 @@ export default function CartPage() {
   const [draftSaved, setDraftSaved] = useState(false)
   const [requiredShipDate, setRequiredShipDate] = useState('')
   const [reps, setReps] = useState<string[]>([])
+  const [notesHydrated, setNotesHydrated] = useState(false)
 
   // Load draft names from localStorage on mount. One-time hydration from an
   // external store (can't read on the server), not a reactive setState loop.
@@ -47,6 +53,46 @@ export default function CartPage() {
       /* localStorage unavailable */
     }
   }, [])
+
+  // Restore any in-progress notes / ship-by date from a previous visit this
+  // order, same one-time-hydration pattern as the cart itself (lib/cart-context).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LS_NOTES_DRAFT_KEY)
+      const draft: { notes?: string; requiredShipDate?: string } = raw ? JSON.parse(raw) : {}
+      if (draft.notes) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setContact((c) => ({ ...c, notes: draft.notes }))
+      }
+      if (draft.requiredShipDate) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setRequiredShipDate(draft.requiredShipDate)
+      }
+    } catch {
+      /* localStorage unavailable */
+    } finally {
+      setNotesHydrated(true)
+    }
+  }, [])
+
+  // Save the notes/ship-by draft on every change, once hydration above has
+  // run (otherwise the initial empty state would overwrite a saved draft
+  // before it's had a chance to load).
+  useEffect(() => {
+    if (!notesHydrated) return
+    try {
+      if (contact.notes || requiredShipDate) {
+        window.localStorage.setItem(
+          LS_NOTES_DRAFT_KEY,
+          JSON.stringify({ notes: contact.notes ?? '', requiredShipDate }),
+        )
+      } else {
+        window.localStorage.removeItem(LS_NOTES_DRAFT_KEY)
+      }
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, [contact.notes, requiredShipDate, notesHydrated])
 
   function handleSaveDraft() {
     if (items.length === 0) return
@@ -235,6 +281,11 @@ export default function CartPage() {
           ship_state: contact.shipState ?? '',
           ship_zip: contact.shipZip ?? '',
         } satisfies SavedContact))
+      } catch {
+        /* localStorage unavailable */
+      }
+      try {
+        localStorage.removeItem(LS_NOTES_DRAFT_KEY)
       } catch {
         /* localStorage unavailable */
       }
