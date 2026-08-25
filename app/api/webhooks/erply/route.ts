@@ -101,6 +101,17 @@ export async function POST(request: NextRequest) {
       console.error('[erply-webhook] Some stock updates failed:', failed)
     }
 
+    // Best-effort — mirrors the same check that runs after Excel/Erply cron
+    // syncs and manual admin stock edits, so an in-store POS sale that
+    // crosses the threshold alerts immediately instead of waiting for the
+    // next daily cron.
+    try {
+      const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
+      await checkLowStockAndNotify(db)
+    } catch (err) {
+      console.error('[erply-webhook] low-stock check failed:', err)
+    }
+
     console.log(`[erply-webhook] ${payload.event} — updated ${rows.length} SKUs`)
     return NextResponse.json({ ok: true, event: payload.event, rowsProcessed: rows.length })
   } catch (err) {

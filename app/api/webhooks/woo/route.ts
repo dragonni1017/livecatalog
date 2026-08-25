@@ -118,6 +118,16 @@ export async function POST(request: NextRequest) {
       console.error('[woo-webhook] Some stock decrements failed:', failed)
     }
 
+    // Best-effort — mirrors the same check that runs after Excel/Erply cron
+    // syncs and manual admin stock edits, so a Woo order that crosses the
+    // threshold alerts immediately instead of waiting for the next daily cron.
+    try {
+      const { checkLowStockAndNotify } = await import('@/lib/low-stock-alert')
+      await checkLowStockAndNotify(db)
+    } catch (err) {
+      console.error('[woo-webhook] low-stock check failed:', err)
+    }
+
     console.log(`[woo-webhook] Order ${order.id} — decremented ${lineItems.length} SKUs`)
     return NextResponse.json({ ok: true, orderId: order.id, itemsProcessed: lineItems.length })
   } catch (err) {
