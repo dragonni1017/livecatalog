@@ -350,13 +350,22 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
     itemLinks.set(item.sku, link.qb_item_list_id)
   }
 
-  // Every link resolved — build and send the real SalesOrderAdd.
-  const lines: SalesOrderLine[] = items.map((item) => ({
-    qbItemListId: itemLinks.get(item.sku)!,
-    desc: item.name,
-    qty: item.qty,
-    rateCents: Math.round(item.line_total_cents / item.qty),
-  }))
+  // Every link resolved — build and send the real SalesOrderAdd. Some items
+  // have QuickBooks' own Advanced Unit of Measure configured (seen live on
+  // main, not the temp file it was originally tested against) -- QuickBooks
+  // silently substitutes its own on-file rate for those, ignoring whatever
+  // <Rate> we send. Rather than fight that, the actual charged price is
+  // appended to the line Desc so it stays visible on the document even when
+  // QuickBooks' own Rate/Amount differ from it.
+  const lines: SalesOrderLine[] = items.map((item) => {
+    const rateCents = Math.round(item.line_total_cents / item.qty)
+    return {
+      qbItemListId: itemLinks.get(item.sku)!,
+      desc: `${item.name} (ordered @ $${(rateCents / 100).toFixed(2)}/ea)`,
+      qty: item.qty,
+      rateCents,
+    }
+  })
   const xml = buildSalesOrderAddRq({
     qbCustomerListId: customerLink.qb_customer_list_id,
     refNumber: compactRefNumber(order.reference_code),
