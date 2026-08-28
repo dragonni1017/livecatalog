@@ -302,7 +302,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const { data: order, error: orderError } = await db
     .from('order_requests')
-    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
+    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, notes, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
     .eq('id', queueRow.order_id)
     .single()
   const { data: items, error: itemsError } = await db
@@ -360,7 +360,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   const xml = buildSalesOrderAddRq({
     qbCustomerListId: customerLink.qb_customer_list_id,
     refNumber: compactRefNumber(order.reference_code),
-    memo: order.reference_code,
+    memo: order.notes ? `${order.reference_code}\n${order.notes}` : order.reference_code,
     poNumber: order.po_number || fallbackPoNumber(order.reference_code),
     shipAddress: order.ship_address1
       ? {
