@@ -57,6 +57,8 @@ scripts/_*.mjs
 /data/inventory-counts/
 /data/price-comparisons/
 /data/livecatalog-products.xlsx
+/data/products-with-images-and-inventory.xlsx
+/data/all-customers-export.xlsx
 /data/erply-review/
 /data/erply-woo-review/
 /data/erply-woo-customer-backfill/
