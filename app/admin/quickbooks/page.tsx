@@ -1,6 +1,12 @@
 import { getAdminClient } from '@/lib/supabase'
 import QbSyncErrors from '@/components/admin/QbSyncErrors'
 
+// Without this, Next can statically freeze getSyncErrors()'s DB query at
+// build time -- confirmed live 2026-08-31: a probe row inserted after the
+// last deploy never appeared here until this was added, even after a hard
+// browser reload. /admin/products already has this for the same reason.
+export const dynamic = 'force-dynamic'
+
 // A 'sent' row stuck for more than this long (no receiveResponseXML ever
 // arrived -- most likely a dropped QBWC connection mid-sync, confirmed via a
 // live probe 2026-08-31) is surfaced as "stuck", not just 'error' rows. See
