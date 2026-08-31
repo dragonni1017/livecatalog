@@ -2,33 +2,18 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import BulkStockTable from '@/components/admin/BulkStockTable'
 import ProductCreateButton from '@/components/admin/ProductCreateButton'
+import { applyAdminProductFilters, resolveCategoryMemberIds, type AdminProductFilterParams } from '@/lib/admin-products'
 
 export const dynamic = 'force-dynamic'
 
-// Supabase/PostgREST enforces its own server-side max-rows cap (independent
-// of whatever .limit()/.range() the client requests) -- confirmed live: this
-// page showed "1,000 total" against 3,032 real products, and a just-saved
-// category on an unordered full-table select could silently fall outside
-// whatever arbitrary 1000-row subset came back. Paginate in real page-size
-// chunks via .range() and concatenate, rather than trusting a single request
-// to return everything.
-const PAGE_SIZE = 1000
-
-async function fetchAllRows<T>(
-  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
-): Promise<T[]> {
-  const all: T[] = []
-  let from = 0
-  for (;;) {
-    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1)
-    if (error) throw new Error(error.message)
-    if (!data || data.length === 0) break
-    all.push(...data)
-    if (data.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
-  return all
-}
+// Real page-based pagination -- until 2026-08-31 this page fetched and
+// rendered all ~3,032 products in one request/DOM tree (working around
+// PostgREST's row cap by paginating internally, but still loading
+// everything). Now only one page's worth is ever fetched or rendered;
+// "select all matching filter" (BulkStockTable/BulkActionBar) re-resolves
+// the full matching set server-side instead of requiring every id to be
+// loaded into the browser -- see app/admin/api/stock/bulk/route.ts.
+const DISPLAY_PAGE_SIZE = 100
 
 interface VolumeTier { min_qty: number; price_cents: number }
 
@@ -50,63 +35,58 @@ interface AdminProduct {
   categoryIds: string[]
 }
 
+const PRODUCT_COLUMNS =
+  'id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories!products_category_id_fkey(id, name)'
+
 export default async function AdminProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; visibility?: string; active?: string }>
+  searchParams: Promise<{ q?: string; category?: string; visibility?: string; active?: string; page?: string }>
 }) {
-  const { q, category, visibility, active } = await searchParams
+  const { q, category, visibility, active, page: pageParam } = await searchParams
   const db = getAdminClient()
+  const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1)
 
   const { data: categories } = await db
     .from('categories')
     .select('id, name, slug')
     .order('name')
+  const categoryList = categories ?? []
 
-  let memberIds: string[] | null = null
-  if (category) {
-    const cat = (categories ?? []).find((c) => c.slug === category)
-    if (cat) {
-      const rows = await fetchAllRows<{ product_id: string }>(
-        (from, to) =>
-          db.from('product_categories').select('product_id').eq('category_id', cat.id).range(from, to) as unknown as Promise<{
-            data: { product_id: string }[] | null
-            error: { message: string } | null
-          }>,
-      )
-      memberIds = rows.map((r) => r.product_id)
-    }
-  }
+  const filters: AdminProductFilterParams = { q, category, visibility, active }
+  const memberIds = await resolveCategoryMemberIds(db, categoryList, category)
 
-  const baseProducts = await fetchAllRows<Omit<AdminProduct, 'categoryIds'>>((from, to) => {
-    let pageQuery = db
-      .from('products')
-      .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories!products_category_id_fkey(id, name)')
-      .order('name')
-      .range(from, to)
+  const from = (page - 1) * DISPLAY_PAGE_SIZE
+  const to = from + DISPLAY_PAGE_SIZE - 1
 
-    if (q) pageQuery = pageQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
-    if (memberIds) pageQuery = pageQuery.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
-    if (visibility === 'hidden') pageQuery = pageQuery.eq('manually_hidden', true)
-    if (visibility === 'visible') pageQuery = pageQuery.eq('manually_hidden', false)
-    if (active === 'active') pageQuery = pageQuery.eq('is_active', true)
-    if (active === 'inactive') pageQuery = pageQuery.eq('is_active', false)
-
-    return pageQuery as unknown as Promise<{ data: Omit<AdminProduct, 'categoryIds'>[] | null; error: { message: string } | null }>
-  })
-
-  // Full category membership per product (product_categories can now hold
-  // more than one row per product) -- fetched once for the whole visible
-  // set rather than per-row, then grouped in memory.
-  const allMemberRows = await fetchAllRows<{ product_id: string; category_id: string }>(
-    (from, to) =>
-      db.from('product_categories').select('product_id, category_id').range(from, to) as unknown as Promise<{
-        data: { product_id: string; category_id: string }[] | null
-        error: { message: string } | null
-      }>,
+  const { data, count: total } = await applyAdminProductFilters(
+    db.from('products').select(PRODUCT_COLUMNS, { count: 'exact' }).order('name').range(from, to),
+    filters,
+    memberIds,
   )
+  const baseProducts = (data ?? []) as unknown as Omit<AdminProduct, 'categoryIds'>[]
+
+  const { count: hiddenCount } = await applyAdminProductFilters(
+    db.from('products').select('id', { count: 'exact', head: true }).eq('manually_hidden', true),
+    filters,
+    memberIds,
+  )
+  const { count: noImageCount } = await applyAdminProductFilters(
+    db.from('products').select('id', { count: 'exact', head: true }).or('image_url.is.null,image_url.eq.'),
+    filters,
+    memberIds,
+  )
+
+  // Category membership for just this page's products (not the whole
+  // catalog) -- naturally bounded to DISPLAY_PAGE_SIZE rows worth, so no
+  // need for the full-table pagination workaround here anymore.
+  const pageProductIds = baseProducts.map((p) => p.id)
+  const { data: memberRows } =
+    pageProductIds.length > 0
+      ? await db.from('product_categories').select('product_id, category_id').in('product_id', pageProductIds)
+      : { data: [] }
   const categoryIdsByProduct = new Map<string, string[]>()
-  for (const row of allMemberRows) {
+  for (const row of memberRows ?? []) {
     const list = categoryIdsByProduct.get(row.product_id) ?? []
     list.push(row.category_id)
     categoryIdsByProduct.set(row.product_id, list)
@@ -115,10 +95,21 @@ export default async function AdminProductsPage({
     ...p,
     categoryIds: categoryIdsByProduct.get(p.id) ?? [],
   }))
-  const total = products.length
-  const hiddenCount = products.filter((p) => p.manually_hidden).length
-  const noImageCount = products.filter((p) => !p.image_url || p.image_url.trim() === '').length
+
+  const totalCount = total ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / DISPLAY_PAGE_SIZE))
   const hasFilters = !!(q || category || visibility || active)
+
+  const paramsForPage = (targetPage: number) => {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (category) params.set('category', category)
+    if (visibility) params.set('visibility', visibility)
+    if (active) params.set('active', active)
+    if (targetPage > 1) params.set('page', String(targetPage))
+    const qs = params.toString()
+    return qs ? `/admin/products?${qs}` : '/admin/products'
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -131,20 +122,20 @@ export default async function AdminProductsPage({
             </Link>
             <h1 className="mt-2 text-2xl font-bold text-gray-900">Products &amp; Stock</h1>
           </div>
-          <ProductCreateButton categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name }))} />
+          <ProductCreateButton categories={categoryList.map((c) => ({ id: c.id, name: c.name }))} />
         </div>
 
         {/* Counts */}
         <div className="mb-4 flex flex-wrap gap-4 text-sm">
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
-            <span className="font-semibold text-gray-900">{total.toLocaleString()}</span>{' '}
+            <span className="font-semibold text-gray-900">{totalCount.toLocaleString()}</span>{' '}
             {hasFilters ? 'matching' : 'total'}
           </span>
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
-            <span className="font-semibold text-gray-900">{hiddenCount.toLocaleString()}</span> hidden
+            <span className="font-semibold text-gray-900">{(hiddenCount ?? 0).toLocaleString()}</span> hidden
           </span>
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
-            <span className="font-semibold text-gray-900">{noImageCount.toLocaleString()}</span> without image
+            <span className="font-semibold text-gray-900">{(noImageCount ?? 0).toLocaleString()}</span> without image
           </span>
         </div>
 
@@ -163,7 +154,7 @@ export default async function AdminProductsPage({
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
           >
             <option value="">All categories</option>
-            {(categories ?? []).map((c) => (
+            {categoryList.map((c) => (
               <option key={c.id} value={c.slug}>
                 {c.name}
               </option>
@@ -208,7 +199,41 @@ export default async function AdminProductsPage({
         </form>
 
         {/* Table with bulk selection */}
-        <BulkStockTable products={products} categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name }))} />
+        <BulkStockTable
+          products={products}
+          categories={categoryList.map((c) => ({ id: c.id, name: c.name }))}
+          totalCount={totalCount}
+          filters={filters}
+        />
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+            <span>
+              Showing {(from + 1).toLocaleString()}–{Math.min(from + DISPLAY_PAGE_SIZE, totalCount).toLocaleString()} of{' '}
+              {totalCount.toLocaleString()}
+            </span>
+            <div className="flex items-center gap-2">
+              {page > 1 ? (
+                <a href={paramsForPage(page - 1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                  ← Prev
+                </a>
+              ) : (
+                <span className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">← Prev</span>
+              )}
+              <span className="px-2">
+                Page {page} of {totalPages}
+              </span>
+              {page < totalPages ? (
+                <a href={paramsForPage(page + 1)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                  Next →
+                </a>
+              ) : (
+                <span className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">Next →</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

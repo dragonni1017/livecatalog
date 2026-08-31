@@ -2,6 +2,7 @@
 
 interface BulkActionBarProps {
   selectedCount: number
+  allMatching?: boolean
   mode: 'adjust' | 'set'
   amount: string
   loading: boolean
@@ -14,6 +15,7 @@ interface BulkActionBarProps {
 
 export default function BulkActionBar({
   selectedCount,
+  allMatching = false,
   mode,
   amount,
   loading,
@@ -26,8 +28,9 @@ export default function BulkActionBar({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg px-4 py-3 flex items-center gap-4 flex-wrap">
       <span className="text-sm text-gray-500 shrink-0">
-        <span className="font-semibold text-gray-900">{selectedCount}</span>{' '}
+        <span className="font-semibold text-gray-900">{selectedCount.toLocaleString()}</span>{' '}
         {selectedCount === 1 ? 'product' : 'products'} selected
+        {allMatching ? <span className="text-blue-600"> (all matching filters)</span> : null}
       </span>
 
       {/* Mode toggle pills */}

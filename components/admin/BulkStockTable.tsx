@@ -34,23 +34,39 @@ interface Category {
   name: string
 }
 
+interface Filters {
+  q?: string
+  category?: string
+  visibility?: string
+  active?: string
+}
+
 interface Props {
   products: Product[]
   categories: Category[]
+  // Total matching the current filters across ALL pages, and the filters
+  // themselves -- needed so "select all matching filter" can be sent to the
+  // server as a filter description rather than requiring every one of
+  // potentially thousands of ids to be loaded into the browser first.
+  totalCount: number
+  filters: Filters
 }
 
-export default function BulkStockTable({ products, categories }: Props) {
+export default function BulkStockTable({ products, categories, totalCount, filters }: Props) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
   const [mode, setMode] = useState<'adjust' | 'set'>('adjust')
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ message: string; ok: boolean } | null>(null)
 
-  const allSelected = products.length > 0 && selected.size === products.length
+  const pageAllSelected = products.length > 0 && selected.size === products.length
+  const moreBeyondPage = totalCount > products.length
 
   function toggleAll() {
-    if (allSelected) {
+    setSelectAllMatching(false)
+    if (pageAllSelected) {
       setSelected(new Set())
     } else {
       setSelected(new Set(products.map((p) => p.id)))
@@ -58,6 +74,7 @@ export default function BulkStockTable({ products, categories }: Props) {
   }
 
   function toggleOne(id: string) {
+    setSelectAllMatching(false)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) {
@@ -69,6 +86,12 @@ export default function BulkStockTable({ products, categories }: Props) {
     })
   }
 
+  function clearSelection() {
+    setSelected(new Set())
+    setSelectAllMatching(false)
+    setResult(null)
+  }
+
   async function applyBulk() {
     const adj = parseInt(amount, 10)
     if (!Number.isInteger(adj)) {
@@ -78,16 +101,18 @@ export default function BulkStockTable({ products, categories }: Props) {
     setLoading(true)
     setResult(null)
     try {
+      const body = selectAllMatching
+        ? { filter: filters, adjustment: adj, mode }
+        : { ids: [...selected], adjustment: adj, mode }
       const res = await fetch('/admin/api/stock/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [...selected], adjustment: adj, mode }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Update failed')
       setResult({ message: `${data.updated} product${data.updated === 1 ? '' : 's'} updated.`, ok: true })
-      setSelected(new Set())
-      setAmount('')
+      clearSelection()
       router.refresh()
     } catch (err) {
       setResult({ message: err instanceof Error ? err.message : 'Update failed', ok: false })
@@ -106,10 +131,10 @@ export default function BulkStockTable({ products, categories }: Props) {
                 <th className="px-4 py-3">
                   <input
                     type="checkbox"
-                    checked={allSelected}
+                    checked={pageAllSelected || selectAllMatching}
                     onChange={toggleAll}
                     className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                    aria-label="Select all"
+                    aria-label="Select all on this page"
                   />
                 </th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Image</th>
@@ -132,7 +157,7 @@ export default function BulkStockTable({ products, categories }: Props) {
             <tbody className="divide-y divide-gray-100">
               {products.map((p) => {
                 const hasImage = !!p.image_url && p.image_url.trim() !== ''
-                const isSelected = selected.has(p.id)
+                const isSelected = selectAllMatching || selected.has(p.id)
                 return (
                   <tr
                     key={p.id}
@@ -221,10 +246,27 @@ export default function BulkStockTable({ products, categories }: Props) {
         </div>
       </div>
 
+      {/* Offer to expand a full-page selection to every product matching the
+          current filters, across all pages -- avoids ever loading every id
+          into the browser just to select them. */}
+      {pageAllSelected && !selectAllMatching && moreBeyondPage && (
+        <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-2 text-sm text-blue-800 flex items-center justify-between">
+          <span>All {products.length} products on this page are selected.</span>
+          <button
+            type="button"
+            onClick={() => setSelectAllMatching(true)}
+            className="font-semibold underline hover:text-blue-900"
+          >
+            Select all {totalCount.toLocaleString()} matching your filters
+          </button>
+        </div>
+      )}
+
       {/* Sticky bulk action bar */}
-      {selected.size > 0 && (
+      {(selected.size > 0 || selectAllMatching) && (
         <BulkActionBar
-          selectedCount={selected.size}
+          selectedCount={selectAllMatching ? totalCount : selected.size}
+          allMatching={selectAllMatching}
           mode={mode}
           amount={amount}
           loading={loading}
@@ -232,7 +274,7 @@ export default function BulkStockTable({ products, categories }: Props) {
           onModeChange={setMode}
           onAmountChange={(v) => { setAmount(v); setResult(null) }}
           onApply={applyBulk}
-          onClearSelection={() => { setSelected(new Set()); setResult(null) }}
+          onClearSelection={clearSelection}
         />
       )}
     </>
