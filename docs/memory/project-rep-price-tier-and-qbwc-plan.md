@@ -1,6 +1,6 @@
 ---
 name: project-rep-price-tier-and-qbwc-plan
-description: 2026-08-20 -- Feature 2 rearchitected to header-dropdown tier browsing, THEN a critical price_tiers bug found+fixed same day (percentages were relative to Retail but the stored base price is actually Wholesale -- see the CRITICAL BUG section); Feature 1 (QBWC) real hardware test done 2026-08-20/21, several live QuickBooks rejections found+fixed iteratively, now confirmed working end-to-end via qb_sync_queue -- see the REAL HARDWARE TEST RESULTS section
+description: 2026-08-20 -- Feature 2 rearchitected to header-dropdown tier browsing, THEN a critical price_tiers bug found+fixed same day (percentages were relative to Retail but the stored base price is actually Wholesale -- see the CRITICAL BUG section); Feature 1 (QBWC) real hardware test done 2026-08-20/21, several live QuickBooks rejections found+fixed iteratively, now confirmed working end-to-end via qb_sync_queue -- see the REAL HARDWARE TEST RESULTS section. UPDATE 2026-08-31: customer-directory real-hardware pull confirmed done (4,828 real customers, see CUSTOMER-MATCHING GAP section update); sync-error retry UI + auto-revert-on-failure shipped -- see SYNC-ERROR RETRY section at the end
 type: project
 ---
 
@@ -561,13 +561,20 @@ the forged `qb_sessions` ticket) deleted after, and
 `qb_customer_pull_state` reset to `idle`/0 so the UI doesn't imply a real
 pull ever ran.
 
-**Still open:** the actual real-hardware pull (does QuickBooks itself
-accept an unfiltered iterator `CustomerQueryRq` the way I've built it,
-and does the real customer list come back in the expected shape) has
-*not* been confirmed against real QuickBooks yet — only the server-side
-state machine and UI were verified, with QuickBooks' responses simulated.
-That confirmation needs Dragon to click "Pull from QuickBooks" for real
-and let Web Connector's next poll (or a manual "Update Selected") run it.
+**RESOLVED 2026-08-28 (confirmed 2026-08-31 via direct SQL):** the real
+hardware pull happened — `qb_customer_pull_state` shows
+`status='done'`, `pulled_count=4828`, `completed_at=2026-08-28 20:29:32`.
+`qb_customer_directory` holds 4,828 genuine QuickBooks customers (real
+business names/emails/phones, real `8000XXXX-<timestamp>` ListIDs) — not
+the fake test rows from the earlier simulated verification, which were
+deleted after. The unfiltered iterator `CustomerQueryRq` (Start/Continue
+across many pages within one session) works correctly against the real
+company file exactly as built. Separately, `qb_customer_links` already
+has 1 real row from `last_sync_source='qbwc_pull'` — a live order's
+automatic name-based customer lookup — confirming the auto-link path
+also works end-to-end on real data, not just the directory pull.
+0 buyers have been manually linked via `/admin/quickbooks/customers` yet
+(that's an admin follow-up task, not a code gap).
 
 **How to apply:** never click a button that calls `confirm()`/`alert()`
 through browser automation — verify the underlying mutation via direct
@@ -587,3 +594,67 @@ the path above for full detail this node intentionally doesn't duplicate.
 Update *this* node (not just the plan file) as work continues, since the
 plan file won't be kept in sync — treat it as a frozen snapshot of the
 approved design, and this node as the living "what's actually done" status.
+
+---
+
+**SYNC-ERROR RETRY UI + AUTO-REVERT, 2026-08-31.** A real test order
+("Cong test 08/31") failed sync with a genuine QuickBooks error:
+`Customer creation failed: ... This list has been modified by another
+user.` This surfaced a real gap: `qb_sync_queue` rows in `status='error'`
+were never retried — `sendRequestXML` only ever polls `status='pending'`
+— so a failed sync sat there forever with no admin-facing way to retry
+short of manual SQL.
+
+Built:
+- `app/admin/api/qbwc/sync-errors/route.ts` (new) — `GET` lists orders
+  stuck in `error` (joined with reference code/customer), `POST
+  {queueId}` resets one back to `pending` for the next Web Connector
+  poll to retry. Audit-logged as `qb_sync_retry`.
+- `components/admin/QbSyncErrors.tsx` (new) + wired into
+  `app/admin/quickbooks/page.tsx` — a "Failed syncs" panel with a Retry
+  button per row.
+- `markQueueError()` in `app/api/qbwc/route.ts` now also reverts the
+  order's own `status` from `converted` back to `new` on any sync
+  failure (customer/item lookup or add, or the SalesOrderAdd itself),
+  so a failed order doesn't sit in the admin orders list looking
+  approved when it never actually reached QuickBooks. Written as a
+  **direct DB update**, not through `/admin/api/orders`'s PATCH, so it
+  can never re-trigger that endpoint's customer status-change email or
+  stock-decrement logic. Only reverts if still `converted` (won't stomp
+  an admin who already moved it elsewhere). Audit-logged as
+  `order_qb_sync_failed_reverted`. Both new audit actions got badge
+  colors in `app/admin/audit-log/page.tsx`.
+- Deployed live (commit `a652db4`), confirmed `READY` on production
+  (`lyusa.app`) via the Vercel MCP tool.
+
+**Root cause of "This list has been modified by another user"**:
+research (not confirmed against Intuit's own docs, no authoritative
+source found) points to QuickBooks Desktop's list edit-sequence being
+**file-wide in multi-user mode**, not scoped to whichever workstation
+runs Web Connector — so *any* connected user actively viewing/editing
+the Customer Center/Customer List at sync time can cause this, not just
+the person running the sync. Practical mitigation is the Retry button
+above (transient collision, just retry) rather than trying to police
+everyone's QuickBooks windows.
+
+**Corrected/confirmed same day**: the customer-directory real-hardware
+pull (flagged "not yet confirmed" earlier in this doc) actually
+completed for real on 2026-08-28 — `qb_customer_pull_state.status='done'`,
+`pulled_count=4828`, and `qb_customer_directory` holds 4,828 genuine
+QuickBooks customers (real names/emails/phones/ListIDs, not the earlier
+simulated test rows). This was discovered via direct SQL on 2026-08-31,
+not re-derived — the earlier "still open" note in this doc was simply
+never updated when it finished. `qb_customer_links` also has 1 real row
+from an actual order's automatic name-based lookup, confirming that path
+too. 0 buyers manually linked via `/admin/quickbooks/customers` yet —
+an admin follow-up task, not a code gap.
+
+**Still open for Feature 1**: duplicate-send handling under an actual
+dropped QBWC connection has still never been exercised — remains the
+single highest-risk untested path.
+
+**How to apply:** if a `qb_sync_queue` row is stuck in `error`, use the
+Retry button on `/admin/quickbooks` (bottom panel) rather than manual
+SQL now — check `error_message` first to see if it's an actual data
+problem (e.g. a bad account/item mapping) vs. a transient QuickBooks-side
+conflict worth just retrying as-is.

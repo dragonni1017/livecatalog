@@ -66,8 +66,12 @@ export default async function AdminProductsPage({
 
   // Full category membership per product (product_categories can now hold
   // more than one row per product) -- fetched once for the whole visible
-  // set rather than per-row, then grouped in memory.
-  const { data: allMemberRows } = await db.from('product_categories').select('product_id, category_id')
+  // set rather than per-row, then grouped in memory. Explicit .limit() to
+  // match the products query above -- without it, PostgREST's default
+  // 1000-row cap silently truncates this (3000+ rows already), so a
+  // product's just-saved category could write correctly but never show up
+  // here if its row fell outside whatever arbitrary subset came back.
+  const { data: allMemberRows } = await db.from('product_categories').select('product_id, category_id').limit(20000)
   const categoryIdsByProduct = new Map<string, string[]>()
   for (const row of allMemberRows ?? []) {
     const list = categoryIdsByProduct.get(row.product_id) ?? []

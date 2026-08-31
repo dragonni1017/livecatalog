@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import StockAdjuster from '@/components/admin/StockAdjuster'
 import ProductVisibilityToggle from '@/components/admin/ProductVisibilityToggle'
 import ProductEditButton from '@/components/admin/ProductEditButton'
+import ProductDeleteButton from '@/components/admin/ProductDeleteButton'
 import ThresholdCell from './ThresholdCell'
 import BulkActionBar from './BulkActionBar'
 
@@ -125,6 +126,7 @@ export default function BulkStockTable({ products, categories }: Props) {
                 </th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Visibility</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Delete</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -201,12 +203,15 @@ export default function BulkStockTable({ products, categories }: Props) {
                         categories={categories}
                       />
                     </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <ProductDeleteButton id={p.id} name={p.name} />
+                    </td>
                   </tr>
                 )
               })}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-400">
+                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-gray-400">
                     No products found.
                   </td>
                 </tr>

@@ -162,6 +162,51 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
+// DELETE /admin/api/products?id=... — permanently remove a product.
+// Safe by schema design: product_categories/back_in_stock rows cascade-delete,
+// while order_items/stock_adjustments/analytics_events just set product_id to
+// null (order/stock history is preserved, only the dead product link goes).
+// NOTE: if this product still exists in Erply or the Excel import source, the
+// next sync/import will simply re-create it (upsert by SKU) -- this only
+// removes it here in between syncs, same caveat as the existing edit/hide
+// actions on this route.
+export async function DELETE(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ error: 'Missing product id' }, { status: 400 })
+    }
+
+    if (isMockMode()) {
+      return NextResponse.json({ ok: true, mock: true })
+    }
+
+    const { getAdminClient } = await import('@/lib/supabase')
+    const { logAudit } = await import('@/lib/audit')
+    const db = getAdminClient()
+
+    const { data: product } = await db.from('products').select('name, sku').eq('id', id).maybeSingle()
+    if (!product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    }
+
+    const { error } = await db.from('products').delete().eq('id', id)
+    if (error) throw error
+
+    await logAudit({
+      action: 'product_deleted',
+      entity_type: 'product',
+      entity_id: id,
+      entity_label: product.sku ? `${product.name} (${product.sku})` : product.name,
+    })
+
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/products DELETE] error:', err)
+    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
+  }
+}
+
 // POST /admin/api/products — bulk visibility actions
 export async function POST(request: NextRequest) {
   try {
