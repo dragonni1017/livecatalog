@@ -42,6 +42,8 @@ function ActionBadge({ action }: { action: string }) {
     qb_customer_pull_requested: 'bg-amber-100 text-amber-700',
     qb_customer_link_created: 'bg-green-100 text-green-700',
     qb_customer_link_removed: 'bg-red-100 text-red-700',
+    order_qb_sync_failed_reverted: 'bg-red-100 text-red-700',
+    qb_sync_retry: 'bg-amber-100 text-amber-700',
   }
   const cls = styles[action] ?? 'bg-gray-100 text-gray-600'
   const label = action.replace(/_/g, ' ')

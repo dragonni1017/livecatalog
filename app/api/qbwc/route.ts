@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { XMLParser } from 'fast-xml-parser'
 import { getAdminClient } from '@/lib/supabase'
+import { logAudit } from '@/lib/audit'
 import {
   buildCustomerAddRq,
   buildCustomerFullQueryRq,
@@ -208,6 +209,37 @@ async function markQueueError(db: Db, orderId: string, message: string, response
       updated_at: new Date().toISOString(),
     })
     .eq('order_id', orderId)
+
+  // A failed sync means this order never actually made it into QuickBooks --
+  // revert the "Converted" mark so it doesn't sit in the admin orders list
+  // looking approved when it isn't. Written directly here (not through
+  // /admin/api/orders' PATCH) so this can never re-trigger that endpoint's
+  // customer status-change email or stock-decrement side effects — only
+  // revert if it's still 'converted' (admin may have already moved it
+  // elsewhere in the meantime).
+  const { data: order } = await db
+    .from('order_requests')
+    .select('status, reference_code')
+    .eq('id', orderId)
+    .maybeSingle()
+  if (order?.status === 'converted') {
+    await db
+      .from('order_requests')
+      .update({
+        status: 'new',
+        status_changed_by: 'QuickBooks sync (auto-reverted after failure)',
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+    await logAudit({
+      action: 'order_qb_sync_failed_reverted',
+      entity_type: 'order',
+      entity_id: orderId,
+      entity_label: order.reference_code,
+      old_value: 'converted',
+      new_value: 'new',
+    })
+  }
 }
 
 // ── Operation handlers ───────────────────────────────────────────────────

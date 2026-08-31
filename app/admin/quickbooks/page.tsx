@@ -1,8 +1,40 @@
-export default function QuickBooksSetupPage() {
+import { getAdminClient } from '@/lib/supabase'
+import QbSyncErrors from '@/components/admin/QbSyncErrors'
+
+async function getSyncErrors() {
+  const db = getAdminClient()
+  const { data: rows } = await db
+    .from('qb_sync_queue')
+    .select('id, order_id, error_message, updated_at')
+    .eq('status', 'error')
+    .order('updated_at', { ascending: false })
+  if (!rows || rows.length === 0) return []
+
+  const { data: orders } = await db
+    .from('order_requests')
+    .select('id, reference_code, customer_name, customer_company')
+    .in('id', rows.map((r) => r.order_id))
+  const orderById = new Map((orders ?? []).map((o) => [o.id, o]))
+
+  return rows.map((r) => {
+    const order = orderById.get(r.order_id)
+    return {
+      queueId: r.id,
+      orderId: r.order_id,
+      referenceCode: order?.reference_code ?? '(order not found)',
+      customerLabel: order?.customer_company || order?.customer_name || '',
+      errorMessage: r.error_message,
+      updatedAt: r.updated_at,
+    }
+  })
+}
+
+export default async function QuickBooksSetupPage() {
   const hasUsername = Boolean(process.env.QBWC_USERNAME)
   const hasPassword = Boolean(process.env.QBWC_PASSWORD)
   const hasFileId = Boolean(process.env.QBWC_FILE_ID)
   const ready = hasUsername && hasPassword && hasFileId
+  const syncErrors = ready ? await getSyncErrors() : []
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -129,6 +161,8 @@ export default function QuickBooksSetupPage() {
             </div>
           )}
         </div>
+
+        <QbSyncErrors initialErrors={syncErrors} />
       </div>
     </div>
   )
