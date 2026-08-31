@@ -1,12 +1,19 @@
 import { getAdminClient } from '@/lib/supabase'
 import QbSyncErrors from '@/components/admin/QbSyncErrors'
 
+// A 'sent' row stuck for more than this long (no receiveResponseXML ever
+// arrived -- most likely a dropped QBWC connection mid-sync, confirmed via a
+// live probe 2026-08-31) is surfaced as "stuck", not just 'error' rows. See
+// app/admin/api/qbwc/sync-errors/route.ts for the full explanation.
+const STUCK_SENT_THRESHOLD_MINUTES = 10
+
 async function getSyncErrors() {
   const db = getAdminClient()
+  const staleBefore = new Date(Date.now() - STUCK_SENT_THRESHOLD_MINUTES * 60_000).toISOString()
   const { data: rows } = await db
     .from('qb_sync_queue')
-    .select('id, order_id, error_message, updated_at')
-    .eq('status', 'error')
+    .select('id, order_id, status, error_message, updated_at')
+    .or(`status.eq.error,and(status.eq.sent,updated_at.lt.${staleBefore})`)
     .order('updated_at', { ascending: false })
   if (!rows || rows.length === 0) return []
 
@@ -21,6 +28,7 @@ async function getSyncErrors() {
     return {
       queueId: r.id,
       orderId: r.order_id,
+      kind: (r.status === 'sent' ? 'stuck' : 'error') as 'stuck' | 'error',
       referenceCode: order?.reference_code ?? '(order not found)',
       customerLabel: order?.customer_company || order?.customer_name || '',
       errorMessage: r.error_message,

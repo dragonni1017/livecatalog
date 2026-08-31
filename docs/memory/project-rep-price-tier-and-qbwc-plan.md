@@ -649,12 +649,39 @@ from an actual order's automatic name-based lookup, confirming that path
 too. 0 buyers manually linked via `/admin/quickbooks/customers` yet —
 an admin follow-up task, not a code gap.
 
-**Still open for Feature 1**: duplicate-send handling under an actual
-dropped QBWC connection has still never been exercised — remains the
-single highest-risk untested path.
+**RESOLVED 2026-08-31 — duplicate-send handling verified + stuck-row gap
+fixed.** Ran a real probe against the live `/api/qbwc` endpoint
+(disposable order/items, real `qb_customer_links`/`qb_item_links` reused
+so it hits the actual `SalesOrderAdd` branch): forged ticket 1, drove a
+real `sendRequestXML` (queue row → `sent`), then **abandoned that ticket
+without calling `receiveResponseXML` or `closeConnection`** — exactly
+what a dropped connection leaves behind — then forged ticket 2 to
+simulate QBWC reconnecting. Confirmed via direct SQL and the actual SOAP
+response:
+- **No duplicate-send risk**: ticket 2's `sendRequestXML` returned empty,
+  not a re-sent `SalesOrderAdd`, since the row is `sent` not `pending`
+  and `sendRequestXML` only ever queries `status='pending'`. This
+  protection already worked correctly, untouched.
+- **Real gap found**: the order was left **permanently stuck** — not
+  `pending` (never retries), not `error` (invisible to the Retry panel
+  built earlier the same day), no timeout/staleness handling anywhere.
+  A stuck `sent` row might have actually succeeded in QuickBooks with
+  only the confirmation lost, so `entered_in_qb` would stay `false`
+  forever with zero visibility.
 
-**How to apply:** if a `qb_sync_queue` row is stuck in `error`, use the
-Retry button on `/admin/quickbooks` (bottom panel) rather than manual
+Fixed: `app/admin/api/qbwc/sync-errors/route.ts` +
+`app/admin/quickbooks/page.tsx` now also surface rows stuck at
+`status='sent'` for 10+ minutes (`STUCK_SENT_THRESHOLD_MINUTES`) as a
+separate "Stuck syncs" panel (`components/admin/QbSyncErrors.tsx`,
+amber not red) with a `confirm()` warning to check QuickBooks itself
+before "Force retry" — unlike a plain `error` row, a stuck one might have
+already succeeded, so blindly retrying risks a real duplicate Sales
+Order. Audit-logged as `qb_sync_force_retry`, distinct from the plain
+`qb_sync_retry`. All probe rows deleted after — nothing live left behind.
+
+**How to apply:** if a `qb_sync_queue` row is stuck in `error` OR stuck
+in `sent` for 10+ minutes, use the Retry/Force-retry buttons on
+`/admin/quickbooks` (bottom panels) rather than manual
 SQL now — check `error_message` first to see if it's an actual data
 problem (e.g. a bad account/item mapping) vs. a transient QuickBooks-side
 conflict worth just retrying as-is.
