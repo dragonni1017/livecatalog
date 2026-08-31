@@ -48,7 +48,6 @@ describe('buildSalesOrderAddRq', () => {
   it('builds a SalesOrderAdd with customer ref, memo, PO number, and one line per item', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: '80000073-1234567890',
-      refNumber: '0011',
       memo: 'ORD-2026-0011',
       poNumber: 'PO-999',
       lines: [
@@ -58,7 +57,6 @@ describe('buildSalesOrderAddRq', () => {
     })
     expect(xml).toContain('<SalesOrderAddRq requestID="1">')
     expect(xml).toContain('<CustomerRef><ListID>80000073-1234567890</ListID></CustomerRef>')
-    expect(xml).toContain('<RefNumber>0011</RefNumber>')
     expect(xml).toContain('<Memo>ORD-2026-0011</Memo>')
     expect(xml).toContain('<PONumber>PO-999</PONumber>')
     expect(xml).toContain('<ItemRef><ListID>50000001-1111111111</ListID></ItemRef>')
@@ -68,10 +66,19 @@ describe('buildSalesOrderAddRq', () => {
     expect(xml).toContain('<Rate>2.50</Rate>')
   })
 
+  it('never sends RefNumber -- QuickBooks must assign its own auto Sales Order number', () => {
+    const xml = buildSalesOrderAddRq({
+      qbCustomerListId: 'X',
+      memo: 'ORD-2026-0011',
+      poNumber: 'PO-999',
+      lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
+    })
+    expect(xml).not.toContain('RefNumber')
+  })
+
   it('omits PONumber entirely when none is given', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: '0012',
       memo: 'ORD-2026-0012',
       poNumber: null,
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
@@ -82,7 +89,6 @@ describe('buildSalesOrderAddRq', () => {
   it('includes ShipAddress with Addr2/Country omitted when not given', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: '0013',
       memo: 'ORD-2026-0013',
       shipAddress: { addr1: '123 Main St', city: 'Vernon', state: 'CA', zip: '90058' },
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
@@ -99,7 +105,6 @@ describe('buildSalesOrderAddRq', () => {
   it('includes Addr2 and Country when given', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: '0013',
       memo: 'ORD-2026-0013',
       shipAddress: { addr1: '123 Main St', addr2: 'Suite 4', city: 'Vernon', state: 'CA', zip: '90058', country: 'US' },
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
@@ -111,28 +116,26 @@ describe('buildSalesOrderAddRq', () => {
   it('omits ShipAddress entirely when none is given', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: '0013',
       memo: 'ORD-2026-0013',
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
     })
     expect(xml).not.toContain('ShipAddress')
   })
 
-  it('orders elements per the qbXML SalesOrderAdd OSR schema: RefNumber, ShipAddress, PONumber, Memo, line items', () => {
+  it('orders elements per the qbXML SalesOrderAdd OSR schema: CustomerRef, ShipAddress, PONumber, Memo, line items', () => {
     const xml = buildSalesOrderAddRq({
       qbCustomerListId: 'X',
-      refNumber: '0014',
       memo: 'ORD-2026-0014',
       poNumber: 'PO-1',
       shipAddress: { addr1: '123 Main St', city: 'Vernon', state: 'CA', zip: '90058' },
       lines: [{ qbItemListId: 'Y', desc: 'Item', qty: 1, rateCents: 100 }],
     })
-    const refIdx = xml.indexOf('<RefNumber>')
+    const customerIdx = xml.indexOf('<CustomerRef>')
     const shipIdx = xml.indexOf('<ShipAddress>')
     const poIdx = xml.indexOf('<PONumber>')
     const memoIdx = xml.indexOf('<Memo>')
     const lineIdx = xml.indexOf('<SalesOrderLineAdd>')
-    expect(refIdx).toBeLessThan(shipIdx)
+    expect(customerIdx).toBeLessThan(shipIdx)
     expect(shipIdx).toBeLessThan(poIdx)
     expect(poIdx).toBeLessThan(memoIdx)
     expect(memoIdx).toBeLessThan(lineIdx)

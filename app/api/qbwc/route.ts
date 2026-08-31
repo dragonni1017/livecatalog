@@ -10,7 +10,6 @@ import {
   buildItemAddRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
-  compactRefNumber,
   fallbackPoNumber,
   isNotFoundStatus,
   parseCustomerAddRs,
@@ -400,7 +399,6 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   })
   const xml = buildSalesOrderAddRq({
     qbCustomerListId: customerLink.qb_customer_list_id,
-    refNumber: compactRefNumber(order.reference_code),
     memo: order.notes ? `${order.reference_code}\n${order.notes}` : order.reference_code,
     poNumber: order.po_number || fallbackPoNumber(order.reference_code),
     shipAddress: order.ship_address1

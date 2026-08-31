@@ -135,18 +135,18 @@ function buildAddressXml(tag: string, addr: QbAddress): string {
     </${tag}>`
 }
 
-// QuickBooks' RefNumber field is capped at 11 characters (confirmed live —
-// QuickBooks rejected a 13-char RefNumber with "too long"), too short for
-// our full ORD-<year>-<seq>[-<tier>] reference codes. refNumber here must
-// already be pre-shortened by the caller to fit; memo carries the full
-// reference code for traceability instead.
+// RefNumber is deliberately NEVER sent -- omitting it lets QuickBooks assign
+// its own auto-incrementing Sales Order number instead of us overwriting it
+// (Dragon's explicit call 2026-08-31: keep PONumber, drop RefNumber). The
+// full reference code still lives in Memo (and PONumber, as a fallback) for
+// traceability -- see compactRefNumber below, now only used by
+// fallbackPoNumber's own length cap, not for RefNumber.
 //
-// Element order below (CustomerRef, RefNumber, ShipAddress, PONumber, Memo,
-// then line items) matches qbXML's SalesOrderAdd OSR schema order exactly —
-// QuickBooks rejects out-of-order elements, it's not just cosmetic.
+// Element order below (CustomerRef, ShipAddress, PONumber, Memo, then line
+// items) matches qbXML's SalesOrderAdd OSR schema order exactly — QuickBooks
+// rejects out-of-order elements, it's not just cosmetic.
 export function buildSalesOrderAddRq(args: {
   qbCustomerListId: string
-  refNumber: string
   memo: string
   poNumber?: string | null
   shipAddress?: QbAddress | null
@@ -169,20 +169,21 @@ export function buildSalesOrderAddRq(args: {
 
   return wrapQbxml(`<SalesOrderAddRq requestID="1">
   <SalesOrderAdd>
-    <CustomerRef><ListID>${xmlEscape(args.qbCustomerListId)}</ListID></CustomerRef>
-    <RefNumber>${xmlEscape(args.refNumber)}</RefNumber>${shipXml}${poXml}
+    <CustomerRef><ListID>${xmlEscape(args.qbCustomerListId)}</ListID></CustomerRef>${shipXml}${poXml}
     <Memo>${xmlEscape(args.memo)}</Memo>${lineXml}
   </SalesOrderAdd>
 </SalesOrderAddRq>`)
 }
 
-// Compacts a reference code (e.g. "ORD-2026-WHO-0011") to fit QuickBooks'
-// 11-char RefNumber cap: drops the constant "ORD-<year>-" portion, keeping
-// just "<tier>-<seq>" (e.g. "WHO-0011") or, for a non-rep order with no
-// tier, just "<seq>" (e.g. "0012"). Year-uniqueness is lost (sequence
-// numbers restart each year), but the full reference code still lives in
-// the SalesOrder's Memo for traceability — this is a display convenience,
-// not the lookup key.
+// Compacts a reference code (e.g. "ORD-2026-WHO-0011") to fit within 11
+// characters: drops the constant "ORD-<year>-" portion, keeping just
+// "<tier>-<seq>" (e.g. "WHO-0011") or, for a non-rep order with no tier,
+// just "<seq>" (e.g. "0012"). No longer used for QuickBooks' RefNumber
+// (see buildSalesOrderAddRq -- that's deliberately never sent, so
+// QuickBooks can assign its own auto-incrementing S.O. number) -- only
+// remaining caller is fallbackPoNumber's own length cap below. Kept at 11
+// chars rather than PONumber's own 25-char cap so it stays valid for
+// either use.
 export function compactRefNumber(referenceCode: string): string {
   const parts = referenceCode.split('-')
   const seq = parts[parts.length - 1]
