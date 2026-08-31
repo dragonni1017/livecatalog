@@ -5,6 +5,31 @@ import ProductCreateButton from '@/components/admin/ProductCreateButton'
 
 export const dynamic = 'force-dynamic'
 
+// Supabase/PostgREST enforces its own server-side max-rows cap (independent
+// of whatever .limit()/.range() the client requests) -- confirmed live: this
+// page showed "1,000 total" against 3,032 real products, and a just-saved
+// category on an unordered full-table select could silently fall outside
+// whatever arbitrary 1000-row subset came back. Paginate in real page-size
+// chunks via .range() and concatenate, rather than trusting a single request
+// to return everything.
+const PAGE_SIZE = 1000
+
+async function fetchAllRows<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const all: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(error.message)
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
+
 interface VolumeTier { min_qty: number; price_cents: number }
 
 interface AdminProduct {
@@ -38,42 +63,50 @@ export default async function AdminProductsPage({
     .select('id, name, slug')
     .order('name')
 
-  let query = db
-    .from('products')
-    .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories!products_category_id_fkey(id, name)')
-    .order('name')
-    .limit(10000)
-
-  if (q) query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
+  let memberIds: string[] | null = null
   if (category) {
     const cat = (categories ?? []).find((c) => c.slug === category)
     if (cat) {
-      const { data: memberRows } = await db
-        .from('product_categories')
-        .select('product_id')
-        .eq('category_id', cat.id)
-      const memberIds = (memberRows ?? []).map((r) => r.product_id)
-      query = query.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
+      const rows = await fetchAllRows<{ product_id: string }>(
+        (from, to) =>
+          db.from('product_categories').select('product_id').eq('category_id', cat.id).range(from, to) as unknown as Promise<{
+            data: { product_id: string }[] | null
+            error: { message: string } | null
+          }>,
+      )
+      memberIds = rows.map((r) => r.product_id)
     }
   }
-  if (visibility === 'hidden') query = query.eq('manually_hidden', true)
-  if (visibility === 'visible') query = query.eq('manually_hidden', false)
-  if (active === 'active') query = query.eq('is_active', true)
-  if (active === 'inactive') query = query.eq('is_active', false)
 
-  const { data } = await query
-  const baseProducts = (data ?? []) as unknown as Omit<AdminProduct, 'categoryIds'>[]
+  const baseProducts = await fetchAllRows<Omit<AdminProduct, 'categoryIds'>>((from, to) => {
+    let pageQuery = db
+      .from('products')
+      .select('id, sku, name, description, image_url, image_urls, is_active, manually_hidden, stock_qty, low_stock_threshold, volume_tiers, price_cents, unit_type, category:categories!products_category_id_fkey(id, name)')
+      .order('name')
+      .range(from, to)
+
+    if (q) pageQuery = pageQuery.or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
+    if (memberIds) pageQuery = pageQuery.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
+    if (visibility === 'hidden') pageQuery = pageQuery.eq('manually_hidden', true)
+    if (visibility === 'visible') pageQuery = pageQuery.eq('manually_hidden', false)
+    if (active === 'active') pageQuery = pageQuery.eq('is_active', true)
+    if (active === 'inactive') pageQuery = pageQuery.eq('is_active', false)
+
+    return pageQuery as unknown as Promise<{ data: Omit<AdminProduct, 'categoryIds'>[] | null; error: { message: string } | null }>
+  })
 
   // Full category membership per product (product_categories can now hold
   // more than one row per product) -- fetched once for the whole visible
-  // set rather than per-row, then grouped in memory. Explicit .limit() to
-  // match the products query above -- without it, PostgREST's default
-  // 1000-row cap silently truncates this (3000+ rows already), so a
-  // product's just-saved category could write correctly but never show up
-  // here if its row fell outside whatever arbitrary subset came back.
-  const { data: allMemberRows } = await db.from('product_categories').select('product_id, category_id').limit(20000)
+  // set rather than per-row, then grouped in memory.
+  const allMemberRows = await fetchAllRows<{ product_id: string; category_id: string }>(
+    (from, to) =>
+      db.from('product_categories').select('product_id, category_id').range(from, to) as unknown as Promise<{
+        data: { product_id: string; category_id: string }[] | null
+        error: { message: string } | null
+      }>,
+  )
   const categoryIdsByProduct = new Map<string, string[]>()
-  for (const row of allMemberRows ?? []) {
+  for (const row of allMemberRows) {
     const list = categoryIdsByProduct.get(row.product_id) ?? []
     list.push(row.category_id)
     categoryIdsByProduct.set(row.product_id, list)
