@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import ImageUploadField from './ImageUploadField'
 
 interface VolumeTier { min_qty: number; price_cents: number }
 interface Category { id: string; name: string }
@@ -215,7 +216,10 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Primary image URL</label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-600">Primary image URL</label>
+                  <ImageUploadField onUploaded={(url) => setForm((f) => ({ ...f, image_url: url }))} />
+                </div>
                 <input
                   value={form.image_url}
                   onChange={(e) => setForm({ ...form, image_url: e.target.value })}
@@ -232,9 +236,20 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
                 )}
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  Additional images <span className="font-normal text-gray-400">(one URL per line)</span>
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-600">
+                    Additional images <span className="font-normal text-gray-400">(one URL per line)</span>
+                  </label>
+                  <ImageUploadField
+                    label="Attach file"
+                    onUploaded={(url) =>
+                      setForm((f) => ({
+                        ...f,
+                        image_urls_text: f.image_urls_text.trim() ? `${f.image_urls_text}\n${url}` : url,
+                      }))
+                    }
+                  />
+                </div>
                 <textarea
                   value={form.image_urls_text}
                   onChange={(e) => setForm({ ...form, image_urls_text: e.target.value })}
