@@ -12,10 +12,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getErplyProducts, isConfigured } from '@/lib/erply'
-import { syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+import { getErplyProducts, getErplyStock, isConfigured } from '@/lib/erply'
+import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/product-sync'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
+
+// Default Vercel function timeout (10s) isn't enough for the batched
+// adjust_stock() calls a full-catalog stock sync makes (see
+// syncStockFromErply in lib/product-sync.ts). 60s is the safe max for both
+// Hobby and Pro plans without checking which tier this project is on —
+// raise it (Pro allows up to 300s) if a real run still times out against
+// the full ~3,000-product catalog.
+export const maxDuration = 60
 
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -104,6 +112,22 @@ export async function GET(request: NextRequest) {
       skipFields: ['image_url', 'stock_qty', 'category'],
     })
 
+    // 3b. Stock sync — separate from the upsert above, since blindly
+    // overwriting stock_qty would clobber any order-fulfillment decrement
+    // or manual admin edit made since the last run. See syncStockFromErply
+    // in lib/product-sync.ts for the delta-anchored approach that avoids
+    // that. Warehouse 1 ("L&Y USA") only — Dragon decided 2026-09-03 that
+    // warehouse 2 ("Store LA") may be retail/in-store-only stock that
+    // shouldn't be sold to wholesale catalog customers.
+    let stockSync: unknown = { skipped: 'not run' }
+    try {
+      const erplyStock = await getErplyStock(1)
+      stockSync = await syncStockFromErply(erplyStock, db)
+    } catch (err) {
+      console.error('[sync] stock sync failed (non-fatal to the rest of this run):', err)
+      stockSync = { error: err instanceof Error ? err.message : String(err) }
+    }
+
     // 4. Run daily auxiliary checks (low-stock + abandoned carts)
     let lowStock: unknown = { skipped: 'not run' }
     let abandonedCarts: unknown = { skipped: 'not run' }
@@ -123,7 +147,7 @@ export async function GET(request: NextRequest) {
     }
 
     const elapsed = Date.now() - startedAt
-    console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length}`)
+    console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length} stockSync:${JSON.stringify(stockSync)}`)
 
     return NextResponse.json({
       ok: true,
@@ -131,6 +155,7 @@ export async function GET(request: NextRequest) {
       durationMs: elapsed,
       lowStock,
       abandonedCarts,
+      stockSync,
       ...result,
     })
   } catch (err) {

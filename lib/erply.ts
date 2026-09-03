@@ -232,6 +232,56 @@ function normalizeProduct(p: ErplyProduct): ErplySyncProduct {
   }
 }
 
+// ── Warehouse-scoped stock fetch (for lib/product-sync.ts's stock sync) ────────
+
+export interface ErplyStockRow {
+  sku: string
+  stockQty: number
+}
+
+/**
+ * Fetches sku + stock at a single warehouse only -- NOT summed across
+ * warehouses like ErplySyncProduct.stockQty above. This account has two
+ * warehouses (confirmed live: 1 "L&Y USA", 2 "Store LA"); Dragon decided
+ * 2026-09-03 that only warehouse 1 should count toward wholesale catalog
+ * availability, since "Store LA" may be retail/in-store-only stock a
+ * wholesale customer can't actually have shipped to them. Matches every
+ * other stock write this repo has done this session (the arrival-list
+ * additions, the earlier connectivity test) — all warehouse 1 only.
+ */
+export async function getErplyStock(warehouseId = 1): Promise<ErplyStockRow[]> {
+  if (!isConfigured()) return []
+
+  const sessionKey = await getSessionKey()
+  const all: ErplyProduct[] = []
+  let page = 1
+  let total = Infinity
+  // Same "don't precompute page count" caution as fetchProductPage above --
+  // getStockInfo=1 silently caps each page at 200 regardless of
+  // recordsOnPage requested.
+  while (all.length < total) {
+    const data = await erplyPost<ErplyProduct>({
+      request: 'getProducts',
+      sessionKey,
+      recordsOnPage: String(PAGE_SIZE),
+      pageNo: String(page),
+      getStockInfo: '1',
+      active: '1',
+    })
+    total = data.status.recordsTotal ?? 0
+    if (data.records.length === 0) break
+    all.push(...data.records)
+    page++
+  }
+
+  return all
+    .map((p) => ({
+      sku: (p.code || String(p.productID)).trim(),
+      stockQty: p.warehouses?.[String(warehouseId)]?.totalInStock ?? 0,
+    }))
+    .filter((r) => r.sku)
+}
+
 // ── Customer sync (Erply <-> WooCommerce bridge, see lib/tier-mapping.ts) ──────
 
 /**

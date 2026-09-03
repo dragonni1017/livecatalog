@@ -262,3 +262,125 @@ export async function syncToSupabase(
 
   return { inserted, updated, deactivated, skipped: errors.length, errors }
 }
+
+export interface StockSyncResult {
+  processed: number
+  changed: number
+  skippedNoMatch: number
+  skippedUncounted: number
+  errors: { sku: string; message: string }[]
+}
+
+const ADJUST_CONCURRENCY = 25
+
+/**
+ * Delta-anchored Erply -> Supabase stock sync — NOT a blind overwrite like
+ * syncToSupabase's upsert path (that's exactly why stock_qty is in that
+ * function's skipFields). For each incoming Erply SKU, computes a delta
+ * against what stock_qty WAS as of the previous sync run
+ * (stock_qty_as_of_bulk, migration 0042) and applies that delta through
+ * adjust_stock() — so an order-fulfillment decrement or manual admin edit
+ * made in Supabase since the last sync is preserved instead of clobbered.
+ * Same design as the paper-count reconciliation in
+ * docs/LIVE-INVENTORY-COUNT-HANDOFF.md, generalized to an automated
+ * periodic source. Every change lands a normal stock_adjustments audit row
+ * (reason: 'erply stock sync').
+ *
+ * On the very first run (erply_sync_state.last_stock_sync_at is null), the
+ * anchor is "now" — stock_qty_as_of_bulk's most-recent-adjustment-at-or-
+ * before-now is just the current value, so the delta becomes
+ * erply_qty - current_stock_qty: a one-time full sync to Erply's numbers,
+ * same as every subsequent run's math, no special-casing needed.
+ *
+ * SKUs in the incoming batch with no matching product in Supabase are
+ * skipped, not created — creating new products from a stock sync isn't
+ * this function's job (see scripts/create-missing-plush-in-erply.mjs-style
+ * scripts for that).
+ *
+ * A SKU where Erply itself reports 0 is also skipped entirely (stock_qty
+ * left untouched) — decided 2026-09-03: most of the catalog hasn't had a
+ * real physical count entered in Erply yet (see
+ * docs/LIVE-INVENTORY-COUNT-HANDOFF.md), so Erply's 0 usually means "not
+ * counted yet," not "confirmed empty." Treating it as real would drop
+ * nearly the whole catalog to a false out-of-stock the moment this sync
+ * first runs. A SKU starts syncing normally (including back down to 0
+ * later, if it sells through) as soon as Erply shows a real count above 0
+ * at least once.
+ */
+export async function syncStockFromErply(
+  stock: { sku: string; stockQty: number }[],
+  db: DB,
+): Promise<StockSyncResult> {
+  const syncStartedAt = new Date().toISOString()
+
+  const { data: stateRow } = await db
+    .from('erply_sync_state')
+    .select('last_stock_sync_at')
+    .eq('id', true)
+    .single()
+  const asOf = stateRow?.last_stock_sync_at ?? syncStartedAt
+
+  const errors: StockSyncResult['errors'] = []
+  let changed = 0
+  const skippedUncounted = stock.filter((s) => s.stockQty === 0).length
+  const countedStock = stock.filter((s) => s.stockQty !== 0)
+
+  // Chunk the baseline lookup to stay well under Postgres's parameter/URL
+  // limits for a large `= any(...)` array against the full catalog.
+  const BASELINE_CHUNK = 500
+  const baselineBySku = new Map<string, number>()
+  for (let i = 0; i < countedStock.length; i += BASELINE_CHUNK) {
+    const chunk = countedStock.slice(i, i + BASELINE_CHUNK).map((s) => s.sku)
+    const { data: baseline, error } = await db.rpc('stock_qty_as_of_bulk', {
+      p_skus: chunk,
+      p_as_of: asOf,
+    })
+    if (error) throw new Error(`stock_qty_as_of_bulk failed: ${error.message}`)
+    for (const row of (baseline ?? []) as { sku: string; qty: number }[]) {
+      baselineBySku.set(row.sku, row.qty)
+    }
+  }
+
+  const toApply = countedStock
+    .map((s) => {
+      const baseline = baselineBySku.get(s.sku)
+      if (baseline === undefined) return null
+      const delta = s.stockQty - baseline
+      if (delta === 0) return null
+      return { sku: s.sku, delta }
+    })
+    .filter((x): x is { sku: string; delta: number } => x !== null)
+  const skippedNoMatch = countedStock.length - baselineBySku.size
+
+  // Concurrent batches, matching the established pattern for bulk
+  // adjust_stock() writes (see app/admin/api/stock/bulk/route.ts) rather
+  // than one request at a time, which would risk this cron's own timeout
+  // against a full ~3,000-product catalog.
+  for (let i = 0; i < toApply.length; i += ADJUST_CONCURRENCY) {
+    const chunk = toApply.slice(i, i + ADJUST_CONCURRENCY)
+    const results = await Promise.allSettled(
+      chunk.map((c) =>
+        db.rpc('adjust_stock', {
+          p_sku: c.sku,
+          p_delta: c.delta,
+          p_reason: 'erply stock sync',
+          p_changed_by_email: 'erply-sync',
+        }),
+      ),
+    )
+    results.forEach((r, idx) => {
+      if (r.status === 'rejected' || r.value.error) {
+        errors.push({
+          sku: chunk[idx].sku,
+          message: r.status === 'rejected' ? String(r.reason) : r.value.error!.message,
+        })
+      } else {
+        changed++
+      }
+    })
+  }
+
+  await db.from('erply_sync_state').update({ last_stock_sync_at: syncStartedAt }).eq('id', true)
+
+  return { processed: stock.length, changed, skippedNoMatch, skippedUncounted, errors }
+}
