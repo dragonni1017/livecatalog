@@ -39,7 +39,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, company, discount_percent, notes } = body
+    const { email, name, company, discount_percent, notes, price_tier_code } = body
 
     if (!email || typeof email !== 'string' || !isValidEmail(email)) {
       return NextResponse.json({ error: 'Valid email is required' }, { status: 400 })
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isMockMode()) {
-      return NextResponse.json({ customer: { id: 'mock', email, name, company, discount_percent: discount, notes } })
+      return NextResponse.json({ customer: { id: 'mock', email, name, company, discount_percent: discount, notes, price_tier_code: price_tier_code || null } })
     }
 
     const { getAdminClient } = await import('@/lib/supabase')
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         company: company ?? null,
         discount_percent: discount,
         notes: notes ?? null,
+        price_tier_code: price_tier_code || null,
       })
       .select()
       .single()
@@ -71,6 +72,9 @@ export async function POST(request: NextRequest) {
     if (error) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'A customer with that email already exists' }, { status: 409 })
+      }
+      if (error.code === '23503') {
+        return NextResponse.json({ error: 'Invalid price tier selected' }, { status: 400 })
       }
       throw error
     }
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, company, discount_percent, notes } = body
+    const { id, name, company, discount_percent, notes, price_tier_code } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -111,9 +115,15 @@ export async function PATCH(request: NextRequest) {
     if (company !== undefined) patch.company = company
     if (discount_percent !== undefined) patch.discount_percent = Number(discount_percent)
     if (notes !== undefined) patch.notes = notes
+    if (price_tier_code !== undefined) patch.price_tier_code = price_tier_code || null
 
     const { error } = await db.from('customers').update(patch).eq('id', id)
-    if (error) throw error
+    if (error) {
+      if (error.code === '23503') {
+        return NextResponse.json({ error: 'Invalid price tier selected' }, { status: 400 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

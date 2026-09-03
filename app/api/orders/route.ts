@@ -73,13 +73,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── 2c. A customer directly assigned a price tier (app/admin/customers)
+    // gets that tier's pricing automatically, no rep or login required —
+    // resolved by the order's own email, same as the flat discount_percent
+    // fallback below. The tier wins over the flat discount when both are
+    // set (never stacked), same override rule as the rep-tier case above.
     if (!appliedTierCode) {
       const { data: customer } = await db
         .from('customers')
-        .select('discount_percent')
+        .select('discount_percent, price_tier_code')
         .eq('email', contact.email.trim().toLowerCase())
         .maybeSingle()
-      discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
+
+      if (customer?.price_tier_code) {
+        const { data: tier } = await db
+          .from('price_tiers')
+          .select('code, discount_percent, active')
+          .eq('code', customer.price_tier_code)
+          .maybeSingle()
+        if (tier?.active) {
+          discountPct = Number(tier.discount_percent)
+          appliedTierCode = tier.code
+        }
+      }
+
+      if (!appliedTierCode) {
+        discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
+      }
     }
 
     // Rep-only per-line price override ("Custom price for this order" on

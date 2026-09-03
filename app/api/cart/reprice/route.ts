@@ -58,6 +58,23 @@ export async function POST(request: NextRequest) {
           .maybeSingle()
         if (tier?.active) discountPct = Number(tier.discount_percent)
       }
+    } else if (sessionUser?.email) {
+      // A logged-in customer with a tier assigned on their account
+      // (app/admin/customers) — same DB-derived lookup as the real order
+      // charge in app/api/orders/route.ts, never the client cookie.
+      const { data: customer } = await db
+        .from('customers')
+        .select('price_tier_code')
+        .eq('email', sessionUser.email.trim().toLowerCase())
+        .maybeSingle()
+      if (customer?.price_tier_code) {
+        const { data: tier } = await db
+          .from('price_tiers')
+          .select('discount_percent, active')
+          .eq('code', customer.price_tier_code)
+          .maybeSingle()
+        if (tier?.active) discountPct = Number(tier.discount_percent)
+      }
     }
 
     const prices: Record<string, number> = {}
