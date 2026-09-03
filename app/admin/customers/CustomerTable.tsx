@@ -25,12 +25,11 @@ interface AddForm {
   email: string
   name: string
   company: string
-  discount_percent: string
   price_tier_code: string
   notes: string
 }
 
-const EMPTY_FORM: AddForm = { email: '', name: '', company: '', discount_percent: '0', price_tier_code: '', notes: '' }
+const EMPTY_FORM: AddForm = { email: '', name: '', company: '', price_tier_code: '', notes: '' }
 
 export default function CustomerTable({ initialCustomers, tiers }: { initialCustomers: Customer[]; tiers: TierOption[] }) {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
@@ -52,11 +51,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
       setAddError('Email is required.')
       return
     }
-    const discount = parseFloat(addForm.discount_percent)
-    if (isNaN(discount) || discount < 0 || discount > 100) {
-      setAddError('Discount must be between 0 and 100.')
-      return
-    }
 
     setAddSaving(true)
     try {
@@ -67,7 +61,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           email: addForm.email.trim(),
           name: addForm.name.trim() || null,
           company: addForm.company.trim() || null,
-          discount_percent: discount,
           price_tier_code: addForm.price_tier_code || null,
           notes: addForm.notes.trim() || null,
         }),
@@ -96,7 +89,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
     setEditForm({
       name: c.name ?? '',
       company: c.company ?? '',
-      discount_percent: String(c.discount_percent),
       price_tier_code: c.price_tier_code ?? '',
       notes: c.notes ?? '',
     })
@@ -105,11 +97,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
 
   async function handleSaveEdit(id: string) {
     setEditError(null)
-    const discount = parseFloat(editForm.discount_percent ?? '0')
-    if (isNaN(discount) || discount < 0 || discount > 100) {
-      setEditError('Discount must be between 0 and 100.')
-      return
-    }
 
     setEditSaving(true)
     try {
@@ -120,7 +107,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           id,
           name: editForm.name?.trim() || null,
           company: editForm.company?.trim() || null,
-          discount_percent: discount,
           price_tier_code: editForm.price_tier_code || null,
           notes: editForm.notes?.trim() || null,
         }),
@@ -137,7 +123,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
                 ...c,
                 name: editForm.name?.trim() || null,
                 company: editForm.company?.trim() || null,
-                discount_percent: discount,
                 price_tier_code: editForm.price_tier_code || null,
                 notes: editForm.notes?.trim() || null,
               }
@@ -190,7 +175,7 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Customer Profiles</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Manage buyer pricing. A price tier (if assigned) is applied automatically at checkout and overrides the flat discount below — never stacked.
+              Manage buyer pricing. A customer&apos;s assigned price tier is applied automatically at checkout and while browsing.
             </p>
           </div>
           <div className="flex items-center gap-3 mt-1 flex-shrink-0 ml-6">
@@ -250,23 +235,11 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
                   onChange={e => setAddForm(f => ({ ...f, price_tier_code: e.target.value }))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
-                  <option value="">None (use flat discount)</option>
+                  <option value="">None</option>
                   {tiers.map(t => (
                     <option key={t.code} value={t.code}>{t.label}</option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Discount %</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  value={addForm.discount_percent}
-                  onChange={e => setAddForm(f => ({ ...f, discount_percent: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -305,7 +278,7 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           {customers.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <p className="text-sm text-gray-500">
-                No customer profiles yet. Add one above to start tracking buyer discounts.
+                No customer profiles yet. Add one above to start assigning buyer pricing.
               </p>
             </div>
           ) : (
@@ -317,7 +290,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Price Tier</th>
-                    <th className="px-4 py-3">Discount %</th>
                     <th className="px-4 py-3">Orders</th>
                     <th className="px-4 py-3">Notes</th>
                     <th className="px-4 py-3 text-right">Actions</th>
@@ -355,17 +327,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
                               <option key={t.code} value={t.code}>{t.label}</option>
                             ))}
                           </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.1}
-                            value={editForm.discount_percent ?? '0'}
-                            onChange={e => setEditForm(f => ({ ...f, discount_percent: e.target.value }))}
-                            className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                          />
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{c.order_count}</td>
                         <td className="px-4 py-3">
@@ -406,15 +367,6 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
                           {c.price_tier_code ? (
                             <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
                               {tiers.find(t => t.code === c.price_tier_code)?.label ?? c.price_tier_code}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.discount_percent > 0 ? (
-                            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                              {c.discount_percent}%
                             </span>
                           ) : (
                             <span className="text-gray-400">—</span>
