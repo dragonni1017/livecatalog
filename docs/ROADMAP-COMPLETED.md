@@ -115,7 +115,10 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ "Customers also ordered" cross-sell — co-purchase query against `order_items` on the product detail page
 - ✅ Net-terms / credit application — customer-facing form (`/credit-application`), `credit_applications` table, API route, admin review dashboard (`/admin/credit-applications`)
 - ✅ Packing slip generation — `/admin/orders/[id]/packing-slip`
-- ✅ Erply/Woo webhook endpoints for real-time stock sync — `/api/webhooks/erply`, `/api/webhooks/woo` (update `stock_qty` immediately on incoming events; daily cron still the only trigger for the low-stock check — see `docs/ROADMAP-OPEN.md`)
+- ✅ Erply/Woo webhook endpoints for real-time stock sync — `/api/webhooks/erply`, `/api/webhooks/woo` (update `stock_qty` immediately on incoming events; both now also trigger the low-stock check directly, not just the daily cron)
+- ✅ **QuickBooks customer matching before auto-create** (2026-09-08) — auto-sync used to check only an explicit `qb_customer_links` row, then fall straight to QuickBooks' exact-name, email-less `CustomerQueryRq`, so a customer already in QuickBooks under different spacing ("Nation wide wholesale" vs "Nationwide Wholesale") got a duplicate created. Now consults the pulled `qb_customer_directory` first, tiered: unique email → auto-link; unique name once whitespace/case/punctuation are stripped → auto-link; anything less certain is held at `qb_sync_queue.status = 'needs_review'` for admin confirmation rather than guessed at. Migrations `0043`, `0044`.
+- ✅ **Fixed: customer pull could never finish unless orders were queued** (2026-09-08) — `receiveResponseXML` reported progress 100 whenever the sync queue was empty, which QBWC reads as "conversation over"; it hung up mid-pull and the next poll died on a stranded iterator. Earlier pulls only ever completed because pending orders coincidentally held progress at 50.
+- ✅ **Merged/deleted QuickBooks customers self-heal** (2026-09-08) — after a cleanly completed pull, links pointing at a ListID no longer in QuickBooks are dropped so the tiered match re-resolves that buyer. Previously a merge in QB Desktop left the link pointing at a retired ListID with nothing to notice.
 
 ---
 
