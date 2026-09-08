@@ -3,20 +3,17 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
-**8 explicitly open checklist items**, plus 3 blocked-on-external-input items,
+**1 explicitly open checklist item**, plus 3 blocked-on-external-input items,
 and 21 unscoped brainstorm ideas below. (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
-shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`.)
+shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`. The low-stock/webhook
+item formerly here shipped since — also moved there.)
 
 ---
 
 ## Open Backlog
 
 - [ ] SMS notifications via Twilio (order received / status change)
-- [ ] Hook low-stock check into the Erply/Woo webhooks — the webhooks
-      (`api/webhooks/erply`, `api/webhooks/woo`) exist and update `stock_qty`
-      in real time, but only the daily cron currently triggers the low-stock
-      alert; the webhooks don't call it yet
 
 ---
 
@@ -96,3 +93,6 @@ Future Brainstorm below.
 ## Known gaps (not on any list above)
 
 - **Barcode backfill** — 11 known stripped-zero rows still need backfilling in the DB; needs the external source-spreadsheet folder mounted to complete (see `docs/BARCODE-LEADING-ZERO-FIX-HANDOFF.md`).
+- **QuickBooks customer matching is unexercised in production** (as of 2026-09-08) — the tiered match, the `needs_review` hold, and its "Use \<match\>" / "create new" buttons are verified against live *data* but no real order has flowed through them yet, and nothing has landed in the review band. Worth checking Admin → QuickBooks after the first order that isn't an exact match.
+- **Duplicate customers in QuickBooks, left as-is by decision** (2026-09-08) — a scan of the 4,874-customer directory found ~15 near-certain duplicate pairs (`A Dodsons`/`ADODSONS`, `NVflorist`/`NV FLORIST`, `PALMETTO VILLE`/`PALMETTOVILLE`, …). Merging is a QuickBooks Desktop-only action (rename one to match exactly, accept the merge prompt); qbXML cannot do it. Nothing depends on this — duplicate names now hold for review instead of being guessed at — and the self-heal above cleans up the links afterward.
+- **187 emails are shared across multiple QuickBooks customers** (as of 2026-09-08) — reps, buyers spanning venues, and shared AP inboxes (`michaellauber007@gmail.com` on 64 records, `invoice.noreply@greatwolf.com` on 25). Not a defect to fix, but it's why an email match must be unique to auto-link; anyone revisiting the matching tiers should keep that constraint.
