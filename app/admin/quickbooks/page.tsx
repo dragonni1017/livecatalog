@@ -18,7 +18,7 @@ async function getSyncErrors() {
   const staleBefore = new Date(Date.now() - STUCK_SENT_THRESHOLD_MINUTES * 60_000).toISOString()
   const { data: rows } = await db
     .from('qb_sync_queue')
-    .select('id, order_id, status, error_message, match_candidate_name, match_candidate_score, updated_at')
+    .select('id, order_id, status, error_message, match_candidate_name, match_candidate_score, match_candidate_count, updated_at')
     .or(`status.eq.error,status.eq.needs_review,and(status.eq.sent,updated_at.lt.${staleBefore})`)
     .order('updated_at', { ascending: false })
   if (!rows || rows.length === 0) return []
@@ -43,6 +43,7 @@ async function getSyncErrors() {
       errorMessage: r.error_message,
       matchCandidateName: r.match_candidate_name,
       matchCandidateScore: r.match_candidate_score,
+      matchCandidateCount: r.match_candidate_count,
       updatedAt: r.updated_at,
     }
   })

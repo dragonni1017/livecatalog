@@ -424,17 +424,19 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
     // 0035) before ever hitting QuickBooks' own name-only CustomerQueryRq —
     // catches "this customer already exists, just spelled/spaced
     // differently" up front instead of creating a duplicate (see
-    // migration 0043). 'email'/'name' tiers are exact once normalized, so
-    // safe to auto-link; 'fuzzy' isn't confident enough to auto-attach and
-    // is held for admin review instead (app/admin/api/qbwc/sync-errors).
+    // migration 0043). 'email'/'name' tiers are exact AND unique, so safe to
+    // auto-link; 'fuzzy' (a near-miss) and 'ambiguous' (several customers
+    // share that email or name — see migration 0044) are both held for admin
+    // review instead (app/admin/api/qbwc/sync-errors).
     const { data: matchRow } = await db
       .rpc('qb_match_customer', { p_email: order.customer_email, p_name: qbName })
       .maybeSingle()
     const match = matchRow as {
-      tier: 'email' | 'name' | 'fuzzy'
+      tier: 'email' | 'name' | 'fuzzy' | 'ambiguous'
       qb_customer_list_id: string
       matched_name: string
       score: number
+      candidate_count: number
     } | null
 
     if (match?.tier === 'email' || match?.tier === 'name') {
@@ -446,14 +448,15 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
         last_sync_source: 'directory_match',
       })
       qbCustomerListId = match.qb_customer_list_id
-    } else if (match?.tier === 'fuzzy') {
+    } else if (match?.tier === 'fuzzy' || match?.tier === 'ambiguous') {
       await db
         .from('qb_sync_queue')
         .update({
           status: 'needs_review',
           match_candidate_qb_list_id: match.qb_customer_list_id,
           match_candidate_name: match.matched_name,
-          match_candidate_score: match.score,
+          match_candidate_score: match.tier === 'fuzzy' ? match.score : null,
+          match_candidate_count: match.tier === 'ambiguous' ? match.candidate_count : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', queueRow.id)
