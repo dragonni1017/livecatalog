@@ -587,13 +587,25 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
 
   if (session && shouldClearPending) await clearPending(db, ticket)
 
-  // Rough progress estimate for QBWC's UI only — not authoritative. The
-  // session only actually ends when sendRequestXML next returns "".
+  // This is NOT just a UI hint: QBWC treats 100 as "this conversation is
+  // finished" and calls closeConnection instead of sendRequestXML again.
+  // That matters because a full customer pull spans many iterator pages and
+  // QuickBooks' iteratorID is only valid inside the session that created it
+  // -- reporting 100 mid-pull ends the session and strands the iterator, so
+  // the next poll dies with 'The iteratorID "{...}" is not valid.' (seen live
+  // 2026-09-08: a pull stopped after one 94-row page because the order queue
+  // happened to be empty; earlier pulls only survived because pending orders
+  // coincidentally held this under 100 for all ~48 pages).
+  //
+  // !shouldClearPending is precisely "this session deliberately left work
+  // mid-flight" -- the pull's next page, or a query->add transition -- so it
+  // is the honest signal for "don't hang up yet".
   const { count: pendingCount } = await db
     .from('qb_sync_queue')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'pending')
-  return simpleResult('receiveResponseXML', 'receiveResponseXMLResult', pendingCount ? '50' : '100')
+  const moreWorkThisSession = session != null && !shouldClearPending
+  return simpleResult('receiveResponseXML', 'receiveResponseXMLResult', pendingCount || moreWorkThisSession ? '50' : '100')
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
