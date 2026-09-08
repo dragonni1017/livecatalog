@@ -322,7 +322,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const { data: queueRow } = await db
     .from('qb_sync_queue')
-    .select('id, order_id')
+    .select('id, order_id, skip_fuzzy_match')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .limit(1)
@@ -356,13 +356,57 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const qbName = (order.customer_company || order.customer_name || '').trim()
 
-  const { data: customerLink } = await db
+  const { data: existingLink } = await db
     .from('qb_customer_links')
     .select('qb_customer_list_id')
-    .eq('email', order.customer_email)
+    .ilike('email', order.customer_email)
     .maybeSingle()
 
-  if (!customerLink?.qb_customer_list_id) {
+  let qbCustomerListId = existingLink?.qb_customer_list_id ?? null
+
+  if (!qbCustomerListId && !queueRow.skip_fuzzy_match) {
+    // Check the QuickBooks customer list already pulled locally (migration
+    // 0035) before ever hitting QuickBooks' own name-only CustomerQueryRq —
+    // catches "this customer already exists, just spelled/spaced
+    // differently" up front instead of creating a duplicate (see
+    // migration 0043). 'email'/'name' tiers are exact once normalized, so
+    // safe to auto-link; 'fuzzy' isn't confident enough to auto-attach and
+    // is held for admin review instead (app/admin/api/qbwc/sync-errors).
+    const { data: matchRow } = await db
+      .rpc('qb_match_customer', { p_email: order.customer_email, p_name: qbName })
+      .maybeSingle()
+    const match = matchRow as {
+      tier: 'email' | 'name' | 'fuzzy'
+      qb_customer_list_id: string
+      matched_name: string
+      score: number
+    } | null
+
+    if (match?.tier === 'email' || match?.tier === 'name') {
+      await db.from('qb_customer_links').upsert({
+        email: order.customer_email.trim().toLowerCase(),
+        qb_customer_list_id: match.qb_customer_list_id,
+        qb_customer_full_name: match.matched_name,
+        last_synced_at: new Date().toISOString(),
+        last_sync_source: 'directory_match',
+      })
+      qbCustomerListId = match.qb_customer_list_id
+    } else if (match?.tier === 'fuzzy') {
+      await db
+        .from('qb_sync_queue')
+        .update({
+          status: 'needs_review',
+          match_candidate_qb_list_id: match.qb_customer_list_id,
+          match_candidate_name: match.matched_name,
+          match_candidate_score: match.score,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', queueRow.id)
+      return simpleResult('sendRequestXML', 'sendRequestXMLResult', '')
+    }
+  }
+
+  if (!qbCustomerListId) {
     await setPending(db, ticket, 'customer_query', order.id, order.customer_email)
     return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerQueryRq(qbName)))
   }
@@ -398,7 +442,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
     }
   })
   const xml = buildSalesOrderAddRq({
-    qbCustomerListId: customerLink.qb_customer_list_id,
+    qbCustomerListId,
     memo: order.notes ? `${order.reference_code}\n${order.notes}` : order.reference_code,
     poNumber: order.po_number || fallbackPoNumber(order.reference_code),
     shipAddress: order.ship_address1
