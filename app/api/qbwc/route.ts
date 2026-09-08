@@ -167,12 +167,13 @@ interface QbCustomerPullState {
   status: 'idle' | 'requested' | 'in_progress' | 'done' | 'error'
   iterator_id: string | null
   pulled_count: number
+  requested_at: string | null
 }
 
 async function getCustomerPullState(db: Db): Promise<QbCustomerPullState | null> {
   const { data } = await db
     .from('qb_customer_pull_state')
-    .select('status, iterator_id, pulled_count')
+    .select('status, iterator_id, pulled_count, requested_at')
     .eq('id', 1)
     .maybeSingle()
   return data as QbCustomerPullState | null
@@ -189,6 +190,60 @@ function buildCustomerPullRequest(pull: { iterator_id: string | null }): string 
   return pull.iterator_id
     ? buildCustomerFullQueryRq({ iterator: 'Continue', iteratorID: pull.iterator_id, maxReturned: CUSTOMER_PULL_PAGE_SIZE })
     : buildCustomerFullQueryRq({ iterator: 'Start', maxReturned: CUSTOMER_PULL_PAGE_SIZE })
+}
+
+// A completed full pull is an authoritative snapshot of every customer in
+// QuickBooks, so a link still pointing at a ListID absent from it refers to
+// a customer that has since been merged or deleted on the QuickBooks side.
+// Nothing detects that on its own: sendRequestXML trusts an existing link
+// and short-circuits before the directory match ever runs, so the next order
+// from that buyer would be addressed to a customer that no longer exists.
+// (Seen live 2026-09-08 -- merging a duplicate retired its ListID while the
+// link kept pointing at it.) Dropping the row lets the tiered match
+// re-resolve the buyer from scratch on their next order.
+//
+// Only links established BEFORE this pull was requested are eligible: a
+// customer auto-created while the pull was mid-iteration may legitimately
+// not be in the snapshot yet, and deleting a valid link is worse than
+// leaving a stale one -- it re-opens the duplicate-creation risk this whole
+// mechanism exists to close.
+async function dropLinksRetiredInQuickBooks(db: Db, requestedAt: string | null) {
+  const { data: links } = await db
+    .from('qb_customer_links')
+    .select('email, qb_customer_list_id, qb_customer_full_name, last_synced_at')
+  if (!links || links.length === 0) return
+
+  // Look the IDs up in chunks rather than reading the whole directory: a
+  // plain select caps at PostgREST's default 1000 rows, and a short read of
+  // a ~4.9k-row directory would look exactly like "these are all retired"
+  // and delete every valid link past the cap.
+  const ids = links.map((l) => l.qb_customer_list_id).filter((id): id is string => Boolean(id))
+  const live = new Set<string>()
+  for (let i = 0; i < ids.length; i += 500) {
+    const { data: found } = await db
+      .from('qb_customer_directory')
+      .select('qb_customer_list_id')
+      .in('qb_customer_list_id', ids.slice(i, i + 500))
+    for (const row of found ?? []) live.add(row.qb_customer_list_id)
+  }
+
+  for (const link of links) {
+    if (!link.qb_customer_list_id || live.has(link.qb_customer_list_id)) continue
+    if (requestedAt && link.last_synced_at && link.last_synced_at > requestedAt) continue
+    const { error } = await db.from('qb_customer_links').delete().eq('email', link.email)
+    if (error) {
+      console.error(`[qbwc] failed to drop retired link for ${link.email}:`, error.message)
+      continue
+    }
+    await logAudit({
+      action: 'qb_customer_link_retired',
+      entity_type: 'qb_customer_link',
+      entity_id: link.email,
+      entity_label: link.email,
+      old_value: `${link.qb_customer_full_name ?? '?'} (${link.qb_customer_list_id})`,
+      new_value: 'unlinked — no longer in QuickBooks',
+    })
+  }
 }
 
 async function clearPending(db: Db, ticket: string) {
@@ -581,6 +636,10 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
           pulled_count: pulledSoFar,
           completed_at: new Date().toISOString(),
         })
+        // Only on a clean finish -- a partial/errored pull leaves an
+        // incomplete snapshot, against which every unpulled customer would
+        // look retired.
+        await dropLinksRetiredInQuickBooks(db, pull?.requested_at ?? null)
       }
     }
   }
