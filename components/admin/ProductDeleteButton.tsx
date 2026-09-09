@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Props {
   id: string
@@ -23,11 +24,15 @@ export default function ProductDeleteButton({ id, name }: Props) {
     setDeleting(true)
     try {
       const res = await fetch(`/admin/api/products?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Delete failed')
+      const err = await readApiError(res, 'Delete failed.')
+      if (err) {
+        alert(err)
+        setDeleting(false)
+        return
+      }
       router.refresh()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed')
+    } catch {
+      alert(TRANSPORT_ERROR)
       setDeleting(false)
     }
   }

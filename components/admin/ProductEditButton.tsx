@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ImageUploadField from './ImageUploadField'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface VolumeTier { min_qty: number; price_cents: number }
 interface Category { id: string; name: string }
@@ -112,12 +113,15 @@ export default function ProductEditButton({ id, name, description, imageUrl, ima
           category_ids: selectedCategoryIds,
         }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Save failed')
+      const err = await readApiError(res, 'Save failed.')
+      if (err) {
+        setError(err)
+        return
+      }
       setOpen(false)
       router.refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+    } catch {
+      setError(TRANSPORT_ERROR)
     } finally {
       setSaving(false)
     }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Preview {
   incoming: number
@@ -29,12 +30,16 @@ export default function SyncControls({ configured }: { configured: boolean }) {
     setBusy('preview'); setError(null); setResult(null)
     try {
       const res = await fetch('/admin/api/sync')
+      const err = await readApiError(res, 'Preview failed.')
+      if (err) {
+        setError(err)
+        return
+      }
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Preview failed')
       setPreview(data.preview)
       setPreviewConfigured(Boolean(data.configured))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Preview failed')
+    } catch {
+      setError(TRANSPORT_ERROR)
     } finally {
       setBusy(null)
     }

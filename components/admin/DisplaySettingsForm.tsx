@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { DisplaySettings } from '@/lib/display-settings'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Row {
   label: string
@@ -42,12 +43,15 @@ export default function DisplaySettingsForm({ initialSettings }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Save failed')
+      const err = await readApiError(res, 'Save failed.')
+      if (err) {
+        setResult({ message: err, ok: false })
+        return
+      }
       setResult({ message: 'Saved.', ok: true })
       router.refresh()
-    } catch (err) {
-      setResult({ message: err instanceof Error ? err.message : 'Save failed', ok: false })
+    } catch {
+      setResult({ message: TRANSPORT_ERROR, ok: false })
     } finally {
       setSaving(false)
     }

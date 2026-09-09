@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Customer {
   id: string
@@ -65,18 +66,19 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           notes: addForm.notes.trim() || null,
         }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setAddError(json.error ?? 'Failed to save.')
+      const err = await readApiError(res, 'Failed to save.')
+      if (err) {
+        setAddError(err)
         return
       }
+      const json = await res.json()
       if (json.customer) {
         setCustomers(prev => [...prev, json.customer as Customer])
       }
       setAdding(false)
       setAddForm(EMPTY_FORM)
     } catch {
-      setAddError('Network error. Please try again.')
+      setAddError(TRANSPORT_ERROR)
     } finally {
       setAddSaving(false)
     }
@@ -111,9 +113,9 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           notes: editForm.notes?.trim() || null,
         }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setEditError(json.error ?? 'Failed to update.')
+      const err = await readApiError(res, 'Failed to update.')
+      if (err) {
+        setEditError(err)
         return
       }
       setCustomers(prev =>
@@ -131,7 +133,7 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
       )
       setEditingId(null)
     } catch {
-      setEditError('Network error. Please try again.')
+      setEditError(TRANSPORT_ERROR)
     } finally {
       setEditSaving(false)
     }
@@ -143,14 +145,14 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
     if (!confirm(`Delete customer "${label}"? This cannot be undone.`)) return
     try {
       const res = await fetch(`/admin/api/customers?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const json = await res.json()
-        alert(json.error ?? 'Failed to delete.')
+      const err = await readApiError(res, 'Failed to delete.')
+      if (err) {
+        alert(err)
         return
       }
       setCustomers(prev => prev.filter(c => c.id !== id))
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     }
   }
 

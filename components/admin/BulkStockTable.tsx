@@ -8,6 +8,7 @@ import ProductEditButton from '@/components/admin/ProductEditButton'
 import ProductDeleteButton from '@/components/admin/ProductDeleteButton'
 import ThresholdCell from './ThresholdCell'
 import BulkActionBar from './BulkActionBar'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface VolumeTier { min_qty: number; price_cents: number }
 
@@ -109,13 +110,17 @@ export default function BulkStockTable({ products, categories, totalCount, filte
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      const err = await readApiError(res, 'Update failed.')
+      if (err) {
+        setResult({ message: err, ok: false })
+        return
+      }
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Update failed')
       setResult({ message: `${data.updated} product${data.updated === 1 ? '' : 's'} updated.`, ok: true })
       clearSelection()
       router.refresh()
-    } catch (err) {
-      setResult({ message: err instanceof Error ? err.message : 'Update failed', ok: false })
+    } catch {
+      setResult({ message: TRANSPORT_ERROR, ok: false })
     } finally {
       setLoading(false)
     }

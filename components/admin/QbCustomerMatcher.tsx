@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface PullState {
   status: 'idle' | 'requested' | 'in_progress' | 'done' | 'error'
@@ -68,8 +69,9 @@ export default function QbCustomerMatcher({
     const id = setInterval(async () => {
       try {
         const res = await fetch('/admin/api/qbwc/customer-pull')
-        const json = await res.json()
-        if (res.ok) {
+        const err = await readApiError(res, 'Failed to load pull status.')
+        if (!err) {
+          const json = await res.json()
           setPull(json.pull)
           setDirectoryCount(json.directoryCount)
         }
@@ -84,14 +86,14 @@ export default function QbCustomerMatcher({
     setRequesting(true)
     try {
       const res = await fetch('/admin/api/qbwc/customer-pull', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to request pull.')
+      const err = await readApiError(res, 'Failed to request pull.')
+      if (err) {
+        alert(err)
         return
       }
       setPull((p) => ({ ...p, status: 'requested', error_message: null }))
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     } finally {
       setRequesting(false)
     }
@@ -108,8 +110,11 @@ export default function QbCustomerMatcher({
     searchTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/admin/api/qbwc/customer-directory?q=${encodeURIComponent(value)}`)
-        const json = await res.json()
-        if (res.ok) setMatches(json.customers)
+        const err = await readApiError(res, 'Failed to search customers.')
+        if (!err) {
+          const json = await res.json()
+          setMatches(json.customers)
+        }
       } catch {
         /* ignore — user can retype */
       }
@@ -130,9 +135,9 @@ export default function QbCustomerMatcher({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, qb_customer_list_id: match.qb_customer_list_id, qb_customer_full_name: match.full_name }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to link.')
+      const err = await readApiError(res, 'Failed to link.')
+      if (err) {
+        alert(err)
         return
       }
       setBuyers((prev) =>
@@ -144,7 +149,7 @@ export default function QbCustomerMatcher({
       )
       setSearchingEmail(null)
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     } finally {
       setLinking(null)
     }
@@ -155,14 +160,14 @@ export default function QbCustomerMatcher({
     setLinking(email)
     try {
       const res = await fetch(`/admin/api/qbwc/customer-links?email=${encodeURIComponent(email)}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const json = await res.json()
-        alert(json.error ?? 'Failed to unlink.')
+      const err = await readApiError(res, 'Failed to unlink.')
+      if (err) {
+        alert(err)
         return
       }
       setBuyers((prev) => prev.map((b) => (b.email === email ? { ...b, link: null } : b)))
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     } finally {
       setLinking(null)
     }

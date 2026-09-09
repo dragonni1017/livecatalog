@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 type Action = 'hide_imageless' | 'unhide_with_image'
 
@@ -24,11 +25,15 @@ export default function BulkVisibilityActions() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       })
+      const err = await readApiError(res, 'Request failed.')
+      if (err) {
+        setError(err)
+        return
+      }
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Request failed')
       setNote({ action, affected: data.affected ?? 0 })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } catch {
+      setError(TRANSPORT_ERROR)
     } finally {
       setPending(null)
     }
