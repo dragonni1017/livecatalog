@@ -685,3 +685,9 @@ in `sent` for 10+ minutes, use the Retry/Force-retry buttons on
 SQL now — check `error_message` first to see if it's an actual data
 problem (e.g. a bad account/item mapping) vs. a transient QuickBooks-side
 conflict worth just retrying as-is.
+
+UPDATE 2026-09-08: a third status, `needs_review`, now shares those panels —
+see [[project-qb-customer-matching]] before changing anything in the customer
+lookup path. That session also found the customer-directory pull had never
+been able to finish on its own (progress=100 ends the QBWC session), so the
+"4,828 customers pulled" noted above had only succeeded by accident.
