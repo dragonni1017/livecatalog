@@ -347,7 +347,13 @@ export default function UsersTable({
                     <th className="px-4 py-3">Confirmed</th>
                     <th className="px-4 py-3">Signed up</th>
                     <th className="px-4 py-3">Last login</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    {/* Pinned to the right edge. This table is 8 columns wide
+                        and scrolls horizontally, so on a laptop the actions —
+                        including Delete — used to sit off-screen with nothing
+                        indicating they were there. */}
+                    <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3 text-right border-l border-gray-200 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.15)]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -357,7 +363,7 @@ export default function UsersTable({
                     const isSelf = account.id === currentUserId
                     const editingEmail = editingEmailId === account.id
                     return (
-                      <tr key={account.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={account.id} className="group hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">
                           {editingEmail ? (
                             <div className="flex items-center gap-2">
@@ -442,8 +448,16 @@ export default function UsersTable({
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(account.createdAt)}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(account.lastSignInAt)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center justify-end gap-2">
+                        {/* Opaque background is required, not decorative: a
+                            transparent sticky cell lets the scrolled columns
+                            show through underneath it. Tracks the row's hover
+                            state via the `group` on <tr>. */}
+                        <td className="sticky right-0 z-10 bg-white group-hover:bg-gray-50 transition-colors px-4 py-3 border-l border-gray-200 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.15)]">
+                          {/* Stays wrapped: five buttons on one line would make
+                              the pinned column wide enough to cover most of the
+                              table on a laptop. Wrapping trades height for
+                              width, which is the right way round here. */}
+                          <div className="flex flex-wrap items-center justify-end gap-2 max-w-[260px] ml-auto">
                             {account.email && (
                               <Link
                                 href={`/admin/orders?email=${encodeURIComponent(account.email)}`}
