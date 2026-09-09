@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**89 items completed** (82 shipped-feature bullets + 7 checked-off backlog/design items).
+**97 items completed** (90 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -41,7 +41,10 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
 ### Customer Accounts (public-facing)
 - ✅ Email/password login + registration (Supabase Auth) — `/login`, `/register`
-- ✅ Forgot-password / reset-password flow
+- ✅ Forgot-password / reset-password flow — **shipped but non-functional in
+  production from the day the `lyusa.app` domain went live until 2026-09-09;
+  see "Auth & account management (2026-09-09)" below for the four independent
+  causes and their fixes**
 - ✅ `/account` — profile details + order history (matched by email)
 - ✅ `/account/settings` — edit profile
 
@@ -121,6 +124,66 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ **Merged/deleted QuickBooks customers self-heal** (2026-09-08) — after a cleanly completed pull, links pointing at a ListID no longer in QuickBooks are dropped so the tiered match re-resolves that buyer. Previously a merge in QB Desktop left the link pointing at a retired ListID with nothing to notice.
 
 ---
+
+### Auth & account management (2026-09-09)
+
+Customer password reset had been dead since the `lyusa.app` custom domain went
+live. Four independent causes, each sufficient on its own, and every one failed
+silently — the customer saw "Check your email" and nothing arrived, or a link
+that landed nowhere. All four verified fixed against production.
+
+- ✅ **Supabase redirect allow-list** — `lyusa.app` was never added, and GoTrue
+  does not reject an unlisted `redirect_to`: it silently substitutes the Site
+  URL. Reset links landed customers on the homepage of a *different* domain
+  with no callback and no session. Allow-list + Site URL corrected (dashboard,
+  not code). Probe the allow-list with `admin.generateLink` — it reports the
+  substitution — before reading application code next time.
+- ✅ **PKCE device-locking** — recovery used PKCE, which keeps its code verifier
+  in browser storage on the device that *requested* the reset, so the emailed
+  link only worked in that one browser. Recovery is now requested over the
+  implicit flow (`lib/auth-client.ts` → `getRecoveryClient`). Note: the first
+  attempt at this was inert because `@supabase/ssr`'s `createBrowserClient`
+  hard-codes `flowType: "pkce"` *after* spreading caller options — it must be
+  supabase-js `createClient`. Assert the resulting client's `.auth.flowType`
+  rather than trusting the option.
+- ✅ **SMTP sender rejection** — Supabase custom SMTP had Sender email
+  `sale@ly-usa.com` but Username `dragon@ly-usa.com`. Titan is a mailbox
+  provider, not a relay, and rejects any sender it doesn't own
+  (`553 5.7.1 ... not owned by user`). Supabase surfaced that as a bare 500
+  with an empty body, which rendered to customers as `{}`. Sender and Username
+  must match exactly.
+- ✅ **`/reset-password`** (`app/(catalog)/reset-password/page.tsx`) — the old
+  flow only understood the PKCE `?code=` grant; every other shape dead-ended at
+  a blank login form. Now accepts all three grants GoTrue can send (`?code=`,
+  `?token_hash=`, `#access_token=`) and states a reason when it can't establish
+  a session. Exempted from the `CATALOG_ACCESS_CODE` gate, which would
+  otherwise bounce reset links to `/enter` and destroy the single-use grant.
+- ✅ **Honest auth errors** (`lib/auth-errors.ts`) — `resetPasswordForEmail`'s
+  error was discarded entirely, so SMTP and rate-limit failures still rendered
+  "Check your email"; the callback's `?error=` was never displayed at all.
+  Empty-body 500s, rate limits, and unconfirmed-email cases now map to text
+  that says what happened.
+- ✅ **`/admin/users` is a full account manager** — was read-only. Role filter,
+  search, inline email edit, role change, deactivate, delete, send-reset, and
+  a pinned Actions column (it previously sat off-screen inside a horizontally
+  scrolling 8-column table, hiding every control including Delete). Demoting to
+  customer *deletes* the `role` key rather than writing `"customer"`, matching
+  how every existing role check reads a missing key. Deleting a rep attributed
+  to orders is blocked by counting `order_requests` first — GoTrue wraps the FK
+  violation as a generic "Database error deleting user", so matching on the
+  message can't explain it; nulling `rep_user_id` would destroy order
+  attribution and is deliberately not done.
+- ✅ **Email-free account paths** — `+ Create account` (pre-confirmed, no signup
+  mail) and per-row `Set password` (also confirms the address, since an
+  unconfirmed account can't sign in even with a correct password). Supabase Auth
+  email is rate-limited per project and confirmation is required at signup, so a
+  customer who can't receive mail otherwise has no self-service route in.
+- ✅ **Admin API session errors** — middleware gated `/admin/api/*` by
+  redirecting to the HTML `/admin/login` page; `fetch` follows the redirect, so
+  every admin screen's `res.json()` threw on HTML and reported "Network error"
+  when the real cause was an expired session. Middleware now returns `401` +
+  JSON, and 18 admin components moved onto a shared reader
+  (`lib/admin-fetch.ts`) that checks `res.ok` before parsing.
 
 ## Backlog items completed
 
