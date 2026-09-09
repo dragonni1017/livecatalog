@@ -47,6 +47,29 @@ export default function UsersTable({
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
 
+  // Every handler below used `await res.json()` before checking res.ok, so any
+  // non-JSON response threw and was caught as "Network error" — which is what
+  // an expired admin session looked like, because middleware used to redirect
+  // API calls to the HTML login page. Read the body defensively and name the
+  // failure instead of blaming the network.
+  async function readError(res: Response, fallback: string): Promise<string | null> {
+    if (res.status === 401) {
+      return 'Your admin session has expired. Reload the page, sign in again, and retry.'
+    }
+    let body: unknown = null
+    try {
+      // clone() so callers that need the success payload (create_account) can
+      // still read it — a Response body can only be consumed once.
+      body = await res.clone().json()
+    } catch {
+      // Not JSON — an error page, a proxy response, or an empty body.
+      return res.ok ? null : `${fallback} (server returned ${res.status})`
+    }
+    if (res.ok) return null
+    const message = (body as { error?: string })?.error
+    return message ?? `${fallback} (server returned ${res.status})`
+  }
+
   async function patch(id: string, body: Record<string, unknown>): Promise<boolean> {
     setBusyId(id)
     try {
@@ -55,14 +78,14 @@ export default function UsersTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...body }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to update account.')
+      const err = await readError(res, 'Failed to update account.')
+      if (err) {
+        alert(err)
         return false
       }
       return true
     } catch {
-      alert('Network error. Please try again.')
+      alert("Couldn't reach the server. Check your connection and try again.")
       return false
     } finally {
       setBusyId(null)
@@ -130,14 +153,14 @@ export default function UsersTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: account.id, action: 'send_password_reset' }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to send password reset.')
+      const err = await readError(res, 'Failed to send password reset.')
+      if (err) {
+        alert(err)
         return
       }
       alert(`Password reset email sent to ${account.email}.`)
     } catch {
-      alert('Network error. Please try again.')
+      alert("Couldn't reach the server. Check your connection and try again.")
     } finally {
       setBusyId(null)
     }
@@ -164,9 +187,9 @@ export default function UsersTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: account.id, action: 'set_password', password }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to set password.')
+      const err = await readError(res, 'Failed to set password.')
+      if (err) {
+        alert(err)
         return
       }
       setAccounts((prev) =>
@@ -174,7 +197,7 @@ export default function UsersTable({
       )
       alert(`Password set for ${account.email}. They can sign in with it now.`)
     } catch {
-      alert('Network error. Please try again.')
+      alert("Couldn't reach the server. Check your connection and try again.")
     } finally {
       setBusyId(null)
     }
@@ -203,15 +226,16 @@ export default function UsersTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_account', email: email.trim(), password }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to create account.')
+      const err = await readError(res, 'Failed to create account.')
+      if (err) {
+        alert(err)
         return
       }
+      const json = await res.json()
       setAccounts((prev) => [json.account as UserAccount, ...prev])
       alert(`Account created for ${json.account.email}. They can sign in immediately.`)
     } catch {
-      alert('Network error. Please try again.')
+      alert("Couldn't reach the server. Check your connection and try again.")
     } finally {
       setCreating(false)
     }
@@ -233,14 +257,14 @@ export default function UsersTable({
     setBusyId(account.id)
     try {
       const res = await fetch(`/admin/api/users?id=${encodeURIComponent(account.id)}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const json = await res.json()
-        alert(json.error ?? 'Failed to delete account.')
+      const err = await readError(res, 'Failed to delete account.')
+      if (err) {
+        alert(err)
         return
       }
       setAccounts((prev) => prev.filter((a) => a.id !== account.id))
     } catch {
-      alert('Network error. Please try again.')
+      alert("Couldn't reach the server. Check your connection and try again.")
     } finally {
       setBusyId(null)
     }
