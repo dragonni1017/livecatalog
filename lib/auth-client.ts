@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
 export function getAuthClient() {
   return createBrowserClient(
@@ -21,10 +22,26 @@ export function getAuthClient() {
 // buys nothing here that the single-use, short-lived token doesn't.
 //
 // Deliberately scoped to this one call — the rest of the app keeps PKCE.
+//
+// MUST be supabase-js createClient, NOT @supabase/ssr createBrowserClient.
+// createBrowserClient sets `flowType: "pkce"` *after* spreading the caller's
+// auth options (see its source), so passing flowType there is silently
+// discarded and the link stays device-locked. That mistake shipped once.
+//
+// Nothing here needs a session: this client only posts an email address to
+// /auth/v1/recover. Persistence is off so it can't fight the cookie-based
+// client above over shared storage.
 export function getRecoveryClient() {
-  return createBrowserClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { flowType: 'implicit' } }
+    {
+      auth: {
+        flowType: 'implicit',
+        persistSession: false,
+        detectSessionInUrl: false,
+        autoRefreshToken: false,
+      },
+    }
   )
 }
