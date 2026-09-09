@@ -36,6 +36,16 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     if (pathname === '/admin/login') return response
     if (!sessionUser || sessionUser.app_metadata?.role !== 'admin') {
+      // API calls get a 401 with a JSON body, not a redirect to an HTML login
+      // page. fetch() follows the redirect, lands on /admin/login, and the
+      // caller's res.json() then throws on HTML — which surfaced to admins as
+      // a misleading "Network error" when their session had simply expired.
+      if (pathname.startsWith('/admin/api/')) {
+        return NextResponse.json(
+          { error: 'Your admin session has expired. Reload the page and sign in again.' },
+          { status: 401 },
+        )
+      }
       const loginUrl = new URL('/admin/login', request.url)
       loginUrl.searchParams.set('from', pathname)
       return NextResponse.redirect(loginUrl)
