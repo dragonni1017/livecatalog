@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getAuthClient, getRecoveryClient } from '@/lib/auth-client'
+import { friendlyAuthError } from '@/lib/auth-errors'
 
 const CALLBACK_ERRORS: Record<string, string> = {
   auth_error:
@@ -40,7 +41,7 @@ function LoginForm() {
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (signInError) {
-      setError(signInError.message)
+      setError(friendlyAuthError(signInError))
       setLoading(false)
       return
     }
@@ -72,7 +73,7 @@ function LoginForm() {
     // so a success here isn't proof an email went out — but a hard failure
     // (SMTP down, rate limit) used to be swallowed entirely.
     if (resetError) {
-      setError(resetError.message)
+      setError(friendlyAuthError(resetError))
       return
     }
     setResetSent(true)

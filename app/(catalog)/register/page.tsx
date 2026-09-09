@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getAuthClient } from '@/lib/auth-client'
+import { friendlyAuthError } from '@/lib/auth-errors'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -37,15 +38,11 @@ export default function RegisterPage() {
     })
 
     if (signUpError) {
-      if (
-        signUpError.message.toLowerCase().includes('already registered') ||
-        signUpError.message.toLowerCase().includes('already exists') ||
-        signUpError.message.toLowerCase().includes('user already')
-      ) {
-        setError('An account with this email already exists. Sign in instead.')
-      } else {
-        setError(signUpError.message)
-      }
+      // friendlyAuthError covers the already-registered case, plus the ones
+      // that used to render as a bare "{}" — GoTrue answers 500 with an empty
+      // body when it can't send the confirmation email, which is a server-side
+      // problem the customer can do nothing about.
+      setError(friendlyAuthError(signUpError))
       setLoading(false)
       return
     }
