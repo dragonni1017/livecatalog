@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
-**1 explicitly open checklist item**, plus 3 blocked-on-external-input items,
+**2 explicitly open checklist items**, plus 3 blocked-on-external-input items,
 and 21 unscoped brainstorm ideas below. (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
 shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`. The low-stock/webhook
@@ -84,6 +84,14 @@ Future Brainstorm below.
 
 ## What Still Needs to Happen (your side)
 
+- [ ] **Two accounts still stuck unconfirmed** (as of 2026-09-09) —
+      `mishka@essentialsforkids.org` (registered 2026-08-13) and
+      `allyee18@hotmail.com` (2026-09-01) both registered while password/
+      confirmation email was broken, never confirmed, and have never signed in.
+      An unconfirmed account can't sign in even with a correct password, so
+      "Set password" on `/admin/users` is the fix — it confirms the address at
+      the same time. They may also have given up and moved on; worth a call
+      before assuming they still want an account.
 - [ ] Purchase `lyusacatalog.com` and point it at Vercel (Settings → Domains)
 - [ ] Confirm Erply data is clean so auto-sync can be enabled
 - [ ] Formally test mobile layout on iOS Safari + Android Chrome
