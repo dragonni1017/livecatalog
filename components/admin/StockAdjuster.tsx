@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { StockAdjustment } from '@/lib/types'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Props {
   id: string
@@ -60,14 +61,17 @@ export default function StockAdjuster({ id, name, stockQty }: Props) {
           reason: reason.trim() || null,
         }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Adjustment failed')
+      const err = await readApiError(res, 'Adjustment failed.')
+      if (err) {
+        setError(err)
+        return
+      }
       setQty('')
       setReason('')
       router.refresh()
       loadHistory()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Adjustment failed')
+    } catch {
+      setError(TRANSPORT_ERROR)
     } finally {
       setSaving(null)
     }

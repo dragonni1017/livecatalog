@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiError } from '@/lib/admin-fetch'
 
 interface Props {
   id: string
@@ -21,8 +22,10 @@ export default function ProductVisibilityToggle({ id, initialHidden }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, manually_hidden: next }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Request failed')
+      const err = await readApiError(res, 'Request failed.')
+      if (err) {
+        setHidden(!next) // revert
+      }
     } catch {
       setHidden(!next) // revert
     } finally {

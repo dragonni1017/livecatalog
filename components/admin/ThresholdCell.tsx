@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface Product {
   id: string
@@ -29,12 +30,15 @@ export default function ThresholdCell({ product, onSaved }: ThresholdCellProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: product.id, low_stock_threshold: newThreshold }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Save failed')
+      const err = await readApiError(res, 'Save failed.')
+      if (err) {
+        setError(err)
+        return
+      }
       setEditing(false)
       onSaved()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+    } catch {
+      setError(TRANSPORT_ERROR)
     } finally {
       setSaving(false)
     }

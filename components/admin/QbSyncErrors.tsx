@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 interface SyncError {
   queueId: string
@@ -51,14 +52,14 @@ export default function QbSyncErrors({ initialErrors }: { initialErrors: SyncErr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ queueId: item.queueId, ...(action ? { action } : {}) }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to retry.')
+      const err = await readApiError(res, 'Failed to retry.')
+      if (err) {
+        alert(err)
         return
       }
       setErrors((prev) => prev.filter((e) => e.queueId !== item.queueId))
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     } finally {
       setBusy(null)
     }

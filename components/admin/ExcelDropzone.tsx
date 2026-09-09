@@ -3,6 +3,7 @@
 import { useRef, useState, DragEvent, ChangeEvent } from 'react'
 import * as XLSX from 'xlsx'
 import type { ExcelRow, ImportResult, DiffResult, BarcodeCorrection } from '@/lib/types'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import ImportPreviewPanel from './ImportPreviewPanel'
 import ImportResultPanel from './ImportResultPanel'
 
@@ -119,7 +120,8 @@ export default function ExcelDropzone() {
         body: JSON.stringify({ rows }),
       })
 
-      if (!res.ok) throw new Error('Server error computing diff')
+      const err = await readApiError(res, 'Server error computing diff.')
+      if (err) throw new Error(err)
 
       const result: DiffResult = await res.json()
       setDiffResult(result)
@@ -160,12 +162,21 @@ export default function ExcelDropzone() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: validRows, barcodeCorrections: corrections }),
       })
+      const err = await readApiError(res, 'Import failed.')
+      if (err) {
+        setImportResult({
+          inserted: 0, updated: 0, deactivated: 0, skipped: 0,
+          errors: [{ row: 0, sku: '', message: err }],
+        })
+        setStage('done')
+        return
+      }
       setImportResult(await res.json())
       setStage('done')
     } catch {
       setImportResult({
         inserted: 0, updated: 0, deactivated: 0, skipped: 0,
-        errors: [{ row: 0, sku: '', message: 'Network error — could not reach the server.' }],
+        errors: [{ row: 0, sku: '', message: TRANSPORT_ERROR }],
       })
       setStage('done')
     }

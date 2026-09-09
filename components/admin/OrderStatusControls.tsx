@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { OrderStatus } from '@/lib/types'
+import { readApiError } from '@/lib/admin-fetch'
 
 const OPTIONS: { value: OrderStatus; label: string; active: string }[] = [
   { value: 'new', label: 'New', active: 'bg-blue-600 text-white' },
@@ -34,8 +35,12 @@ export default function OrderStatusControls({ id, initialStatus }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: next }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Request failed')
+      const err = await readApiError(res, 'Request failed.')
+      if (err) {
+        setStatus(prev) // revert
+        setError(true)
+        return
+      }
       router.refresh() // re-pull status_changed_at etc. from the server
     } catch {
       setStatus(prev) // revert

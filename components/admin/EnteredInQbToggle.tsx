@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { readApiError } from '@/lib/admin-fetch'
 
 interface Props {
   id: string
@@ -30,8 +31,12 @@ export default function EnteredInQbToggle({ id, initial, variant = 'button' }: P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, enteredInQb: next }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Request failed')
+      const err = await readApiError(res, 'Request failed.')
+      if (err) {
+        setEntered(!next) // revert
+        setError(true)
+        return
+      }
       router.refresh()
     } catch {
       setEntered(!next) // revert

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 type Role = 'admin' | 'rep'
 
@@ -52,14 +53,14 @@ export default function AccountsTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...body }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        alert(json.error ?? 'Failed to update account.')
+      const err = await readApiError(res, 'Failed to update account.')
+      if (err) {
+        alert(err)
         return false
       }
       return true
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
       return false
     } finally {
       setBusyId(null)
@@ -83,18 +84,19 @@ export default function AccountsTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password, role }),
       })
-      const json = await res.json()
-      if (!res.ok) {
-        setAddError(json.error ?? 'Failed to create account.')
+      const err = await readApiError(res, 'Failed to create account.')
+      if (err) {
+        setAddError(err)
         return
       }
+      const json = await res.json()
       setAccounts((prev) => [...prev, json.account as Account].sort((a, b) => a.email.localeCompare(b.email)))
       setAdding(false)
       setEmail('')
       setPassword('')
       setRole('rep')
     } catch {
-      setAddError('Network error. Please try again.')
+      setAddError(TRANSPORT_ERROR)
     } finally {
       setAddSaving(false)
     }
@@ -152,14 +154,14 @@ export default function AccountsTable({
     setBusyId(account.id)
     try {
       const res = await fetch(`/admin/api/accounts?id=${encodeURIComponent(account.id)}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const json = await res.json()
-        alert(json.error ?? 'Failed to delete account.')
+      const err = await readApiError(res, 'Failed to delete account.')
+      if (err) {
+        alert(err)
         return
       }
       setAccounts((prev) => prev.filter((a) => a.id !== account.id))
     } catch {
-      alert('Network error. Please try again.')
+      alert(TRANSPORT_ERROR)
     } finally {
       setBusyId(null)
     }
