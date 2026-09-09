@@ -62,6 +62,13 @@ export async function middleware(request: NextRequest) {
   // browser after entry and aren't gated here.
   if (pathname === '/enter' || pathname.startsWith('/api')) return response
 
+  // A customer clicking an emailed password-reset link has already proven
+  // who they are via the Supabase grant in the URL/hash — bouncing them to
+  // the shared-access-code gate here would drop that single-use grant with
+  // no way back. /login and /register aren't exempted either (same gap),
+  // left as-is since only this route was in scope for this fix.
+  if (pathname === '/reset-password') return response
+
   // ── Catalog: optional shared access code ─────────────────────────────────
   // Dormant unless CATALOG_ACCESS_CODE is set, so the catalog stays public
   // until you turn the gate on by setting that env var.

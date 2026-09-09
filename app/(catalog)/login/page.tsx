@@ -3,12 +3,26 @@
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getAuthClient } from '@/lib/auth-client'
+import { getAuthClient, getRecoveryClient } from '@/lib/auth-client'
+
+const CALLBACK_ERRORS: Record<string, string> = {
+  auth_error:
+    'That sign-in link is no longer valid. Reset links expire and can only be used once — request a new one below.',
+  expired:
+    'That password reset link has expired or was already used. Request a new one below.',
+  no_verifier:
+    'That reset link was opened on a different device or browser than the one it was requested from. Request a new link below and open it on this device.',
+}
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const from = searchParams.get('from') ?? '/account'
+
+  // /api/auth/callback and /reset-password bounce failures back here. Without
+  // rendering them the customer just lands on a blank sign-in form and assumes
+  // the reset link did nothing.
+  const callbackError = CALLBACK_ERRORS[searchParams.get('error') ?? '']
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -42,12 +56,25 @@ function LoginForm() {
     setResetLoading(true)
     setError(null)
 
-    const supabase = getAuthClient()
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + '/api/auth/callback?next=/account/settings',
+    // getRecoveryClient (not getAuthClient) so the emailed link works from any
+    // browser — see lib/auth-client.ts. Land on the dedicated recovery page
+    // rather than /api/auth/callback → /account/settings: that route only
+    // understood PKCE `?code=`, so any other link shape silently bounced the
+    // customer to a blank login form.
+    const supabase = getRecoveryClient()
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password',
     })
 
     setResetLoading(false)
+
+    // Supabase deliberately doesn't reveal whether the address is registered,
+    // so a success here isn't proof an email went out — but a hard failure
+    // (SMTP down, rate limit) used to be swallowed entirely.
+    if (resetError) {
+      setError(resetError.message)
+      return
+    }
     setResetSent(true)
   }
 
@@ -76,6 +103,11 @@ function LoginForm() {
 
         {/* Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          {callbackError && !resetSent && (
+            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {callbackError}
+            </p>
+          )}
           {resetSent ? (
             <p className="text-sm text-gray-700 text-center">
               Check your email for a password reset link.
