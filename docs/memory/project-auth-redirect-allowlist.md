@@ -95,8 +95,12 @@ the fallback landing could never have completed the exchange.
   through to `TITAN_SMTP_USER` and sends as the authenticated mailbox. Setting
   either to `sale@ly-usa.com` reproduces cause 2 in the app's mail. Recipients
   (`SALES_ALERT_TO`, `REORDER_ALERT_TO`) are unaffected — Titan only polices the
-  sender. Vercel's copies of these vars were not verified (no CLI on this
-  machine); check them there before assuming production matches local.
+  sender. **Vercel checked 2026-09-10: both are set explicitly to
+  `dragon@ly-usa.com`**, which the probe confirms Titan accepts, so production
+  sends legally too — local and prod differ only in that local leaves them
+  unset and falls through to the same address. Production naming the address
+  explicitly means a future `TITAN_SMTP_USER` change has to be made in three
+  places, not one.
 - **An app-side sender rejection is invisible.**
   `app/api/orders/route.ts` runs `notifyReps` / `notifyCustomer` through
   `Promise.allSettled` and only `console.error`s a rejection, by design so mail
