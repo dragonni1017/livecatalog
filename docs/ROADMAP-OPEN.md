@@ -3,8 +3,9 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
-**2 explicitly open checklist items**, plus 3 blocked-on-external-input items,
-and 21 unscoped brainstorm ideas below. (Volume pricing, cross-sell, credit
+**No open items in the backlog.** 3 design items awaiting design input, 3
+blocked-on-external-input items, 4 items on your side, and 21 unscoped
+brainstorm ideas below. (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
 shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`. The low-stock/webhook
 item formerly here shipped since — also moved there.)
@@ -13,7 +14,11 @@ item formerly here shipped since — also moved there.)
 
 ## Open Backlog
 
-- [ ] SMS notifications via Twilio (order received / status change)
+Empty. The one item that lived here — SMS notifications via Twilio (order
+received / status change) — was **declined 2026-09-10**. No SMS wanted, Twilio
+or any other provider. Recorded rather than deleted so it stops resurfacing as
+"the only unblocked item." Order and status notifications stay email-only via
+`lib/order-emails.ts`; next candidates come from the Future Brainstorm below.
 
 ---
 
