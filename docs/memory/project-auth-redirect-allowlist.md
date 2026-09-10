@@ -26,6 +26,10 @@ The other three, all of which also failed silently:
    provider, not a relay (`553 5.7.1 ... not owned by user`). Sender and Username
    must match exactly. GoTrue reports this as a 500 with an **empty body**, which
    the SDK stringifies to `"{}"` — so it surfaced to customers as a literal `{}`.
+   **Current state (2026-09-10): both fields are `dragon@ly-usa.com`** — the
+   Sender was moved to match the Username, not the other way round. These are
+   *not* the credentials the app itself sends with; see the two-connections note
+   under How to apply.
 3. **`/reset-password` didn't exist.** The flow pointed at a callback that only
    understood the PKCE `?code=` grant; every other shape dead-ended at a blank
    login form.
@@ -72,6 +76,18 @@ the fallback landing could never have completed the exchange.
   Configuration → Redirect URLs (`https://lyusa.app/**`), and the Site URL
   should point at the real customer-facing domain. Nothing in the repo
   encodes this, and nothing fails loudly when it's missed.
+- **Two independent Titan SMTP connections exist — don't cross them.** Supabase
+  Auth has its own (dashboard-configured, Sender + Username both
+  `dragon@ly-usa.com`) and sends reset / confirm / magic-link mail. The app has
+  a separate one (`lib/email.ts`, `TITAN_SMTP_USER` authenticating, from-address
+  `SALES_ALERT_FROM` / `REORDER_ALERT_FROM` = `sale@ly-usa.com`) and sends order
+  notifications, customer confirmations, back-in-stock, abandoned cart, and
+  `/api/order-reply`. The sender-must-match-username rule applies *within* one
+  connection, so the two using different addresses is correct — not something to
+  "fix" by unifying them. But repointing `TITAN_SMTP_USER` without moving
+  `SALES_ALERT_FROM` and `REORDER_ALERT_FROM` in the same edit reproduces cause 2
+  in the app's mail instead of Supabase's, where it fails on a background send
+  with nothing customer-visible at all.
 - Don't diagnose this from `auth.users`: `recovery_sent_at` and `identities`
   come back empty from the admin `listUsers` API on this project regardless of
   reality, so they look alarming and prove nothing.
