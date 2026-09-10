@@ -76,18 +76,34 @@ the fallback landing could never have completed the exchange.
   Configuration → Redirect URLs (`https://lyusa.app/**`), and the Site URL
   should point at the real customer-facing domain. Nothing in the repo
   encodes this, and nothing fails loudly when it's missed.
-- **Two independent Titan SMTP connections exist — don't cross them.** Supabase
-  Auth has its own (dashboard-configured, Sender + Username both
-  `dragon@ly-usa.com`) and sends reset / confirm / magic-link mail. The app has
-  a separate one (`lib/email.ts`, `TITAN_SMTP_USER` authenticating, from-address
-  `SALES_ALERT_FROM` / `REORDER_ALERT_FROM` = `sale@ly-usa.com`) and sends order
-  notifications, customer confirmations, back-in-stock, abandoned cart, and
-  `/api/order-reply`. The sender-must-match-username rule applies *within* one
-  connection, so the two using different addresses is correct — not something to
-  "fix" by unifying them. But repointing `TITAN_SMTP_USER` without moving
-  `SALES_ALERT_FROM` and `REORDER_ALERT_FROM` in the same edit reproduces cause 2
-  in the app's mail instead of Supabase's, where it fails on a background send
-  with nothing customer-visible at all.
+- **Two independent Titan SMTP connections exist, and `sale@` is NOT a legal
+  sender on either.** Supabase Auth has its own connection (dashboard-
+  configured, Sender + Username both `dragon@ly-usa.com`) for reset / confirm /
+  magic-link mail. The app has a separate one (`lib/email.ts`, authenticating as
+  `TITAN_SMTP_USER` = `dragon@ly-usa.com`) for order notifications, customer
+  confirmations, back-in-stock, abandoned cart, credit applications and
+  `/api/order-reply`. **Probed live 2026-09-10 with
+  `scripts/probe-smtp-sender.mjs`** (raw SMTP, stops at `MAIL FROM`, sends no
+  message): authenticated as `dragon@ly-usa.com`, Titan answers
+  `MAIL FROM:<dragon@ly-usa.com>` with `250 2.1.0 Ok` and
+  `MAIL FROM:<sale@ly-usa.com>` with
+  `553 5.7.1 ... Sender address rejected: not owned by user dragon@ly-usa.com`.
+  So `sale@ly-usa.com` is a *separate mailbox, not an alias* — do not assume the
+  two addresses are interchangeable because they share a domain.
+- **App email works only because the from-vars are unset.** `SALES_ALERT_FROM`
+  and `REORDER_ALERT_FROM` are absent from `.env.local`, so `lib/email.ts` falls
+  through to `TITAN_SMTP_USER` and sends as the authenticated mailbox. Setting
+  either to `sale@ly-usa.com` reproduces cause 2 in the app's mail. Recipients
+  (`SALES_ALERT_TO`, `REORDER_ALERT_TO`) are unaffected — Titan only polices the
+  sender. Vercel's copies of these vars were not verified (no CLI on this
+  machine); check them there before assuming production matches local.
+- **An app-side sender rejection is invisible.**
+  `app/api/orders/route.ts` runs `notifyReps` / `notifyCustomer` through
+  `Promise.allSettled` and only `console.error`s a rejection, by design so mail
+  trouble never loses an order. A 553 therefore means: order saved, customer
+  shown success, no confirmation sent, no rep notified, nothing surfaced in the
+  UI. Don't expect this class of failure to announce itself the way the
+  customer-facing `{}` did.
 - Don't diagnose this from `auth.users`: `recovery_sent_at` and `identities`
   come back empty from the admin `listUsers` API on this project regardless of
   reality, so they look alarming and prove nothing.
