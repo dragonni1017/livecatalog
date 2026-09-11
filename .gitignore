@@ -70,6 +70,9 @@ scripts/_*.mjs
 /data/woo-category-review/
 /data/erply-bulk-import/
 /data/qbd-catalog-compare/
+# regenerate with scripts/build-measurement-worklist.mjs; the filled-in copy
+# is warehouse working paper, not source
+/data/measurement-worklist.xlsx
 /export-out/
 
 # superseded scratch exports moved aside (not deleted) during the 2026-07-14

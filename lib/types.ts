@@ -35,7 +35,36 @@ export interface Product {
   volume_tiers: VolumeTier[] | null
   created_at: string
   updated_at: string
+  // Physical measurements, for warehouse bin capacity planning (migration
+  // 0045). Admin-facing only — public catalog queries select named columns
+  // and don't include these, so they're optional here.
+  //
+  // INCHES AND POUNDS, per the column names. The upstream Erply data is
+  // imperial even though WooCommerce's store settings declare kg/cm; read
+  // migration 0045's header before writing any conversion.
+  //
+  // case_* is the master carton and is backfilled from Erply. unit_* is the
+  // individual piece and is hand-entered — Erply holds only one dimension
+  // triple per product, so it physically cannot store both sets.
+  case_length_in?: number | null
+  case_width_in?: number | null
+  case_height_in?: number | null
+  case_weight_lb?: number | null
+  unit_length_in?: number | null
+  unit_width_in?: number | null
+  unit_height_in?: number | null
+  unit_weight_lb?: number | null
+  measurements_source?: MeasurementSource | null
+  measurements_updated_at?: string | null
+  measurements_updated_by?: string | null
 }
+
+/**
+ * Where a product's measurements came from. 'manual' outranks the other two:
+ * the Erply/Woo backfill skips rows marked manual so a warehouse
+ * hand-measurement is never overwritten by the stale upstream number.
+ */
+export type MeasurementSource = 'erply' | 'woo' | 'manual'
 
 // ── Manual stock adjustments (see STAFF-LOGIN-AND-STOCK-ADJUSTMENTS-HANDOFF.md) ──
 
