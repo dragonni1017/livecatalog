@@ -187,13 +187,30 @@ const [catalog, erply, woo] = await Promise.all([fetchCatalog(), fetchErply(), f
 console.log(`${catalog.length} active products; Erply has ${erply.size} SKUs, Woo ${woo.size}.`)
 
 const updates = []
-const stats = { fromErply: 0, fromWoo: 0, skippedManual: 0, noSource: 0, alreadyCurrent: 0 }
+const stats = {
+  fromErply: 0, fromWoo: 0, skippedManual: 0, noSource: 0, alreadyCurrent: 0,
+  protectedExisting: 0, toppedUpProtected: 0,
+}
 
 for (const row of catalog) {
   if (row.measurements_source === 'manual') { stats.skippedManual++; continue }
 
   const e = erply.get(row.sku)
   const w = woo.get(row.sku)
+
+  // This script only overwrites values it owns. A row whose
+  // measurements_source is 'erply' or 'woo' was written by a previous run, so
+  // refreshing it is fine. Anything else -- 'manual' from the admin UI or the
+  // xlsx importer, or a NULL source from a direct SQL/table-editor edit -- is
+  // somebody's real measurement, so only the fields still empty get filled.
+  //
+  // The null-source case is not hypothetical: 196 rows held hand-entered
+  // dimensions with no provenance on 2026-09-11, and an earlier version of
+  // this script (which protected only source === 'manual') would have
+  // overwritten every one of them as soon as Erply reported a value for that
+  // SKU.
+  const ownedByBackfill = row.measurements_source === 'erply' || row.measurements_source === 'woo'
+
   // Per-field preference for Erply, then Woo. Field-by-field rather than
   // whole-record so a product Erply has dimensions but no weight for still
   // gets its weight from Woo -- they agree where both have data (0 of 3,160
@@ -201,12 +218,23 @@ for (const row of catalog) {
   const next = {}
   let usedErply = false
   let usedWoo = false
+  let protectedFields = 0
   for (const field of FIELDS) {
-    if (e?.[field] != null) { next[field] = e[field]; usedErply = true }
-    else if (w?.[field] != null) { next[field] = w[field]; usedWoo = true }
+    const upstream = e?.[field] != null ? { value: e[field], from: 'erply' }
+      : w?.[field] != null ? { value: w[field], from: 'woo' }
+      : null
+    if (upstream === null) continue
+    if (!ownedByBackfill && row[field] != null) { protectedFields++; continue }
+    next[field] = upstream.value
+    if (upstream.from === 'erply') usedErply = true
+    else usedWoo = true
   }
 
-  if (Object.keys(next).length === 0) { stats.noSource++; continue }
+  if (Object.keys(next).length === 0) {
+    if (protectedFields > 0) stats.protectedExisting++
+    else stats.noSource++
+    continue
+  }
 
   // Don't rewrite rows that already hold these numbers -- keeps re-runs cheap
   // and leaves measurements_updated_at meaningful.
@@ -227,12 +255,26 @@ for (const row of catalog) {
   if (usedErply) stats.fromErply++
   else if (usedWoo) stats.fromWoo++
 
+  // Claim the row as backfill-owned only when it actually is: either a
+  // previous run wrote it, or it had nothing at all before now. Topping up
+  // the empty fields of a row somebody else measured must NOT relabel it
+  // 'erply' -- that would hand ownership to this script and make their
+  // values fair game on the next run, which is the exact bug the
+  // ownedByBackfill check above exists to prevent.
+  const hadExistingValue = FIELDS.some((f) => row[f] != null)
+  const claimOwnership = ownedByBackfill || !hadExistingValue
+  if (!claimOwnership) stats.toppedUpProtected++
+
   updates.push({
     id: row.id,
     ...next,
-    measurements_source: usedErply ? 'erply' : 'woo',
-    measurements_updated_at: new Date().toISOString(),
-    measurements_updated_by: 'backfill-product-measurements.mjs',
+    ...(claimOwnership
+      ? {
+          measurements_source: usedErply ? 'erply' : 'woo',
+          measurements_updated_at: new Date().toISOString(),
+          measurements_updated_by: 'backfill-product-measurements.mjs',
+        }
+      : {}),
   })
 }
 
@@ -241,8 +283,10 @@ console.table([
   { outcome: 'to update from Erply', count: stats.fromErply },
   { outcome: 'to update from Woo', count: stats.fromWoo },
   { outcome: '  ...of those, complete sets', count: complete },
+  { outcome: '  ...of those, topping up someone else\'s row', count: stats.toppedUpProtected },
   { outcome: 'already up to date', count: stats.alreadyCurrent },
   { outcome: 'skipped (hand-measured)', count: stats.skippedManual },
+  { outcome: 'kept existing un-owned values', count: stats.protectedExisting },
   { outcome: 'NO SOURCE - needs measuring', count: stats.noSource },
 ])
 
