@@ -100,10 +100,14 @@ function measurement(value) {
 // These get their own sheet and are NOT counted as measured, so they're
 // re-measured rather than trusted.
 //
-// Kept identical to implausible() in
-// scripts/import-measurement-worklist.mjs -- if the two disagree, this
-// script can flag a carton the importer would happily accept back, or vice
-// versa. The absolute bounds come from the real distribution of the 2,244
+// CANONICAL VERSION LIVES IN lib/measurements.ts
+// (implausibleCaseMeasurement). This is a mirror, because .mjs can't import
+// TypeScript -- the same constraint that makes unitsPerCase() below
+// re-implement lib/pack.ts. Change one, change all three: here,
+// scripts/import-measurement-worklist.mjs, and lib/measurements.ts. If they
+// drift, one surface flags a carton another accepts back.
+//
+// The absolute bounds come from the real distribution of the 2,244
 // backfilled cartons (weight p50 30.9 / p99 64 / max 189.6 lb; dimensions
 // p50 18 / p99 49 in), so they reject typos, not stock.
 //

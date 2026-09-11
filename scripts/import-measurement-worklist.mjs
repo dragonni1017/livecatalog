@@ -94,9 +94,13 @@ function parseCell(raw) {
   return { value: Math.round(n * 100) / 100 }
 }
 
-// Same tests as the worklist generator, applied at the door this time: a
-// hand-entered carton has to be physically possible before it lands in the
-// table a capacity plan reads.
+// Applied at the door here: a hand-entered carton has to be physically
+// possible before it lands in the table a capacity plan reads.
+//
+// CANONICAL VERSION LIVES IN lib/measurements.ts
+// (implausibleCaseMeasurement); this is a mirror because .mjs can't import
+// TypeScript. Change one, change all three: here,
+// scripts/build-measurement-worklist.mjs, and lib/measurements.ts.
 //
 // The two absolute bounds are set from the real distribution of 2,244
 // backfilled cartons (2026-09-11), not invented: weight p50 is 30.9 lb, p99
