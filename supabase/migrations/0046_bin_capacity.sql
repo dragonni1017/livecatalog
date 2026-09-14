@@ -93,6 +93,41 @@ alter table bins
 alter table bin_types enable row level security;
 alter table bins      enable row level security;
 
+-- REQUIRED, and the thing that is easy to miss. PostgREST builds its schema
+-- cache from what its roles can actually see, so a table with no grants is
+-- invisible to the API even though it exists in `public` and the cache is
+-- fresh -- every query returns PGRST205 "Could not find the table
+-- 'public.bins' in the schema cache", which reads exactly like the migration
+-- never ran. Confirmed live 2026-09-14: both tables were created here with
+-- zero grants, so this project does not hand new tables their privileges.
+--
+-- Looped over pg_roles rather than granting to a fixed list, because
+-- **this project has no `service_role` role** (it uses the newer
+-- publishable/secret API keys). A plain
+-- `grant ... to anon, authenticated, service_role` is all-or-nothing: the
+-- missing role makes the whole statement error, nothing is granted, and
+-- since the Supabase SQL editor runs a script in ONE transaction, the error
+-- would also roll back the create table statements above. That is how a
+-- migration "applies successfully" and leaves nothing behind.
+do $$
+declare
+  role_name text;
+begin
+  foreach role_name in array array['anon', 'authenticated', 'service_role', 'postgres', 'authenticator']
+  loop
+    if exists (select 1 from pg_roles where rolname = role_name) then
+      execute format('grant all privileges on table bin_types to %I', role_name);
+      execute format('grant all privileges on table bins to %I', role_name);
+    end if;
+  end loop;
+end $$;
+
+-- Granting to anon/authenticated is not a data leak here: RLS is enabled
+-- above with no policies, so neither role can read a single row. The grant
+-- only makes the table visible to PostgREST's schema cache; the policies
+-- still decide who reads what.
+notify pgrst, 'reload schema';
+
 comment on table bins is
   'Warehouse bins mirrored from Erply getBins. Erply holds the bins but has no dimension or weight-limit field, so capacity is recorded here — see migration 0046.';
 comment on table bin_types is
