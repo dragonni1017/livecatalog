@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSessionUser } from '@/lib/auth-server'
+import {
+  CASE_MEASUREMENT_FIELDS,
+  CASE_MEASUREMENT_LABELS,
+  implausibleCaseMeasurement,
+  parseMeasurementInput,
+} from '@/lib/measurements'
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -127,6 +134,91 @@ export async function PATCH(request: NextRequest) {
       } else {
         return NextResponse.json({ error: 'low_stock_threshold must be a non-negative integer or null' }, { status: 400 })
       }
+    }
+
+    // Carton measurements (migration 0045), for warehouse bin capacity.
+    // INCHES AND POUNDS -- nothing is converted here; see lib/measurements.ts.
+    //
+    // Unlike the fields above, a value edited here is marked
+    // measurements_source='manual', which makes
+    // scripts/backfill-product-measurements.mjs skip the row from then on. So
+    // this is NOT a between-imports override like the rest of this route --
+    // it's the one write path whose result outranks the Erply/Woo backfill and
+    // survives it. That matters because Erply's own values drift (it reported
+    // dimensions for ~200 products and length="0" for the same products 20
+    // minutes later on 2026-09-11).
+    const measurementUpdates: Record<string, number | null> = {}
+    let touchedMeasurements = false
+    for (const field of CASE_MEASUREMENT_FIELDS) {
+      if (!(field in body)) continue
+      touchedMeasurements = true
+      const raw = body[field]
+      // An explicit null clears a measurement -- needed to retract a bad
+      // value. Anything else goes through the same parser the xlsx importer
+      // uses, so '12 in' works in the form too.
+      if (raw === null) {
+        measurementUpdates[field] = null
+        continue
+      }
+      const { value, error } = parseMeasurementInput(raw)
+      if (error) {
+        return NextResponse.json({ error: `${CASE_MEASUREMENT_LABELS[field]}: ${error}` }, { status: 400 })
+      }
+      measurementUpdates[field] = value
+    }
+
+    // In mock mode there's no row to merge against, so the submitted fields
+    // are all that can be checked. The write is a no-op anyway below.
+    if (touchedMeasurements && isMockMode()) {
+      const reason = implausibleCaseMeasurement(measurementUpdates)
+      if (reason) {
+        return NextResponse.json({ error: `That can't be a real carton: ${reason}` }, { status: 400 })
+      }
+      Object.assign(updates, measurementUpdates)
+      touchedMeasurements = false
+    }
+
+    if (touchedMeasurements) {
+      // Validate the merged result, not just the submitted fields: sending a
+      // weight alone has to be judged against the dimensions already stored,
+      // or a partial edit could slip past the plausibility rule.
+      const { getAdminClient } = await import('@/lib/supabase')
+      // Literal select string, not CASE_MEASUREMENT_FIELDS.join() -- a
+      // computed one leaves the typed client unable to infer the row shape
+      // and it falls back to GenericStringError.
+      const { data: current, error: currentError } = await getAdminClient()
+        .from('products')
+        .select('case_length_in, case_width_in, case_height_in, case_weight_lb')
+        .eq('id', id)
+        .maybeSingle()
+      if (currentError) throw currentError
+      if (!current) {
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      }
+
+      const merged: Record<string, number | null> = {}
+      for (const field of CASE_MEASUREMENT_FIELDS) {
+        const existing = (current as Record<string, unknown>)[field]
+        merged[field] = field in measurementUpdates
+          ? measurementUpdates[field]
+          : existing == null ? null : Number(existing)
+      }
+
+      const reason = implausibleCaseMeasurement(merged)
+      if (reason) {
+        return NextResponse.json({ error: `That can't be a real carton: ${reason}` }, { status: 400 })
+      }
+
+      Object.assign(updates, measurementUpdates)
+
+      // Only claim a hand measurement when something is actually set. Clearing
+      // every field back to null is a retraction, so the row goes back to
+      // unmeasured and becomes eligible for the backfill again.
+      const anySet = CASE_MEASUREMENT_FIELDS.some((f) => merged[f] != null)
+      const sessionUser = await getSessionUser()
+      updates.measurements_source = anySet ? 'manual' : null
+      updates.measurements_updated_at = anySet ? new Date().toISOString() : null
+      updates.measurements_updated_by = anySet ? (sessionUser?.email ?? 'admin') : null
     }
 
     if (Object.keys(updates).length === 0) {

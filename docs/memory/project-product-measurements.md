@@ -76,7 +76,24 @@ columns stay in the schema as headroom but nothing fills them, and the
 worklist's old "Need Unit Measurement" sheet was dropped because it listed
 2,209 products nobody intends to measure.
 
-**8. A batched upsert cannot be used to update these columns.** An id-only
+**8. The backfill only overwrites values it owns.** A row whose
+`measurements_source` is `erply`/`woo` was written by a previous backfill run
+and gets refreshed. Anything else — `manual`, or a **NULL source from a
+direct SQL / Supabase-table-editor edit** — is somebody's real measurement:
+only its still-empty fields get topped up, and topping up deliberately does
+*not* stamp the source, because claiming ownership would make those
+hand-entered values fair game on the next run. Not hypothetical: 196 rows
+held hand-entered dimensions with a NULL source on 2026-09-11, and the first
+version of the script (which protected only `manual`) would have overwritten
+every one of them as soon as Erply reported a value for that SKU. Both paths
+were verified live on `D701081` and reverted.
+
+**A direct table-editor edit therefore does not mark a row `manual`** — it is
+protected by the rule above, but it won't show as hand-measured in the admin
+UI or the worklist. Editing through `/admin/measurements` or the xlsx
+importer is preferable because both stamp provenance.
+
+**9. A batched upsert cannot be used to update these columns.** An id-only
 `upsert(..., { onConflict: 'id' })` payload fails `null value in column
 "sku"` — Postgres validates NOT NULL when the proposed tuple is formed,
 before `ON CONFLICT` resolution runs, so it never reaches the `DO UPDATE`.
@@ -99,6 +116,14 @@ table.
 **Why:** the goal is to know how much of a SKU fits in a given bin, by volume
 and by weight limit. That needs product measurements (this node) *and* bin
 measurements, and the bin half has nowhere to live in Erply.
+
+**Surfaces:** `/admin/measurements` (screen, `app/admin/measurements/page.tsx`
++ `components/admin/MeasurementsTable.tsx`) for per-product editing, tabbed by
+needs/implausible/measured; the four carton fields on `PATCH
+/admin/api/products`; and the two xlsx scripts for bulk work. The
+plausibility rule is canonical in `lib/measurements.ts` and **mirrored** in
+both `.mjs` scripts because plain `.mjs` can't import TypeScript — change one,
+change all three.
 
 **How to apply:** never add a bare `weight`/`length` column or convert units
 without re-reading point 1, and never treat a `> 0` upstream measurement as

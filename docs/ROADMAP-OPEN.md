@@ -4,7 +4,7 @@ Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
 **No open items in the backlog.** 3 design items awaiting design input, 3
-blocked-on-external-input items, 4 items on your side, and 21 unscoped
+blocked-on-external-input items, 6 items on your side, and 21 unscoped
 brainstorm ideas below. (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
 shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`. The low-stock/webhook
@@ -89,6 +89,25 @@ Future Brainstorm below.
 
 ## What Still Needs to Happen (your side)
 
+- [ ] **986 cartons still need physically measuring** (as of 2026-09-14) —
+      395 on the storefront, 591 hidden. Nothing upstream has a figure for
+      these, so no code can fill them: someone has to put a tape measure and
+      a scale on a carton. Run
+      `node scripts/build-measurement-worklist.mjs` for the fill-in
+      spreadsheet (inches and pounds — a sheet filled in in cm/kg is
+      undetectable), then
+      `node scripts/import-measurement-worklist.mjs --apply` to load it back.
+      Single products can be done at `/admin/measurements` instead.
+      A further **28 products** hold figures that can't be real and need
+      re-measuring — they're on the worklist's "Implausible - Recheck" sheet
+      and the matching admin tab.
+- [ ] **Decide where Erply bin dimensions and weight limits will live** —
+      bin capacity planning is blocked on this. Erply's bin records expose no
+      dimension or weight-limit field at all (only `maximumAmount`, a bare
+      quantity, unset on all 518 bins), so the sizes have to be stored
+      outside Erply. The 516 racks are `aisle-rack-level` codes, so this is
+      realistically a handful of rack *types* × dimensions, not 518
+      measurements.
 - [ ] **Two accounts still stuck unconfirmed** (as of 2026-09-09) —
       `mishka@essentialsforkids.org` (registered 2026-08-13) and
       `allyee18@hotmail.com` (2026-09-01) both registered while password/
