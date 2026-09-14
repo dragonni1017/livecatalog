@@ -5,12 +5,12 @@
  * though WooCommerce's store settings declare kg/cm; see migration 0045's
  * header before writing any conversion.
  *
- * `scripts/build-measurement-worklist.mjs` and
- * `scripts/import-measurement-worklist.mjs` mirror this logic rather than
+ * `scripts/build-measurement-worklist.mjs`, `scripts/import-measurement-worklist.mjs`,
+ * and `scripts/import-packing-list.mjs` mirror this logic rather than
  * importing it — they're plain .mjs and can't load TypeScript, the same
  * constraint that makes build-measurement-worklist.mjs re-implement
  * lib/pack.ts's pack parsing. **If you change the rule here, change it in
- * both scripts too.** If they drift, one surface flags a carton another
+ * all three scripts too.** If they drift, one surface flags a carton another
  * accepts.
  */
 

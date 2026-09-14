@@ -99,8 +99,9 @@ function parseCell(raw) {
 //
 // CANONICAL VERSION LIVES IN lib/measurements.ts
 // (implausibleCaseMeasurement); this is a mirror because .mjs can't import
-// TypeScript. Change one, change all three: here,
-// scripts/build-measurement-worklist.mjs, and lib/measurements.ts.
+// TypeScript. Change one, change all four: here,
+// scripts/build-measurement-worklist.mjs, scripts/import-packing-list.mjs,
+// and lib/measurements.ts.
 //
 // The two absolute bounds are set from the real distribution of 2,244
 // backfilled cartons (2026-09-11), not invented: weight p50 is 30.9 lb, p99

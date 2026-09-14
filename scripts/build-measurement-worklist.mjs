@@ -103,9 +103,10 @@ function measurement(value) {
 // CANONICAL VERSION LIVES IN lib/measurements.ts
 // (implausibleCaseMeasurement). This is a mirror, because .mjs can't import
 // TypeScript -- the same constraint that makes unitsPerCase() below
-// re-implement lib/pack.ts. Change one, change all three: here,
-// scripts/import-measurement-worklist.mjs, and lib/measurements.ts. If they
-// drift, one surface flags a carton another accepts back.
+// re-implement lib/pack.ts. Change one, change all four: here,
+// scripts/import-measurement-worklist.mjs, scripts/import-packing-list.mjs,
+// and lib/measurements.ts. If they drift, one surface flags a carton another
+// accepts back.
 //
 // The absolute bounds come from the real distribution of the 2,244
 // backfilled cartons (weight p50 30.9 / p99 64 / max 189.6 lb; dimensions
