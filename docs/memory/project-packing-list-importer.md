@@ -1,6 +1,6 @@
 ---
 name: project-packing-list-importer
-description: scripts/import-packing-list.mjs writes real supplier shipment measurements into products; only handles the "Original List" xls/xlsx format, not the PDF-only shipment docs
+description: import-packing-list.mjs (dimensions) + add-stock-from-packing-list.mjs (Erply stock) both read the same "Original List" xls/xlsx shipment file; stock script must NOT be run on already-received/old shipments
 type: project
 ---
 
@@ -46,3 +46,37 @@ intentional, fix the mapping rather than loosening the match. The plausibility
 check here is a fourth mirror of `lib/measurements.ts`'s
 `implausibleCaseMeasurement` — see that file's comment before changing the
 bounds anywhere.
+
+## Stock additions (add-stock-from-packing-list.mjs)
+
+Same file also has a `QTY` column (pieces per line, already totalled by the
+supplier) usable to add received stock — but stock has to be written to
+**Erply, not Supabase**: Erply only has delta APIs
+(`saveInventoryRegistration`), and `products.stock_qty` is deliberately
+excluded from the normal Erply→Supabase sync (it gets decremented on order
+fulfillment — see [[project-order-fulfillment-stock-decrement]]), so writing
+it directly would fight that and get overwritten by the next sync anyway.
+
+`scripts/add-stock-from-packing-list.mjs` mirrors the older, hardcoded
+`add-stock-from-arrival-lists.mjs`: exact SKU match against Erply only, no
+barcode fallback (a SKU with no exact match is reported, not written — could
+be a genuinely-new product needing `saveProduct` with an English name +
+category, which no packing list supplies, or a barcode-only near-match that
+needs a human look). Dry run writes a backup CSV to
+`data/erply-bulk-import/` before any write; `--apply` batches
+`saveInventoryRegistration` calls (50/batch) and independently re-fetches
+stock afterward to confirm.
+
+**Tested against container EMCU8402359 (2023-11) — all 27 SKUs matched
+correctly — but deliberately NOT applied for real**, because every SKU
+already shows 0 current stock: this shipment is ~3 years old and that
+inventory has clearly already been received and sold through. Only run
+`--apply` on this script for a shipment that hasn't been received/counted
+yet; running it against an old container would inject stale phantom stock
+into live inventory. The dimensions importer has no such restriction —
+carton size doesn't go stale, so it's safe to run against any shipment file
+regardless of age.
+
+New-SKU handling was deliberately left as report-only per Dragon's choice
+2026-09-14 — no auto-creation of products from packing-list data, since the
+required English name + category aren't present in these sheets.
