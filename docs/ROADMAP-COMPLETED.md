@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**97 items completed** (90 shipped-feature bullets + 7 checked-off backlog/design items).
+**104 items completed** (97 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -184,6 +184,51 @@ that landed nowhere. All four verified fixed against production.
   when the real cause was an expired session. Middleware now returns `401` +
   JSON, and 18 admin components moved onto a shared reader
   (`lib/admin-fetch.ts`) that checks `res.ok` before parsing.
+
+### Product carton measurements (2026-09-11 → 2026-09-14)
+
+Groundwork for warehouse bin capacity planning ("how many cases of this SKU
+fit in bin 01-03-2"). Nothing in the repo held a weight or a dimension before
+this. Migration `0045`; see `docs/memory/project-product-measurements.md` for
+the gotchas.
+
+- ✅ **`case_*` / `unit_*` measurement columns on `products`** — units are in
+  the column names (`case_weight_lb`, `case_length_in`) because the upstream
+  data is inches and pounds while WooCommerce's store settings declare kg/cm
+  and are mislabelling the same values. A bare `weight` column would have
+  invited a 2.2×/2.54× error. Case and unit are separate because Erply
+  physically cannot hold both — one dimension triple per product, and its
+  native packaging fields are unused on all 3,076 active products, which is
+  why Supabase is the system of record here and not a cache.
+- ✅ **Backfilled 2,352 of 3,222 active products** from Erply with a
+  WooCommerce fallback. The two systems agree exactly — 0 of 3,160 compared
+  fields differed by more than 2% — so there was no reconciliation problem.
+- ✅ **xlsx round trip** for the remaining gap —
+  `scripts/build-measurement-worklist.mjs` exports the outstanding list,
+  `scripts/import-measurement-worklist.mjs` reads hand measurements back as
+  `manual`, rejecting unparseable, ambiguous, zero, out-of-bounds and
+  unknown-SKU rows rather than writing them.
+- ✅ **28 products quarantined as physically impossible** rather than counted
+  as measured — 26 carry a dimension of exactly `0.2` (one repeated
+  placeholder, all floral paper) and the rest imply a density above lead.
+- ✅ **`/admin/measurements`** — per-product editing tabbed by
+  needs/implausible/measured, ordered by stock on hand, showing pack spec and
+  units-per-case as the context that makes a figure checkable by eye.
+- ✅ **Measurement provenance is ownership, not a flag** — the backfill
+  refreshes only rows it wrote (`erply`/`woo`) and merely tops up the empty
+  fields of anything else, without claiming it. Caught because 196 rows held
+  hand-entered dimensions with a NULL source from direct table-editor edits,
+  all of which the first version would have overwritten.
+- ✅ **Fixed 560 products silently missing from the measurements screen** —
+  `range()` pagination over `stock_qty desc` isn't stable when 3,222 rows
+  share 61 distinct values; ordered by unique `sku` now.
+
+Per-piece (`unit_*`) measurement was **descoped 2026-09-11**: bins hold sealed
+cases, so carton figures are the whole job. The columns stay as headroom.
+
+Still blocked: the capacity calculation itself. Erply's bin records carry no
+dimension or weight-limit fields at all — only a bare `maximumAmount`, unset
+on all 518 bins — so bin sizes have nowhere to live in Erply.
 
 ## Backlog items completed
 
