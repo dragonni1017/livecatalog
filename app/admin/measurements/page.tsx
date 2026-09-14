@@ -57,8 +57,14 @@ async function fetchAllRows(db: ReturnType<typeof getAdminClient>): Promise<Meas
     const { data, error } = await db
       .from('products')
       .select(COLUMNS)
-      .eq('is_active', true)
-      .order('stock_qty', { ascending: false })
+      // Ordered by sku, which is unique. range() pagination over a
+      // non-unique sort is not stable: Postgres may order tied rows
+      // differently per page, so rows get duplicated into one page and
+      // dropped from another. Ordering by stock_qty here (only 61 distinct
+      // values across 3,222 rows) returned 3,222 rows holding just 2,662
+      // distinct products -- 560 silently missing from the list and from
+      // every count on the page. Display order is applied in JS below.
+      .order('sku', { ascending: true })
       .range(from, from + pageSize - 1)
     if (error) throw error
     const batch = (data ?? []) as unknown as MeasurementRow[]
@@ -88,6 +94,13 @@ export default async function AdminMeasurementsPage({
 
   const counts = { needs: 0, implausible: 0, measured: 0, all: allRows.length }
   for (const row of allRows) counts[classify(row)]++
+
+  // Highest stock first: a bin-capacity plan is most urgent for the products
+  // actually occupying the warehouse. Sorted here rather than in the query so
+  // the fetch above can stay on a unique, stable sort key.
+  allRows.sort(
+    (a, b) => (b.stock_qty ?? 0) - (a.stock_qty ?? 0) || (a.sku ?? '').localeCompare(b.sku ?? ''),
+  )
 
   const term = q?.trim().toLowerCase()
   const filtered = allRows.filter((row) => {
