@@ -32,6 +32,28 @@ code, not the file itself).
   2026-08-21) — after any such migration, load the actual public homepage
   and confirm real product counts before considering it done, not just a
   clean migration apply + typecheck.
+- ANY new table (admin-only included) needs table grants in the migration —
+  this project does not hand them out. Without them PostgREST omits the
+  table from its schema cache and *every* query returns PGRST205 "Could not
+  find the table 'public.<t>' in the schema cache", which reads exactly like
+  the migration never ran; reloading the cache does nothing. Three traps,
+  all hit on `bins`/`bin_types` 2026-09-14:
+  - **Don't name roles from memory.** This project has **no `service_role`
+    role** (it uses the newer publishable/secret API keys). Mirror whatever
+    `products` has instead: `select grantee, privilege_type from
+    information_schema.role_table_grants where table_name = 'products';` —
+    `products` is reachable through the app's key, so its grantees are the
+    ones that matter.
+  - **A multi-role grant is all-or-nothing.** `grant ... to anon,
+    authenticated, service_role` fails entirely on the missing role and
+    grants nothing, silently. Worse, the Supabase SQL editor runs a script
+    in ONE transaction, so a failed grant at the bottom rolls back the
+    `create table` at the top — the migration "succeeds" and leaves nothing.
+    Loop over `pg_roles` and skip roles that don't exist.
+  - **`{ count: 'exact', head: true }` hides the failure.** A HEAD response
+    has no body for supabase-js to parse the error from, so it returns
+    `error: null, count: null`. A null count with no error means the query
+    failed — this misdiagnosis cost three wrong fixes in a row.
 - New table with FKs to two tables that PostgREST already auto-embeds
   elsewhere via shorthand (e.g. `category:categories(...)`): grep the whole
   codebase for that shorthand and disambiguate every hit with

@@ -81,12 +81,34 @@ async function fetchExistingBins() {
       .order('code', { ascending: true })
       .range(from, from + 999)
     if (error) {
-      // PostgREST's wording for a missing table is "Could not find the table
-      // 'public.bins' in the schema cache" -- not the raw Postgres "relation
-      // does not exist", which an earlier version of this check expected and
-      // so missed entirely.
-      if (/could not find the table|does not exist/i.test(error.message)) {
-        console.error('No `bins` table -- apply supabase/migrations/0046_bin_capacity.sql first.')
+      // PGRST205 is specifically "table not in the schema cache", which has
+      // two very different causes -- the migration never ran, or it ran and
+      // PostgREST hasn't picked it up yet. Saying only "apply the migration"
+      // sends someone to re-run SQL that already succeeded, so both are named
+      // and the raw message is always printed.
+      if (error.code === 'PGRST205' || /could not find the table/i.test(error.message)) {
+        console.error(`Supabase can't see the \`bins\` table: ${error.message}`)
+        console.error('')
+        console.error('PostgREST omits a table from its schema cache when the role it')
+        console.error('connects as cannot see it, so this reads identically whether the')
+        console.error('table is missing or merely un-granted.')
+        console.error('')
+        console.error('On 2026-09-14 the tables existed in `public`, in the right project,')
+        console.error('with no grants at all -- and this project has NO `service_role` role')
+        console.error('(it uses the newer publishable/secret API keys), so any grant naming')
+        console.error('it errors and, in the SQL editor\'s single transaction, grants nothing.')
+        console.error('')
+        console.error('Do not guess which role to grant. Ask the table that already works:')
+        console.error('')
+        console.error('  select table_name, grantee,')
+        console.error("         string_agg(privilege_type, ',' order by privilege_type) as privs")
+        console.error('  from information_schema.role_table_grants')
+        console.error("  where table_name in ('products', 'bins', 'bin_types')")
+        console.error('  group by table_name, grantee order by table_name, grantee;')
+        console.error('')
+        console.error('`products` is reachable through this same key, so whichever roles')
+        console.error('appear for it are the ones that matter. Grant those, then:')
+        console.error("  notify pgrst, 'reload schema';")
         return null
       }
       throw new Error(error.message)
