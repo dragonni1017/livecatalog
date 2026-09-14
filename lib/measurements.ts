@@ -72,6 +72,55 @@ export function implausibleCaseMeasurement(m: CaseMeasurements): string | null {
   return null
 }
 
+/**
+ * Bin capacity bounds (migration 0046). Deliberately NOT the carton bounds
+ * above: a bin holds many cartons, so a pallet position's safe working load
+ * runs into the thousands of pounds where a single carton over 250 lb is a
+ * data-entry error. Reusing MAX_WEIGHT_LB here would reject real racking.
+ */
+export const MAX_BIN_WEIGHT_LB = 10000
+export const MAX_BIN_DIMENSION_IN = 480 // 40 ft — longer than any single bay
+
+export interface BinTypeMeasurements {
+  length_in?: number | null
+  width_in?: number | null
+  height_in?: number | null
+  max_weight_lb?: number | null
+}
+
+/**
+ * Returns a reason when a bin shape can't be real, or null when it's fine
+ * (including incomplete — a rack's weight rating often isn't to hand).
+ *
+ * No density test here, unlike the carton rule: a bin is mostly air by
+ * definition, so its dimensions and its weight limit are independent facts
+ * and no ratio between them is suspicious.
+ */
+export function implausibleBinType(m: BinTypeMeasurements): string | null {
+  const dims = [m.length_in, m.width_in, m.height_in]
+
+  const tiny = dims.filter((d) => d != null && d < MIN_DIMENSION_IN)
+  if (tiny.length > 0) {
+    return `dimension under ${MIN_DIMENSION_IN} inch (${tiny.join(', ')})`
+  }
+
+  const huge = dims.filter((d) => d != null && d > MAX_BIN_DIMENSION_IN)
+  if (huge.length > 0) {
+    return `dimension over ${MAX_BIN_DIMENSION_IN} in (${huge.join(', ')}) — extra digit?`
+  }
+
+  if (m.max_weight_lb != null && m.max_weight_lb > MAX_BIN_WEIGHT_LB) {
+    return `weight limit over ${MAX_BIN_WEIGHT_LB.toLocaleString()} lb (${m.max_weight_lb})`
+  }
+
+  return null
+}
+
+/** Enough of a bin type recorded to compute how much fits in it. */
+export function binTypeIsUsable(m: BinTypeMeasurements): boolean {
+  return m.length_in != null && m.width_in != null && m.height_in != null
+}
+
 /** Every carton dimension and the weight are present. */
 export function hasCompleteCaseMeasurement(m: CaseMeasurements): boolean {
   return (
