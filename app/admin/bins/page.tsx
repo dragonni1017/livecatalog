@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import BinCapacityManager from '@/components/admin/BinCapacityManager'
+import BinCapacityCalculator from '@/components/admin/BinCapacityCalculator'
 import { binTypeIsUsable } from '@/lib/measurements'
 
 export const dynamic = 'force-dynamic'
@@ -137,10 +138,13 @@ export default async function AdminBinsPage() {
           </div>
         )}
 
-        <BinCapacityManager
-          binTypes={binTypes.map((t) => ({ ...t, binCount: binCountByType.get(t.id) ?? 0 }))}
-          bins={bins}
-        />
+        <div className="space-y-8">
+          <BinCapacityManager
+            binTypes={binTypes.map((t) => ({ ...t, binCount: binCountByType.get(t.id) ?? 0 }))}
+            bins={bins}
+          />
+          <BinCapacityCalculator />
+        </div>
 
         <p className="mt-6 text-xs text-gray-400">
           Bins are mirrored from Erply and can&apos;t be created or deleted here — re-run{' '}
