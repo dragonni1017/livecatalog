@@ -31,8 +31,23 @@ Two live facts that aren't in the code:
 no column for who decided or on what terms — so nothing had ever moved a row
 off `pending` even though applications were arriving.
 **How to apply:** don't assume an approved application changes anything about
-how that customer is priced or invoiced — wiring it into the QuickBooks terms
-field or a `customers.payment_terms` column is still open work. Unlike order
-approval, the decision is reversible (Reopen sets it back to `pending` and
-clears the review columns). See [[project-admin-users-screen]] for the
-neighbouring admin-screen conventions.
+how that customer is priced or invoiced. **Wiring it into QuickBooks terms was
+explicitly deferred by Dragon on 2026-09-15** — asked for, then called off
+before any code was written, so treat the gap as a decision, not an oversight,
+and don't re-propose it unprompted. Two questions were open when it stopped,
+worth reusing if it's ever picked up: (a) QuickBooks holds terms in two
+independent places — `TermsRef` on the customer record (the default future
+documents inherit) and `TermsRef` on each `SalesOrderAdd` — and setting the
+customer record means this app starts overwriting records QuickBooks users
+created by hand, via a `CustomerModRq` that needs an EditSequence fetch first;
+(b) `TermsRef` names an entry in QuickBooks' own Terms list and the exact
+strings in the company file are unknown — a name QB doesn't recognize fails
+the entire request under `onError="stopOnError"`, so the order silently
+wouldn't key at all. A `StandardTermsQueryRq` pull (mirroring the existing
+customer-directory pull) is the way to learn the real names rather than
+guessing. `lib/qbxml.ts` has no `TermsRef` in any builder today.
+
+Unlike order approval, the decision is reversible (Reopen sets it back to
+`pending` and clears the review columns). See [[project-admin-users-screen]]
+for the neighbouring admin-screen conventions and
+[[project-qb-customer-matching]] before touching the QB customer path at all.
