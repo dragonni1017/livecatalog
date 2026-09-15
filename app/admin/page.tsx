@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminDashboard() {
   let qbPending = 0
+  let creditPending = 0
   try {
     const db = getAdminClient()
     const { count } = await db
@@ -14,6 +15,14 @@ export default async function AdminDashboard() {
       .eq('entered_in_qb', false)
       .neq('status', 'lost')
     qbPending = count ?? 0
+
+    // Not head:true — a HEAD response has no body for supabase-js to read an
+    // error out of, so a failure would come back as a silent null count.
+    const { data: creditRows } = await db
+      .from('credit_applications')
+      .select('id')
+      .eq('status', 'pending')
+    creditPending = creditRows?.length ?? 0
   } catch {
     // non-fatal — dashboard still renders without the count
   }
@@ -141,8 +150,13 @@ export default async function AdminDashboard() {
                 Net-Terms Applications
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Review buyer applications for net-30 / net-60 payment terms
+                Approve or decline buyer applications for net-30 / net-60 payment terms
               </p>
+              {creditPending > 0 && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700">
+                  {creditPending} application{creditPending !== 1 ? 's' : ''} awaiting review
+                </p>
+              )}
             </div>
             <svg
               className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
