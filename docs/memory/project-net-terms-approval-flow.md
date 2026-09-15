@@ -1,6 +1,6 @@
 ---
 name: project-net-terms-approval-flow
-description: 2026-09-15 — /admin/credit-applications can now approve/decline net-terms applications; migration 0047 NOT YET APPLIED, and the decision feeds nothing downstream
+description: 2026-09-15 — /admin/credit-applications can now approve/decline net-terms applications (0047 applied, verified live); the decision still feeds nothing downstream
 type: project
 ---
 
@@ -10,16 +10,16 @@ migration `0047_credit_application_review.sql`, `app/admin/api/credit-applicatio
 
 Two live facts that aren't in the code:
 
-1. **Migration 0047 is not applied yet.** Confirmed against the live DB on
-   2026-09-15: `credit_applications.reviewed_at does not exist`, and 4 real
-   applications (Eagle Mountain Casino, Nationwide wholesale, Witchbabe
-   Designs, El arte d las flores) are all sitting at `pending` — they are
-   real buyers, not test rows. Until someone pastes 0047 into the Supabase
-   SQL editor, the Approve/Decline buttons surface a "column does not exist"
-   error. Re-check by selecting `reviewed_at` from `credit_applications` —
-   it errors if 0047 hasn't run. (The scratch probe used on 2026-09-15 was
-   `scripts/_probe_credit_apps.mjs`, which is gitignored via `scripts/_*.mjs`
-   and so exists only on the machine it was written on.)
+1. **0047 is applied and the write path is verified.** Applied in the
+   Supabase SQL editor 2026-09-15 and checked live the same day: the four
+   review columns exist, the approve write (status + approved_terms +
+   review_notes + reviewed_by/at) round-trips, setting status back to
+   `pending` with the columns nulled works, and the `approved_terms` CHECK
+   rejects a junk value. Done on a throwaway row that was then deleted —
+   the 4 real applications (Eagle Mountain Casino, Nationwide wholesale,
+   Witchbabe Designs, El arte d las flores) are **still all `pending` and
+   are real buyers, not test rows**; approving one emails that buyer, so
+   don't use them to smoke-test the screen.
 2. **An approval is a record, not a switch.** Nothing downstream reads
    `status` or `approved_terms`: catalog pricing still comes from
    `customers.price_tier_code` / `discount_percent`, and the customer's
