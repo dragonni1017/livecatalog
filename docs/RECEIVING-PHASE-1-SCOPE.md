@@ -66,7 +66,11 @@ back the `create table` above it.
   and applying it would inject phantom inventory into live stock.
 - **UPC cross-check** — a barcode mismatch marks the line and excludes it from
   apply, given this business's real barcode-collision history.
-- **Unmatched SKUs** — staged and visible, never applied (Phase 2).
+- **Unmatched SKUs** — staged and visible, and not appliable *until* they're
+  created as products (Phase 2). Creating one re-resolves its line to
+  `matched`, so the same pass can then receive its stock. Barcode mismatches
+  are never appliable and never creatable — that SKU already exists and only
+  its UPC disagrees.
 
 ## Decisions taken (defaults, not answers)
 
@@ -250,3 +254,31 @@ a question for Erply support, and the cheapest next step.
 Until it's resolved: a product created by this app has **no price**, the
 create route flags it per line, and the price must be set in the Erply back
 office by hand.
+
+### One pass, both kinds of line (2026-09-16)
+
+Receiving now finishes a whole container in one visit. It sorts every line at
+staging (`matched` / `unmatched_sku` / `barcode_mismatch`), the new SKUs get
+created as products, and **creating one re-resolves its line to `matched`, so
+its stock is appliable in the same session.**
+
+That flip is the fix for a real hole: `match_status` was set once at staging
+and nothing updated it afterwards, while apply only accepts `matched`. So a
+container's new products were created and their received pieces had nowhere to
+go — and re-uploading the workbook didn't help, since the unique `file_hash`
+reopens the same shipment with the same stale classification. On the real
+EGSU9522424 container that was 24 of 34 SKUs and 67,668 of 86,484 pieces.
+
+Order matters: create first, then apply. The apply button's count is live, so
+it grows as products are created.
+
+The two rules live in `lib/receiving.ts` as pure predicates
+(`isStockAppliable`, `isCreatable`, `missingForCreate`) precisely because they
+have to agree — the UI's enable/disable logic and the route's validation both
+read the same ones, and `tests/receiving.test.ts` asserts no line can ever be
+both creatable and appliable at once.
+
+`barcode_mismatch` is excluded from both. Creating one would ask Erply for a
+duplicate code (the SKU is already in the catalog) or produce a second product
+for the same item; applying one would add stock to a product whose barcode
+disagrees with the sheet, which no later sync corrects.

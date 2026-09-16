@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, parseProductName } from '@/lib/product-naming'
+import { isCreatable, missingForCreate } from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
 
 // Phase 2: the SKUs on this shipment that aren't in the catalog yet.
@@ -41,7 +42,11 @@ export default function NewProductsPanel({
   lines: ShipmentLine[]
   onLines: (lines: ShipmentLine[]) => void
 }) {
-  const unmatched = lines.filter((l) => l.match_status !== 'matched')
+  // A created line now reads 'matched' (that's what makes its stock
+  // appliable), so it's kept in this list explicitly — otherwise it would
+  // vanish the moment it was created, taking its Erply product ID and any
+  // price warning with it.
+  const unmatched = lines.filter((l) => l.match_status !== 'matched' || l.erply_created_product_id)
   const [groups, setGroups] = useState<ProductGroup[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -209,7 +214,7 @@ export default function NewProductsPanel({
     }
   }
 
-  const creatable = unmatched.filter((l) => !l.erply_created_product_id)
+  const creatable = unmatched.filter(isCreatable)
 
   return (
     <div className="mt-8">
@@ -246,7 +251,16 @@ export default function NewProductsPanel({
           const draft = draftFor(line)
           const created = !!line.erply_created_product_id
           const { name, note } = finalName(line)
-          const ready = !created && !!name && !!draft.category && !!draft.priceDollars
+          // Same rule the route enforces, so the checkbox can't offer a line
+          // the server will reject.
+          const ready =
+            isCreatable(line) &&
+            missingForCreate({
+              ...line,
+              proposed_name: name || null,
+              proposed_category: draft.category || null,
+              proposed_price_cents: draft.priceDollars ? Math.round(Number(draft.priceDollars) * 100) : null,
+            }).length === 0
 
           return (
             <div
