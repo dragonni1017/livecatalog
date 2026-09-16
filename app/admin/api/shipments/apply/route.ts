@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
+import { isStockAppliable } from '@/lib/receiving'
 import { getActorEmail } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 import {
@@ -86,12 +87,13 @@ export async function POST(request: NextRequest) {
 
     const lines = allLines ?? []
 
-    // Only clean, positive, not-yet-applied lines are eligible. Unmatched SKUs
-    // and barcode mismatches are staged for a human (Phase 2) and never
-    // registered; a zero received count is a legitimate "none arrived".
-    const eligible = lines.filter(
-      (l) => l.match_status === 'matched' && l.qty_received > 0 && !l.applied_at,
-    )
+    // Only clean, positive, not-yet-applied lines are eligible — see
+    // isStockAppliable for why each half of that matters. A SKU created
+    // earlier in this same session DOES qualify: the create step re-resolves
+    // its line to 'matched', so one pass can create a container's new
+    // products and then receive every line's stock. Barcode mismatches never
+    // qualify, and a zero received count is a legitimate "none arrived".
+    const eligible = lines.filter(isStockAppliable)
 
     if (eligible.length === 0) {
       return NextResponse.json(

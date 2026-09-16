@@ -9,6 +9,7 @@ import {
   proposeDescriptor,
 } from '@/lib/commercial-invoice'
 import type { SheetRow } from '@/lib/packing-list'
+import { isCreatable } from '@/lib/receiving'
 import {
   createErplyProduct,
   getErplyProductByCode,
@@ -79,9 +80,12 @@ export async function PUT(request: NextRequest) {
         invoice_match_basis: join.basis === 'none' ? null : join.basis,
       }
 
-      // An ambiguous match carries candidate text, not a description, so it
-      // must never seed a proposed name.
-      if (line.match_status !== 'matched' && !line.erply_created_product_id && join.basis !== 'ambiguous') {
+      // Only a genuinely new SKU gets a name proposal. A barcode_mismatch
+      // line is not creatable — the SKU already exists and only its UPC
+      // disagrees — so proposing a name there would imply an action the
+      // create step refuses. An ambiguous match carries candidate text
+      // rather than a description, so it must never seed a name either.
+      if (isCreatable(line) && join.basis !== 'ambiguous') {
         const descriptor = proposeDescriptor(join.description, line.sku)
         // Descriptor only — no pack spec. The sheet gives pieces per case but
         // never how those pieces are packed, and a name asserting "12/pk"
@@ -183,9 +187,24 @@ export async function POST(request: NextRequest) {
       .eq('shipment_id', shipmentId)
       .in('id', lineIds)
 
-    const eligible = (lines ?? []).filter((l) => !l.erply_created_product_id)
+    // isCreatable also excludes barcode_mismatch, which used to slip through:
+    // that status means the SKU IS already in the catalog and only its UPC
+    // disagrees, so "creating" it would ask Erply for a duplicate code or
+    // produce a second product for the same item.
+    const eligible = (lines ?? []).filter(isCreatable)
     if (eligible.length === 0) {
-      return NextResponse.json({ error: 'Every selected line already has a product in Erply.' }, { status: 400 })
+      const alreadyCreated = (lines ?? []).filter((l) => l.erply_created_product_id).length
+      const mismatched = (lines ?? []).filter((l) => l.match_status === 'barcode_mismatch').length
+      return NextResponse.json(
+        {
+          error: alreadyCreated
+            ? 'Every selected line already has a product in Erply.'
+            : mismatched
+              ? 'Those lines have a UPC that disagrees with the barcode on file, so the SKU already exists in the catalog. Resolve the barcode before creating anything.'
+              : 'None of the selected lines are new SKUs.',
+        },
+        { status: 400 },
+      )
     }
 
     // Validate the whole batch before creating anything: a product created in
@@ -251,12 +270,23 @@ export async function POST(request: NextRequest) {
 
         // Recorded immediately, per line: if the next one throws, this SKU
         // must never be offered for creation again.
+        //
+        // match_status flips to 'matched' because the SKU now genuinely does
+        // exist in Erply — and that is what makes its stock appliable in the
+        // same pass. Without it the classification stayed 'unmatched_sku'
+        // forever, the apply step skipped the line, and a container's new
+        // products landed in the catalog with their received pieces stranded;
+        // re-uploading the workbook didn't help either, since the unique
+        // file_hash just reopens the same shipment with the same stale
+        // classification. Only lines that were 'unmatched_sku' reach here
+        // (see isCreatable), so this can't quietly clear a barcode mismatch.
         await db
           .from('shipment_lines')
           .update({
             erply_created_product_id: productId,
             created_product_at: new Date().toISOString(),
             create_error: priceWarning,
+            match_status: 'matched',
           })
           .eq('id', line.id)
         created.push({ sku: line.sku, productId })
