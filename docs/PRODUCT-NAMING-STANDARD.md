@@ -88,3 +88,51 @@ invariant governs names written from here on.
 The cross-check method that produced that table: read `pk/cs`, `箱数 CTN` and
 `总PCS` from a container's Arrival/Original List, divide pieces by cartons to
 get the true per-case count, and compare against the name's parsed spec.
+
+## Verifying the 435 against supplier documents (2026-09-16)
+
+A physical count wasn't available, so the check was done against the supplier
+paperwork instead — `node scripts/verify-pack-specs.ts [--csv]`, report-only.
+
+Every "Original List" / "Arrival List" workbook states, per SKU, the total
+pieces and the carton count for that shipment. Pieces ÷ cartons is the real
+per-case quantity, and unlike the sheet's own `pk/cs` column its meaning can't
+be misread. 944 workbooks were scanned, 572 parsed (the rest have no 货号
+column — commercial invoices, other suppliers' layouts), yielding 2,396
+distinct SKUs of evidence.
+
+| Verdict | Count |
+|---|---|
+| **Confirmed** by the documents | 300 (271 with a complete corrected name) |
+| Documents **disagree** with each other | 26 |
+| SKU in **no** document scanned | 109 |
+
+**The correction is the opposite of the arithmetic one.** In every confirmed
+case, `cs.N` was already right and **`bx` was the wrong field** — it held the
+case total instead of the box count:
+
+```
+F287294  Foam Bear with Heart 7cm - 12/pk 120bx/cs cs.120
+      -> Foam Bear with Heart 7cm - 12/pk  10bx/cs cs.120     (120/case confirmed)
+
+F287684  Pink Shiny Foil Heart Floral Papers - 20/pk 60bx/cs cs.60
+      -> Pink Shiny Foil Heart Floral Papers - 20/pk  3bx/cs cs.60   (60/case confirmed)
+```
+
+That systematically confirms what F287672 showed by hand: recomputing `cs.N`
+as `pk × bx` would have inflated hundreds of case quantities.
+
+The 29 confirmed-but-not-auto-fixable ones are those where the documents'
+per-case figure isn't divisible by the name's `pk` — so the pack size is wrong
+too, and only a human can say what a pack is.
+
+The 26 disagreements are left alone deliberately; packing genuinely changed
+between shipments, e.g. `3D801221` shows 380, 432 and 504 per case across six
+shipments, and `F287605` alternates 60 and 100. Averaging or taking the latest
+would be the same guess this whole exercise avoids.
+
+Full per-SKU detail, including which document each figure came from, is in
+`data/pack-spec-verification.csv` (`--csv`).
+
+Remember names are synced FROM Erply, so applying any of these corrections
+means changing them in Erply, not Supabase.
