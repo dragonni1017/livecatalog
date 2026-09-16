@@ -164,7 +164,7 @@ assumptions: there is no `nameEN` field on this account, and groups are a
 **tree** — `subGroups` are flattened into path-style labels so a child
 category is reachable in the picker.
 
-## NOT yet verified
+## saveProduct: tested for real 2026-09-16 — one finding
 
 `createErplyProduct()` (`saveProduct`) has **never been called**. It sends
 `code`, `name`, `groupID`, `price`, `status` and optionally `code2`, and
@@ -172,3 +172,31 @@ deliberately touches no other price field — on 2026-08-04 a wrong saveProduct
 parameter zeroed all 2,871 selling prices. **Create exactly one product first
 and check it in Erply before trusting a batch.** Creation is one-way; this
 repo cannot delete an Erply product.
+
+### Result of the single real create
+
+One product was created end to end through the real route: Erply **#3081**,
+code `ZZTESTCLAUDE0916`, name `ZZ TEST DELETE ME Claude Receiving Check -
+12/pk 2bx/cs cs.24`, group "Default group". It was **archived immediately**
+(`status=ARCHIVED`, `active=0`), so the daily 08:00 UTC sync — which pulls
+active products only — can never bring it into the catalog or WooCommerce.
+The test shipment row was deleted from Supabase.
+
+What worked: code, name, product group, the per-line record of the new
+productID, and the guard that refuses to create the same line twice.
+
+**What did NOT work: the price.** The product was created with `price=1.23`
+and Erply stored **0** — both `price` and `priceWithVat` read back as 0, while
+a real product (F287491) carries `price=11`. So `saveProduct`'s price
+parameter is ignored on this account, and the correct mechanism is still
+unknown; `pricelistID`/`savePriceList` appear in this repo only for tier
+discount rules, not base price.
+
+Consequence: **a created product lands at $0.00.** Until the right mechanism
+is found, the create route reads each product back and, when the stored price
+doesn't match, persists a `WARNING:` on the shipment line telling the admin to
+set the price in Erply by hand. A $0.00 product that reached the catalog would
+be sellable for nothing, so this is not a cosmetic warning.
+
+Determining the right parameter needs more writes against live Erply and was
+not attempted.

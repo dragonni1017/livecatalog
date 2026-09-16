@@ -441,6 +441,27 @@ export async function getErplyProductGroups(): Promise<ErplyProductGroup[]> {
   return out
 }
 
+/**
+ * One product by its code (our SKU), without walking the whole catalog the
+ * way getErplyStockIndex has to. Used to read a product back immediately
+ * after creating it — see the price warning in the create route.
+ */
+export async function getErplyProductByCode(
+  code: string,
+): Promise<{ productId: number; name: string; price: number; groupName: string } | null> {
+  if (!isConfigured()) return null
+  const sessionKey = await getSessionKey()
+  const data = await erplyPost<ErplyProduct>({ request: 'getProducts', sessionKey, code })
+  const rec = data.records?.[0]
+  if (!rec) return null
+  return {
+    productId: rec.productID,
+    name: rec.name,
+    price: rec.price ?? 0,
+    groupName: rec.groupName ?? '',
+  }
+}
+
 export interface CreateErplyProductInput {
   /** Becomes Erply's `code`, which the sync reads back as products.sku. */
   sku: string
@@ -483,6 +504,14 @@ export async function createErplyProduct(input: CreateErplyProductInput): Promis
     // priceWithVat / discountPercent: the 2026-08-04 incident zeroed all
     // 2,871 selling prices by sending the wrong price parameter, so this
     // sends exactly one and nothing else.
+    // CONFIRMED NOT TO WORK ON THIS ACCOUNT, 2026-09-16: a product created
+    // with price '1.23' came back from getProducts with price 0 AND
+    // priceWithVat 0 (test product ZZTESTCLAUDE0916, Erply #3081, since
+    // archived), while real products carry a non-zero price. The parameter
+    // is still sent because it is the documented one and costs nothing if a
+    // later account configuration honours it — but the caller MUST read the
+    // product back and warn when the price didn't land, rather than leaving
+    // a $0.00 product to reach the catalog. See the create route.
     price: input.priceDollars.toFixed(2),
     status: 'ACTIVE',
   }

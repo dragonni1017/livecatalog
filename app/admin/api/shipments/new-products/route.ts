@@ -9,7 +9,12 @@ import {
   proposeDescriptor,
 } from '@/lib/commercial-invoice'
 import type { SheetRow } from '@/lib/packing-list'
-import { createErplyProduct, getErplyProductGroups, isConfigured as isErplyConfigured } from '@/lib/erply'
+import {
+  createErplyProduct,
+  getErplyProductByCode,
+  getErplyProductGroups,
+  isConfigured as isErplyConfigured,
+} from '@/lib/erply'
 
 export const dynamic = 'force-dynamic'
 
@@ -210,6 +215,7 @@ export async function POST(request: NextRequest) {
 
     const actor = await getActorEmail()
     const created: Array<{ sku: string; productId: number }> = []
+    const priceWarnings: Array<{ sku: string; stored: number; wanted: number }> = []
     const failed: Array<{ sku: string; error: string }> = []
 
     for (const line of eligible) {
@@ -222,6 +228,27 @@ export async function POST(request: NextRequest) {
           groupId: group.id,
           priceDollars: line.proposed_price_cents / 100,
         })
+        // Read the product back before declaring success. Erply's saveProduct
+        // accepted a price and stored 0 when this was tested on 2026-09-16
+        // (test product ZZTESTCLAUDE0916), so a create that "worked" can still
+        // leave a $0.00 product — which, once it syncs, is a sellable free
+        // product. The warning is persisted on the line, not just returned,
+        // so it survives a page reload.
+        let priceWarning: string | null = null
+        try {
+          const readBack = await getErplyProductByCode(line.sku)
+          const wanted = line.proposed_price_cents / 100
+          if (readBack && Math.abs((readBack.price ?? 0) - wanted) > 0.005) {
+            priceWarning =
+              `WARNING: created, but Erply stored a price of ${(readBack.price ?? 0).toFixed(2)} instead of ${wanted.toFixed(2)}. ` +
+              `Set this product's price in Erply by hand before it goes on sale.`
+            priceWarnings.push({ sku: line.sku, stored: readBack.price ?? 0, wanted })
+          }
+        } catch {
+          // A failed read-back must not make a successful create look failed.
+          priceWarning = 'WARNING: created, but the price could not be verified — check it in Erply.'
+        }
+
         // Recorded immediately, per line: if the next one throws, this SKU
         // must never be offered for creation again.
         await db
@@ -229,7 +256,7 @@ export async function POST(request: NextRequest) {
           .update({
             erply_created_product_id: productId,
             created_product_at: new Date().toISOString(),
-            create_error: null,
+            create_error: priceWarning,
           })
           .eq('id', line.id)
         created.push({ sku: line.sku, productId })
@@ -257,6 +284,7 @@ export async function POST(request: NextRequest) {
       lines: fresh ?? [],
       created,
       failed,
+      priceWarnings,
       note:
         'Created in Erply. They appear in the catalog after the next Erply sync, and their stock still has to be applied from the Receiving tab.',
     })
