@@ -1,6 +1,6 @@
 ---
 name: project-receiving-phase-1
-description: 2026-09-16 — /admin/receiving Phase 1 (stock) + Phase 2 (new products) built; 0048 applied, 0049 NOT applied; saveProduct never yet called
+description: 2026-09-16 — /admin/receiving receives a container in one pass (stock + new products); 0048/0049 applied; Erply can't set a price via API and pricing is DECIDED as a manual step
 type: project
 ---
 
@@ -58,7 +58,29 @@ from both creating and applying: that SKU already exists and only its UPC
 disagrees. The rules are pure predicates in `lib/receiving.ts` so the UI and
 the routes can't drift.
 
-**Phase 2 (same day):** unmatched SKUs can become Erply products — migration 0049 (NOT applied yet), lib/commercial-invoice.ts, app/admin/api/shipments/new-products. Two things to know: the real 2026 files head the piece count 总PCS, not the English QTY the 2023 container used (the parser threw on every current file until that was fixed), and createErplyProduct/saveProduct has NEVER been called — create exactly one product and check it in Erply before trusting a batch, given the 2026-08-04 incident where a wrong saveProduct parameter zeroed 2,871 selling prices. getProductGroups IS verified live (19 groups, no nameEN field, tree-shaped with subGroups).
+**Phase 2:** unmatched SKUs become Erply products via `lib/commercial-invoice.ts`
+and `app/admin/api/shipments/new-products` (migration 0049, applied). Four
+things worth keeping:
+
+- The real 2026 supplier files head the piece count **总PCS**, not the English
+  QTY the 2023 container used; the parser threw on every current file until
+  that was fixed.
+- **`saveProduct` cannot set a price on this account.** Proven 2026-09-16:
+  six parameter combinations (price, priceWithVat, each ± an explicit
+  vatrateID, and both ARCHIVED and ACTIVE) all returned `ok` and left the
+  price at 0. Permissions (admin, `rightChangePrices=1`), archived status and
+  VAT rate were all ruled out. The account has a dedicated `pricing` service
+  at api-pricing-us.erply.com which is the likely owner.
+- **DECIDED by Dragon 2026-09-16: pricing is set by hand in Erply.** Closed,
+  not open — don't re-probe the pricing service or re-litigate the parameter.
+  `proposed_price_cents` is a record of intent and a worklist for the manual
+  pass.
+- `getProductGroups` is verified live: 19 top-level groups, no `nameEN` field
+  on this account, and tree-shaped (`subGroups` are flattened into path
+  labels, or child categories would be unreachable in the picker).
+- One real product was created end to end (Erply #3081) and then deleted;
+  `deleteProduct` works, which is what shows the classic API isn't broadly
+  read-only — it's specifically the price field.
 
 See [[project-packing-list-importer]] for the file-format
 findings this builds on and [[project-product-measurements]] for the
