@@ -29,10 +29,6 @@
 const COLUMN: Record<string, string[]> = {
   sku: ['货号'],
   upc: ['UPC'],
-  // This file's quantity column is literally headed "QTY" in English --
-  // deliberately not matching 总量KG / 总体积, which are totals per line in
-  // other units.
-  qty: ['QTY'],
   // Deliberately unit-agnostic, unlike the .mjs mirror which matches
   // ['长', 'cm']: the column is located by dimension name alone, and the unit
   // is then REQUIRED in whatever header was found (see dimensionFactor).
@@ -48,9 +44,22 @@ const COLUMN: Record<string, string[]> = {
   weight: ['毛重'],
 }
 
-// Dimensions and weight are optional: a sheet can legitimately be a
-// quantities-only list, and Phase 1 only needs SKU + QTY to receive stock.
-const REQUIRED_FIELDS = ['sku', 'qty'] as const
+// The piece-count column is the one header that genuinely changes between
+// suppliers and years, so it's matched against a list of ALTERNATIVES rather
+// than one pattern. Confirmed live:
+//   'QTY'   — container EMCU8402359 (2023-11), English header
+//   '总PCS' — container EGSU9522424 (2026-08), on both the Arrival List and
+//             the Original List; this format has no English QTY column at all
+// Deliberately NOT matched: 总量KG (total kilograms) and 总体积 (total volume)
+// are also line totals but in other units, and 箱数/CTN is cartons, not
+// pieces. Add a new alternative here only after reading the real header off
+// the file — a wrong guess here means registering the wrong stock quantity.
+const QTY_COLUMN_ALTERNATIVES: string[][] = [['qty'], ['总pcs']]
+
+// SKU and piece count are the only required columns — checked individually
+// below so each gets its own actionable message. Dimensions and weight are
+// optional: a sheet can legitimately be a quantities-only list, and receiving
+// only needs SKU + pieces.
 
 export type SheetRow = Array<string | number | null | undefined>
 
@@ -87,11 +96,24 @@ function findHeaderRow(rows: SheetRow[]): number {
   return -1
 }
 
+// Case-insensitive so a sheet headed "Qty" or "总pcs" matches the same rules
+// as one headed "QTY" — lowercasing leaves the Chinese headers untouched.
 function findCol(headerRow: SheetRow, substrings: string[]): number {
+  const needles = substrings.map((s) => s.toLowerCase())
   for (let i = 0; i < headerRow.length; i++) {
     const cell = headerRow[i]
     if (typeof cell !== 'string') continue
-    if (substrings.every((s) => cell.includes(s))) return i
+    const haystack = cell.toLowerCase()
+    if (needles.every((s) => haystack.includes(s))) return i
+  }
+  return -1
+}
+
+// First alternative that matches wins.
+function findColAny(headerRow: SheetRow, alternatives: string[][]): number {
+  for (const alt of alternatives) {
+    const idx = findCol(headerRow, alt)
+    if (idx >= 0) return idx
   }
   return -1
 }
@@ -150,13 +172,19 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   for (const [field, substrings] of Object.entries(COLUMN)) {
     colIndex[field] = findCol(headerRow, substrings)
   }
+  colIndex.qty = findColAny(headerRow, QTY_COLUMN_ALTERNATIVES)
 
-  for (const field of REQUIRED_FIELDS) {
-    if (colIndex[field] < 0) {
-      throw new PackingListError(
-        `Could not find a ${field.toUpperCase()} column (looking for ${COLUMN[field].join(' + ')}). Header row read as: ${JSON.stringify(headerRow)}`,
-      )
-    }
+  if (colIndex.sku < 0) {
+    throw new PackingListError(
+      `Could not find a SKU column (looking for ${COLUMN.sku.join(' + ')}). Header row read as: ${JSON.stringify(headerRow)}`,
+    )
+  }
+  if (colIndex.qty < 0) {
+    throw new PackingListError(
+      `Could not find a piece-count column — tried ${QTY_COLUMN_ALTERNATIVES.map((a) => a.join('+')).join(', ')}. ` +
+        `Header row read as: ${JSON.stringify(headerRow)}. If this supplier names it something else, add it to ` +
+        `QTY_COLUMN_ALTERNATIVES in lib/packing-list.ts after checking the real header — don't guess, a wrong column registers the wrong stock.`,
+    )
   }
 
   // Dimensions are all-or-nothing: a sheet either has the full set of

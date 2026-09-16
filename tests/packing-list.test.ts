@@ -120,6 +120,42 @@ describe('normalizeBarcode', () => {
 const REAL_FILE =
   'C:/Users/Dragon/OneDrive - L&Y USA/L&Y/L&Y/import documents/2023-11 ETD 1031 397ctn Original List ETA 11-14-2023 CNTR#EMCU8402359 by Round MBL#EGLV143355507278 HBL#RWRD102300024323 gift box.xls'
 
+// The 2026 supplier files name the piece count 总PCS and have no English QTY
+// column at all — the parser threw on them until QTY_COLUMN_ALTERNATIVES
+// existed. Both the Arrival List and the Original List for this container
+// share that shape, which is why both are checked: "Arrival List" was
+// previously assumed to be PDF-only and unusable.
+const DIR_2026 = 'C:/Users/Dragon/OneDrive - L&Y USA/L&Y/L&Y/import documents'
+const BASE_2026 =
+  '2026-08 ETD 0826 738ctn KIND ETA 09-08-2026 Cntr#EGSU9522424 MBL#EGLV143655274724 HBL#RWRD102613031248.xlsx'
+const file2026 = (kind: string) => `${DIR_2026}/${BASE_2026.replace('KIND', kind)}`
+
+describe.skipIf(!fs.existsSync(file2026('Arrival List')))('real container EGSU9522424 (总PCS format)', () => {
+  for (const kind of ['Arrival List', 'Original List']) {
+    it(`parses the ${kind}`, () => {
+      const wb = XLSX.readFile(file2026(kind))
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null }) as SheetRow[]
+      const parsed = parsePackingListSheet(rows)
+
+      expect(parsed.problems).toEqual([])
+      expect(parsed.lines.length).toBeGreaterThan(20)
+      expect(parsed.unitNote).toMatch(/weight in kg/)
+
+      // Colour-suffixed SKUs are normal here (F288023-WN, F288024-PINK) and
+      // must survive verbatim — they're distinct sellable products.
+      expect(parsed.lines.some((l) => l.sku.includes('-'))).toBe(true)
+
+      const grouped = groupLinesBySku(parsed.lines)
+      const totalPieces = grouped.reduce((sum, l) => sum + l.qtyShipped, 0)
+      expect(totalPieces).toBeGreaterThan(1000)
+      for (const line of grouped) {
+        expect(Number.isInteger(line.qtyShipped)).toBe(true)
+        expect(line.qtyShipped).toBeGreaterThan(0)
+      }
+    })
+  }
+})
+
 describe.skipIf(!fs.existsSync(REAL_FILE))('real container EMCU8402359', () => {
   it('matches the 27 line items the .mjs script found, with no rejections', () => {
     const wb = XLSX.readFile(REAL_FILE)
