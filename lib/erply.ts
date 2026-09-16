@@ -282,6 +282,115 @@ export async function getErplyStock(warehouseId = 1): Promise<ErplyStockRow[]> {
     .filter((r) => r.sku)
 }
 
+// ── Receiving: stock registration (see docs/RECEIVING-PHASE-1-SCOPE.md) ───────
+
+export interface ErplyStockIndexRow {
+  productId: number
+  sku: string
+  name: string
+  stockQty: number
+}
+
+/**
+ * Same paginated getProducts walk as getErplyStock, but keyed by SKU and
+ * carrying productID and name. Receiving needs the productID (that's what
+ * saveInventoryRegistration takes, not the code) and the before-stock, so the
+ * effect of an apply can be verified afterward.
+ *
+ * Ported from scripts/add-stock-from-packing-list.mjs's fetchAllErplyProducts.
+ */
+export async function getErplyStockIndex(warehouseId = 1): Promise<Map<string, ErplyStockIndexRow>> {
+  const bySku = new Map<string, ErplyStockIndexRow>()
+  if (!isConfigured()) return bySku
+
+  const sessionKey = await getSessionKey()
+  let page = 1
+  let total = Infinity
+  const all: ErplyProduct[] = []
+
+  // getStockInfo=1 silently caps each page at 200 regardless of recordsOnPage,
+  // so the loop is driven by what came back, never by a precomputed page count
+  // -- same caution as fetchProductPage/getErplyStock above.
+  while (all.length < total) {
+    const data = await erplyPost<ErplyProduct>({
+      request: 'getProducts',
+      sessionKey,
+      recordsOnPage: String(PAGE_SIZE),
+      pageNo: String(page),
+      getStockInfo: '1',
+      active: '1',
+    })
+    total = data.status.recordsTotal ?? 0
+    if (data.records.length === 0) break
+    all.push(...data.records)
+    page++
+  }
+
+  for (const p of all) {
+    const sku = (p.code || String(p.productID)).trim()
+    if (!sku) continue
+    // Upper-cased key so a packing list's "f123456" finds Erply's "F123456";
+    // groupLinesBySku in lib/packing-list.ts groups on the same casing.
+    bySku.set(sku.toUpperCase(), {
+      productId: p.productID,
+      sku,
+      name: p.name,
+      stockQty: p.warehouses?.[String(warehouseId)]?.totalInStock ?? 0,
+    })
+  }
+  return bySku
+}
+
+export interface StockRegistrationItem {
+  productId: number
+  addQty: number
+}
+
+/**
+ * Adds stock in Erply. Erply has no "set stock to N" call — only deltas
+ * (saveInventoryRegistration to add, saveInventoryWriteOff to remove) — which
+ * is precisely why the caller must guarantee it runs once per shipment line
+ * (see shipment_lines.applied_at, migration 0048). Calling this twice doubles
+ * the stock, silently and legitimately.
+ *
+ * Batched 50 per request, matching the script this is ported from. Returns
+ * nothing useful from Erply: the registration response carries a document ID
+ * but not per-line results, so the caller verifies by re-reading stock.
+ */
+const REGISTRATION_BATCH_SIZE = 50
+
+export async function saveInventoryRegistration(
+  items: StockRegistrationItem[],
+  warehouseId = 1,
+): Promise<{ batches: number }> {
+  if (!isConfigured()) {
+    throw new Error(
+      'Erply is not configured in this environment (ERPLY_CLIENT_CODE / ERPLY_USERNAME / ERPLY_PASSWORD). Stock was NOT registered.',
+    )
+  }
+  if (items.length === 0) return { batches: 0 }
+
+  const sessionKey = await getSessionKey()
+  let batches = 0
+
+  for (let i = 0; i < items.length; i += REGISTRATION_BATCH_SIZE) {
+    const chunk = items.slice(i, i + REGISTRATION_BATCH_SIZE)
+    const params: Record<string, string> = {
+      request: 'saveInventoryRegistration',
+      sessionKey,
+      warehouseID: String(warehouseId),
+    }
+    chunk.forEach((c, idx) => {
+      params[`productID${idx + 1}`] = String(c.productId)
+      params[`amount${idx + 1}`] = String(c.addQty)
+    })
+    await erplyPost(params)
+    batches++
+  }
+
+  return { batches }
+}
+
 // ── Customer sync (Erply <-> WooCommerce bridge, see lib/tier-mapping.ts) ──────
 
 /**
