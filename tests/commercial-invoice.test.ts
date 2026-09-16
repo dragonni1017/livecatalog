@@ -170,12 +170,82 @@ describe.skipIf(!fs.existsSync(real('Commercial Invoice')))('real EGSU9522424 in
     // Most of the container should resolve; the rest is the admin's to fill.
     expect(matched.length).toBeGreaterThan(shipment.length / 2)
 
-    // The F288023 colourways must all land on one shared description.
+    // The F288023 colourways must be treated as one unit — every member gets
+    // the same outcome, never a mix of descriptions.
     const family = joined.filter((j) => j.sku.startsWith('F288023'))
     if (family.length > 1) {
-      const lineNos = new Set(family.map((f) => f.invoiceLineNo))
-      expect(lineNos.size).toBe(1)
-      expect([...lineNos][0]).not.toBeNull()
+      expect(new Set(family.map((f) => f.basis)).size).toBe(1)
+      expect(new Set(family.map((f) => f.description)).size).toBe(1)
+
+      // In THIS container that outcome is 'ambiguous', not a match: the
+      // family totals 50 cartons / 600 pieces, and so does invoice line 23
+      // ("Plush Toys Axolotl 60cm") as well as line 1 ("Flower Decorative
+      // 6-in-1 Set"). Arithmetic cannot separate them, and an earlier cut of
+      // this matcher silently named these florals after the axolotl.
+      expect(family[0].basis).toBe('ambiguous')
+      expect(family[0].description).toMatch(/AMBIGUOUS/)
+      expect(family[0].invoiceLineNo).toBeNull()
     }
+
+    // Nothing may be assigned off a colliding signature.
+    const collidingSigs = new Set<string>()
+    const seen = new Set<string>()
+    for (const l of invoice) {
+      const sig = `${l.cartons}/${l.pieces}`
+      if (seen.has(sig)) collidingSigs.add(sig)
+      seen.add(sig)
+    }
+    expect(collidingSigs.size).toBeGreaterThan(0) // this container really does have them
+    for (const j of joined) {
+      if (j.invoiceLineNo == null) continue
+      const line = invoice.find((l) => l.lineNo === j.invoiceLineNo)!
+      expect(collidingSigs.has(`${line.cartons}/${line.pieces}`)).toBe(false)
+    }
+  })
+})
+
+describe('joinInvoiceToLines — ambiguous signatures', () => {
+  // The real EGSU9522424 invoice has five pairs of rows sharing a
+  // (cartons, pieces) signature, e.g. 50/600 for both "Flower Decorative
+  // 6-in-1 Set" and "Plush Toys Axolotl 60cm". Resolving those by processing
+  // order produced two confidently wrong product names.
+  const colliding: InvoiceLine[] = [
+    { lineNo: 1, description: 'Flower Decorative 6-in-1 Set', cartons: 50, pieces: 600, unitPriceUsd: 1.9 },
+    { lineNo: 23, description: 'Plush Toys Axolotl 60cm', cartons: 50, pieces: 600, unitPriceUsd: 4.5 },
+    { lineNo: 5, description: 'Squeeze Toy Giant Drumstick', cartons: 80, pieces: 1920, unitPriceUsd: 0.75 },
+  ]
+
+  it('refuses to assign either colliding row to an exact single-SKU match', () => {
+    const out = joinInvoiceToLines(colliding, [{ sku: 'P273816-60cm', qtyShipped: 600, cartons: 50 }])
+    expect(out[0].basis).toBe('ambiguous')
+    expect(out[0].invoiceLineNo).toBeNull()
+    expect(out[0].description).toMatch(/AMBIGUOUS/)
+    // Both candidates are named, so the admin can choose without digging.
+    expect(out[0].description).toMatch(/Flower Decorative 6-in-1 Set/)
+    expect(out[0].description).toMatch(/Plush Toys Axolotl 60cm/)
+  })
+
+  it('refuses a colourway family whose total hits a colliding signature', () => {
+    const out = joinInvoiceToLines(colliding, [
+      { sku: 'F288023-WN', qtyShipped: 180, cartons: 15 },
+      { sku: 'F288023-BLK', qtyShipped: 180, cartons: 15 },
+      { sku: 'F288023-LPK', qtyShipped: 180, cartons: 15 },
+      { sku: 'F288023-VLT', qtyShipped: 60, cartons: 5 },
+    ])
+    expect(out).toHaveLength(4)
+    for (const r of out) {
+      expect(r.basis).toBe('ambiguous')
+      expect(r.description).toMatch(/50 cartons \/ 600 pieces/)
+    }
+  })
+
+  it('still matches unambiguous rows in the same invoice', () => {
+    const out = joinInvoiceToLines(colliding, [
+      { sku: 'S162782', qtyShipped: 1920, cartons: 80 },
+      { sku: 'P273816-60cm', qtyShipped: 600, cartons: 50 },
+    ])
+    const clean = out.find((r) => r.sku === 'S162782')!
+    expect(clean.basis).toBe('cartons+pieces')
+    expect(clean.description).toBe('Squeeze Toy Giant Drumstick')
   })
 })

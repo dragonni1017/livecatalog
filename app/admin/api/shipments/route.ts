@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { getAdminClient } from '@/lib/supabase'
-import { getSessionUser } from '@/lib/auth-server'
+import { getActorEmail } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 import {
   groupLinesBySku,
@@ -124,6 +124,11 @@ export async function POST(request: NextRequest) {
         qty_shipped: line.qtyShipped,
         qty_received: line.qtyShipped,
         match_status: matchStatus,
+        // Needed by Phase 2: cartons is what reconciles a line against a
+        // Commercial Invoice row, and pieces_per_case is the cs.N of a
+        // generated product name. Both null on a sheet without a 箱数 column.
+        cartons: line.cartons,
+        pieces_per_case: line.piecesPerCase,
         case_length_in: line.caseLengthIn,
         case_width_in: line.caseWidthIn,
         case_height_in: line.caseHeightIn,
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    const sessionUser = await getSessionUser()
+    const actor = await getActorEmail()
     const { data: shipment, error: shipmentError } = await db
       .from('shipments')
       .insert({
@@ -139,7 +144,7 @@ export async function POST(request: NextRequest) {
         file_hash: fileHash,
         container_ref: containerRef,
         line_count: lineRows.length,
-        staged_by: sessionUser?.email ?? 'admin',
+        staged_by: actor,
       })
       .select('*')
       .single()
@@ -166,7 +171,7 @@ export async function POST(request: NextRequest) {
       entity_id: shipment.id,
       entity_label: containerRef || fileName,
       new_value: `${lineRows.length} lines`,
-      performed_by: sessionUser?.email ?? 'admin',
+      performed_by: actor,
     })
 
     return NextResponse.json({
@@ -233,13 +238,13 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (body.status === 'abandoned') {
-      const sessionUser = await getSessionUser()
+      const actor = await getActorEmail()
       await logAudit({
         action: 'shipment_abandoned',
         entity_type: 'shipment',
         entity_id: shipmentId,
         entity_label: shipment.container_ref || shipment.file_name,
-        performed_by: sessionUser?.email ?? 'admin',
+        performed_by: actor,
       })
     }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
-import { getSessionUser } from '@/lib/auth-server'
+import { getActorEmail } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 import {
   getErplyStockIndex,
@@ -131,8 +131,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const sessionUser = await getSessionUser()
-    const actor = sessionUser?.email ?? 'admin'
+    const actor = await getActorEmail()
 
     // Flip the shipment BEFORE calling Erply, and only put it back if Erply
     // positively rejects the request. If this process dies mid-call, the row

@@ -14,14 +14,20 @@
  *
  *  - The invoice's `Item#` column is EMPTY on every row. The leading number
  *    is a line counter, not a SKU. There is no SKU on the invoice at all.
- *  - **Invoice rows group colourways.** Row 1 is 50 cartons / 600 pieces,
- *    which is exactly the four F288023-WN/BLK/LPK/VLT packing-list rows
- *    (15+15+15+5 cartons, 180+180+180+60 pieces).
+ *  - **Invoice rows group colourways.** The four F288024-PINK/CREAM/BLK/LB
+ *    rows total 900 pieces in 50 cartons, which is exactly invoice line 25
+ *    ("Flower Decorative 6-in-1 Set Cylinder 25cm").
+ *  - **Different rows can share a (cartons, pieces) signature.** This invoice
+ *    has five such pairs. Line 1 and line 25 even share a description while
+ *    differing in quantity, and line 1's 50/600 is also line 23's ("Plush
+ *    Toys Axolotl 60cm"). Those rows are excluded from matching entirely —
+ *    see ambiguousSignatures below.
  *
- * So the join is by arithmetic: cartons AND pieces must both reconcile, and
- * the match must be unique. That is the same discipline the QuickBooks
- * customer matcher uses — a non-unique match is held for a human rather than
- * guessed at (see docs/memory/project-qb-customer-matching.md).
+ * So the join is by arithmetic: cartons AND pieces must both reconcile, the
+ * match must be unique, AND the invoice row's numbers must not be shared with
+ * another row. Same discipline as the QuickBooks customer matcher — a
+ * non-unique match is held for a human rather than guessed at (see
+ * docs/memory/project-qb-customer-matching.md).
  */
 
 import type { SheetRow } from '@/lib/packing-list'
@@ -162,7 +168,40 @@ export interface JoinResult {
   description: string | null
   unitPriceUsd: number | null
   /** How the line was matched, for display — never hidden from the admin. */
-  basis: 'cartons+pieces' | 'pieces' | 'family-share' | 'none'
+  basis: 'cartons+pieces' | 'pieces' | 'family-share' | 'ambiguous' | 'none'
+}
+
+/**
+ * Invoice rows that share a (cartons, pieces) signature with another row.
+ *
+ * These are NOT joinable by arithmetic, and they are common: the real
+ * EGSU9522424 invoice has five such pairs, including 50 cartons / 600 pieces
+ * for BOTH "Flower Decorative 6-in-1 Set" (line 1) and "Plush Toys Axolotl
+ * 60cm" (line 23). An earlier cut of this matcher resolved that collision by
+ * processing order and confidently named the F288023 florals "Plush Toys
+ * Axolotl" while handing the axolotl's row to P273816-60cm — two wrong
+ * product names, produced silently.
+ *
+ * So a shared signature disqualifies a row from automatic assignment
+ * entirely. The affected SKUs come back with basis 'ambiguous' and every
+ * candidate description, for a human to choose between.
+ */
+function ambiguousSignatures(invoice: InvoiceLine[]): Map<string, InvoiceLine[]> {
+  const bySig = new Map<string, InvoiceLine[]>()
+  for (const line of invoice) {
+    const sig = `${line.cartons}/${line.pieces}`
+    if (!bySig.has(sig)) bySig.set(sig, [])
+    bySig.get(sig)!.push(line)
+  }
+  return new Map([...bySig.entries()].filter(([, lines]) => lines.length > 1))
+}
+
+function describeCandidates(lines: InvoiceLine[], cartons: number | null, pieces: number): string {
+  const which = cartons != null ? `${cartons} cartons / ${pieces} pieces` : `${pieces} pieces`
+  return (
+    `AMBIGUOUS — ${lines.length} invoice rows share ${which}, so the SKU can't be matched by numbers alone. ` +
+    `Candidates: ${lines.map((l) => `(line ${l.lineNo}) ${l.description}`).join('  |  ')}`
+  )
 }
 
 /**
@@ -181,6 +220,9 @@ export function joinInvoiceToLines(invoice: InvoiceLine[], candidates: JoinCandi
     results.set(c.sku, { sku: c.sku, invoiceLineNo: null, description: null, unitPriceUsd: null, basis: 'none' })
   }
 
+  const ambiguous = ambiguousSignatures(invoice)
+  // Only rows with a signature unique in this invoice can be auto-assigned.
+  const joinable = invoice.filter((l) => !ambiguous.has(`${l.cartons}/${l.pieces}`))
   const claimed = new Set<number>()
 
   const assign = (skus: string[], line: InvoiceLine, basis: JoinResult['basis']) => {
@@ -197,7 +239,7 @@ export function joinInvoiceToLines(invoice: InvoiceLine[], candidates: JoinCandi
   }
 
   // Tier 1 — exact single-SKU match on both figures.
-  for (const line of invoice) {
+  for (const line of joinable) {
     if (claimed.has(line.lineNo)) continue
     const exact = candidates.filter((c) => c.cartons === line.cartons && c.qtyShipped === line.pieces)
     if (exact.length === 1 && results.get(exact[0].sku)!.basis === 'none') {
@@ -213,7 +255,7 @@ export function joinInvoiceToLines(invoice: InvoiceLine[], candidates: JoinCandi
     families.get(key)!.push(c)
   }
 
-  for (const line of invoice) {
+  for (const line of joinable) {
     if (claimed.has(line.lineNo)) continue
     const hits: JoinCandidate[][] = []
     for (const members of families.values()) {
@@ -232,12 +274,50 @@ export function joinInvoiceToLines(invoice: InvoiceLine[], candidates: JoinCandi
   }
 
   // Tier 3 — unique match on pieces alone.
-  for (const line of invoice) {
+  for (const line of joinable) {
     if (claimed.has(line.lineNo)) continue
     const byPieces = candidates.filter(
       (c) => c.qtyShipped === line.pieces && results.get(c.sku)!.basis === 'none',
     )
     if (byPieces.length === 1) assign([byPieces[0].sku], line, 'pieces')
+  }
+
+  // Finally, tell the admin WHY a SKU is unmatched when the reason is a
+  // signature collision rather than a missing row — with the candidates, so
+  // the choice is a two-second read instead of a hunt through the invoice.
+  if (ambiguous.size > 0) {
+    const familyTotals = new Map<string, { pieces: number; cartons: number | null }>()
+    for (const [key, members] of families) {
+      const pieces = members.reduce((s, m) => s + m.qtyShipped, 0)
+      const cartons = members.every((m) => m.cartons != null)
+        ? members.reduce((s, m) => s + (m.cartons ?? 0), 0)
+        : null
+      familyTotals.set(key, { pieces, cartons })
+    }
+
+    for (const candidate of candidates) {
+      const result = results.get(candidate.sku)!
+      if (result.basis !== 'none') continue
+
+      const own = `${candidate.cartons}/${candidate.qtyShipped}`
+      const family = familyTotals.get(baseSku(candidate.sku))
+      const fam = family ? `${family.cartons}/${family.pieces}` : null
+
+      const hit = ambiguous.get(own) ?? (fam ? ambiguous.get(fam) : undefined)
+      if (!hit) continue
+
+      results.set(candidate.sku, {
+        sku: candidate.sku,
+        invoiceLineNo: null,
+        description: describeCandidates(
+          hit,
+          ambiguous.has(own) ? candidate.cartons : (family?.cartons ?? null),
+          ambiguous.has(own) ? candidate.qtyShipped : (family?.pieces ?? 0),
+        ),
+        unitPriceUsd: null,
+        basis: 'ambiguous',
+      })
+    }
   }
 
   return [...results.values()]

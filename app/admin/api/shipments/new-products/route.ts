@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
-import { getSessionUser } from '@/lib/auth-server'
+import { getActorEmail } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 import {
   CommercialInvoiceError,
@@ -74,7 +74,9 @@ export async function PUT(request: NextRequest) {
         invoice_match_basis: join.basis === 'none' ? null : join.basis,
       }
 
-      if (line.match_status !== 'matched' && !line.erply_created_product_id) {
+      // An ambiguous match carries candidate text, not a description, so it
+      // must never seed a proposed name.
+      if (line.match_status !== 'matched' && !line.erply_created_product_id && join.basis !== 'ambiguous') {
         const descriptor = proposeDescriptor(join.description, line.sku)
         // Descriptor only — no pack spec. The sheet gives pieces per case but
         // never how those pieces are packed, and a name asserting "12/pk"
@@ -206,8 +208,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const sessionUser = await getSessionUser()
-    const actor = sessionUser?.email ?? 'admin'
+    const actor = await getActorEmail()
     const created: Array<{ sku: string; productId: number }> = []
     const failed: Array<{ sku: string; error: string }> = []
 

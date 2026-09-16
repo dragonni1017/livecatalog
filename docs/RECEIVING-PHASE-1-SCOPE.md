@@ -122,15 +122,31 @@ Migration `0049_shipment_new_products.sql`.
 ## The invoice join
 
 The invoice has no SKU column at all — `Item#` is empty on every row and the
-leading number is a line counter. Rows also **group colourways**: row 1 of
-EGSU9522424 is 50 cartons / 600 pieces, exactly the four `F288023-*` rows
-(15+15+15+5 cartons, 180+180+180+60 pieces).
+leading number is a line counter. Rows also **group colourways**: the four
+`F288024-*` rows total 900 pieces in 50 cartons, which is exactly invoice
+line 25 ("Flower Decorative 6-in-1 Set Cylinder 25cm").
 
 So `joinInvoiceToLines()` matches by arithmetic, strictest tier first: a single
 SKU matching cartons AND pieces; then a base-SKU family summing to a row; then
 a unique pieces-only match. A tie matches nothing — the same "unique or hold"
 rule as the QuickBooks customer matcher. The basis is shown in the UI, never
 hidden, because a family-share match is an inference.
+
+### Colliding signatures — the bug this nearly shipped with
+
+Different invoice rows can carry the SAME (cartons, pieces). EGSU9522424 has
+**five such pairs**, including 50/600 for both line 1 ("Flower Decorative
+6-in-1 Set") and line 23 ("Plush Toys Axolotl 60cm"). Lines 1 and 25 even
+share a description while differing in quantity.
+
+The first cut resolved that collision by processing order, and confidently
+named the F288023 florals "Plush Toys Axolotl" while handing the axolotl's row
+to P273816-60cm — two wrong product names, produced silently. Nothing but
+running the real files end to end would have caught it.
+
+A shared signature now disqualifies a row from automatic matching entirely.
+The affected SKUs come back with basis `ambiguous`, carry the full candidate
+list in place of a description, and are never given a proposed name.
 
 ## What is deliberately not automatic
 
