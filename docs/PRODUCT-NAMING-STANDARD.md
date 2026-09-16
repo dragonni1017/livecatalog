@@ -107,20 +107,49 @@ distinct SKUs of evidence.
 | Documents **disagree** with each other | 26 |
 | SKU in **no** document scanned | 109 |
 
-**The correction is the opposite of the arithmetic one.** In every confirmed
-case, `cs.N` was already right and **`bx` was the wrong field** — it held the
-case total instead of the box count:
+**Which field is wrong varies — that's the whole reason a document has to
+decide it.** Of the 271:
+
+- **235: `cs.N` was already right and `bx` was the wrong field**, holding the
+  case total instead of the box count.
+- **36: `cs.N` itself was wrong.** In 23 of those the document's figure equals
+  the original `pk × bx`, so for those specific SKUs the arithmetic fix would
+  have been correct.
 
 ```
 F287294  Foam Bear with Heart 7cm - 12/pk 120bx/cs cs.120
-      -> Foam Bear with Heart 7cm - 12/pk  10bx/cs cs.120     (120/case confirmed)
+      -> Foam Bear with Heart 7cm - 12/pk  10bx/cs cs.120     (120/case confirmed, bx was wrong)
 
-F287684  Pink Shiny Foil Heart Floral Papers - 20/pk 60bx/cs cs.60
-      -> Pink Shiny Foil Heart Floral Papers - 20/pk  3bx/cs cs.60   (60/case confirmed)
+F287771  ... - 20/pk 50bx/cs cs.50
+      -> ... - 20/pk 50bx/cs cs.1000                          (1000/case confirmed, cs.N was wrong)
 ```
 
-That systematically confirms what F287672 showed by hand: recomputing `cs.N`
-as `pk × bx` would have inflated hundreds of case quantities.
+So neither "keep cs.N" nor "recompute cs.N as pk × bx" is a rule you can apply
+blind — F287672 is real (150/case, recomputing would have written cs.7200) and
+so is F287771 (1000/case, which IS pk × bx). The document figure is the
+authority in both directions, which is why `auditProductName` still refuses to
+suggest anything for a mismatch on its own.
+
+> An earlier version of this section claimed `cs.N` was right in *every*
+> confirmed case. That was an overgeneralisation from the first examples the
+> script printed — the 225-product floral-paper group dominates the output and
+> all of it fits that shape. Corrected 2026-09-16 after grouping all 271.
+
+By correction pattern:
+
+| Count | Correction |
+|---|---|
+| 225 | `20/pk 60bx/cs cs.60` → `20/pk 3bx/cs cs.60` |
+| 18 | `20/pk 50bx/cs cs.50` → `20/pk 50bx/cs cs.1000` |
+| 8 | `20/pk 100bx/cs cs.100` → `20/pk 50bx/cs cs.1000` |
+| 6 | `10/pk 100bx/cs cs.100` → `10/pk 10bx/cs cs.100` |
+| 3 | `12/pk 120bx/cs cs.120` → `12/pk 10bx/cs cs.120` |
+| 2 | `60/pk 20bx/cs cs.20` → `60/pk 20bx/cs cs.1200` |
+| 2 | `200/pk 10bx/cs cs.10` → `200/pk 1bx/cs cs.200` |
+| 1 each | seven one-offs — `F287039` (96 → 1500/case) and `D701018` (100 → 360/case) are the largest jumps and deserve an eyeball before they're applied |
+
+The 225 are one repeated data-entry habit across the floral-paper range, not
+225 independent mistakes.
 
 The 29 confirmed-but-not-auto-fixable ones are those where the documents'
 per-case figure isn't divisible by the name's `pk` — so the pack size is wrong
