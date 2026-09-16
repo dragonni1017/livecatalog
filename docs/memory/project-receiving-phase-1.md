@@ -1,6 +1,6 @@
 ---
 name: project-receiving-phase-1
-description: 2026-09-16 — /admin/receiving (packing list → Erply stock) built; migration 0048 NOT YET APPLIED, and apply needs Erply creds which Vercel production lacks
+description: 2026-09-16 — /admin/receiving (packing list → Erply stock) built; migration 0048 applied + verified; apply still needs Erply creds, which Vercel production lacks
 type: project
 ---
 
@@ -12,11 +12,15 @@ reasoning live in `docs/RECEIVING-PHASE-1-SCOPE.md`; migration is
 
 Three live facts not derivable from the code:
 
-1. **Migration 0048 is not applied.** Confirmed 2026-09-16: both tables return
-   PGRST205 "Could not find the table 'public.shipments' in the schema cache".
-   The screen and dashboard tile degrade quietly to empty until it runs (they
-   null-coalesce), so a blank Receiving page is the expected pre-migration
-   state, not a bug.
+1. **Migration 0048 is applied and the table layer is verified.** Applied in
+   the Supabase SQL editor 2026-09-16 and exercised the same day on a
+   throwaway row that was then deleted: both tables reachable (so the
+   `pg_roles` grant loop worked), `numeric(10,2)` keeps a converted weight of
+   22.05, a duplicate `file_hash` is rejected with 23505 (the idempotency key
+   holds), both CHECK constraints reject junk values, the apply write-back
+   columns round-trip, the guarded `staged -> applied` update works, and
+   deleting a shipment cascade-deletes its lines. No real shipment has been
+   staged through the HTTP route yet.
 2. **Apply can't run where Erply isn't configured.** Erply credentials exist
    locally but not in Vercel production. The apply route returns a 503 saying
    so rather than calling the stub path in `lib/erply.ts`, which would make a
