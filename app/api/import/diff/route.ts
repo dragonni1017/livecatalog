@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ExcelRow, DiffResult, ClassifiedRow } from '@/lib/types'
+import { selectAll } from '@/lib/product-sync'
 
 interface DbProduct {
   sku: string
@@ -85,13 +86,23 @@ export async function POST(request: NextRequest) {
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
 
-    // Fetch all products so we can detect deactivations across both active and previously inactive
-    const { data: dbProducts, error } = await db
-      .from('products')
-      .select('sku, name, price_cents, stock_qty, description, image_url, is_active')
-      .limit(50000)
-
-    if (error) throw error
+    // Fetch all products so we can detect deactivations across both active and
+    // previously inactive.
+    //
+    // MUST be paged. This used to be a single select with .limit(50000), which
+    // silently returned only the first 1,000 rows — PostgREST enforces its own
+    // max-rows cap and a larger client-side limit cannot raise it. With 3,225
+    // products that made the preview lie in two directions at once: every SKU
+    // past the first page was reported as "new" (F287491, a real product, came
+    // back as new), and "will be deactivated" capped at 999. The import itself
+    // was always correct, since lib/product-sync.ts pages properly — only this
+    // preview, the thing an admin decides on, was wrong.
+    const dbProducts = await selectAll<DbProduct>((from, to) =>
+      db
+        .from('products')
+        .select('sku, name, price_cents, stock_qty, description, image_url, is_active')
+        .range(from, to),
+    )
 
     const dbBySku = new Map<string, DbProduct>()
     for (const p of dbProducts ?? []) {
