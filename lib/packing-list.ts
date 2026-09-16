@@ -42,6 +42,11 @@ const COLUMN: Record<string, string[]> = {
   // 毛重 (gross weight) distinguishes this from 总量KG (total kg across all
   // cartons in the line).
   weight: ['毛重'],
+  // Carton count for the line. Needed to derive pieces-per-case, and to join
+  // a line against a Commercial Invoice row (see lib/commercial-invoice.ts) —
+  // invoice rows group colourways, and cartons + pieces are what reconcile
+  // the two. Optional: a sheet without it still receives fine.
+  cartons: ['箱数'],
 }
 
 // The piece-count column is the one header that genuinely changes between
@@ -67,6 +72,19 @@ export interface PackingListLine {
   sku: string
   barcodeFromFile: string | null
   qtyShipped: number
+  /** Cartons for this line (箱数 CTN). Null when the sheet omits the column. */
+  cartons: number | null
+  /**
+   * Pieces in one carton, derived as qtyShipped / cartons rather than read
+   * from the sheet's own pk/cs column — the arithmetic is unambiguous where
+   * the column's meaning isn't. Verified on container EGSU9522424: S162782
+   * ships 1,920 pieces in 80 cartons and its pk/cs column reads 24, which is
+   * exactly 1920/80. Null when cartons are missing or it doesn't divide
+   * evenly (a mixed-carton line, which shouldn't be guessed at).
+   *
+   * This is the cs.N of the house naming standard — see lib/product-naming.ts.
+   */
+  piecesPerCase: number | null
   caseLengthIn: number | null
   caseWidthIn: number | null
   caseHeightIn: number | null
@@ -252,10 +270,18 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
       }
     }
 
+    const rawCartons = colIndex.cartons >= 0 ? row[colIndex.cartons] : null
+    const cartons = typeof rawCartons === 'number' && Number.isInteger(rawCartons) && rawCartons > 0 ? rawCartons : null
+    // Only when it divides evenly: a non-integer means mixed cartons, and a
+    // guessed case quantity would end up in a product name as fact.
+    const piecesPerCase = cartons && qty % cartons === 0 ? qty / cartons : null
+
     lines.push({
       sku,
       barcodeFromFile: rawUpc == null || rawUpc === '' ? null : String(rawUpc).trim(),
       qtyShipped: qty,
+      cartons,
+      piecesPerCase,
       ...dims,
     })
   }
@@ -285,6 +311,12 @@ export function groupLinesBySku(lines: PackingListLine[]): PackingListLine[] {
       continue
     }
     existing.qtyShipped += line.qtyShipped
+    if (line.cartons != null) existing.cartons = (existing.cartons ?? 0) + line.cartons
+    // Recompute rather than summing: pieces-per-case is a rate, not a total.
+    existing.piecesPerCase =
+      existing.cartons && existing.qtyShipped % existing.cartons === 0
+        ? existing.qtyShipped / existing.cartons
+        : null
     // Keep the first line's carton figures and barcode: cartons in one line
     // group are the same physical product, and a later row's blank cells
     // shouldn't erase what the first row supplied.

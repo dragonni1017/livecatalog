@@ -391,6 +391,109 @@ export async function saveInventoryRegistration(
   return { batches }
 }
 
+// ── Receiving Phase 2: product creation ──────────────────────────────────────
+
+export interface ErplyProductGroup {
+  id: number
+  name: string
+}
+
+interface ErplyProductGroupRecord {
+  productGroupID: number
+  name: string
+  subGroups?: ErplyProductGroupRecord[]
+}
+
+/**
+ * Erply's product groups — what `groupName` on a synced product comes from,
+ * and what maps to our `category`. saveProduct takes a groupID, not a name,
+ * so a new product needs this lookup first.
+ *
+ * Verified live 2026-09-16 (19 top-level groups: Drinkware, Florals/Gifts,
+ * LED/Electronics, Seasonal Items, Toys, 3D, …). Two things that response
+ * settled, rather than being assumed:
+ *  - There is no `nameEN` field on this account; the only name is `name`.
+ *  - Groups are a TREE — each record can carry `subGroups`. They're
+ *    flattened here, because a product commonly belongs to a child group and
+ *    a picker offering only parents would quietly make that unreachable.
+ */
+export async function getErplyProductGroups(): Promise<ErplyProductGroup[]> {
+  if (!isConfigured()) return []
+  const sessionKey = await getSessionKey()
+  const data = await erplyPost<ErplyProductGroupRecord>({
+    request: 'getProductGroups',
+    sessionKey,
+  })
+
+  const out: ErplyProductGroup[] = []
+  const walk = (records: ErplyProductGroupRecord[] | undefined, prefix: string) => {
+    for (const g of records ?? []) {
+      const name = (g.name ?? '').trim()
+      if (!g.productGroupID || !name) continue
+      // Child groups are shown path-style so two same-named children under
+      // different parents stay distinguishable in the picker.
+      const label = prefix ? `${prefix} / ${name}` : name
+      out.push({ id: g.productGroupID, name: label })
+      walk(g.subGroups, label)
+    }
+  }
+  walk(data.records, '')
+  return out
+}
+
+export interface CreateErplyProductInput {
+  /** Becomes Erply's `code`, which the sync reads back as products.sku. */
+  sku: string
+  name: string
+  /** Erply's `code2`, read back as products.barcode. */
+  barcode?: string | null
+  groupId: number
+  /** Selling price in dollars, matching getErplyProducts' `price`. */
+  priceDollars: number
+}
+
+/**
+ * Creates one product in Erply.
+ *
+ * Erply is the master for product data — the catalog's name, price and
+ * category are all overwritten from it on every sync (lib/product-sync.ts) —
+ * so a new product has to be born here, not in Supabase.
+ *
+ * Deliberately one product per call rather than a batch: saveProduct returns
+ * the new productID per request, and the caller records it per shipment line
+ * so a failure halfway through a container doesn't lose track of which SKUs
+ * already exist. Creating a duplicate product in Erply is not something this
+ * repo can undo (cf. the 1,121 duplicate customers incident, 2026-08-07).
+ */
+export async function createErplyProduct(input: CreateErplyProductInput): Promise<{ productId: number }> {
+  if (!isConfigured()) {
+    throw new Error(
+      'Erply is not configured in this environment (ERPLY_CLIENT_CODE / ERPLY_USERNAME / ERPLY_PASSWORD). No product was created.',
+    )
+  }
+
+  const sessionKey = await getSessionKey()
+  const params: Record<string, string> = {
+    request: 'saveProduct',
+    sessionKey,
+    code: input.sku,
+    name: input.name,
+    groupID: String(input.groupId),
+    // `price` is the plain selling price. Deliberately not touching
+    // priceWithVat / discountPercent: the 2026-08-04 incident zeroed all
+    // 2,871 selling prices by sending the wrong price parameter, so this
+    // sends exactly one and nothing else.
+    price: input.priceDollars.toFixed(2),
+    status: 'ACTIVE',
+  }
+  if (input.barcode) params.code2 = input.barcode
+
+  const data = await erplyPost<{ productID: number }>(params)
+  const productId = data.records?.[0]?.productID
+  if (!productId) throw new Error('Erply accepted saveProduct but returned no productID')
+  return { productId }
+}
+
 // ── Customer sync (Erply <-> WooCommerce bridge, see lib/tier-mapping.ts) ──────
 
 /**

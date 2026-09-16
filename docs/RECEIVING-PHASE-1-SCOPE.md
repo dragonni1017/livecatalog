@@ -100,3 +100,59 @@ with zero rejections, proving the port is faithful against a known-good file.
 **Never apply that one.** The first real apply waits for a shipment that
 hasn't been received; the post-apply re-fetch plus a `syncStockFromErply()`
 run then confirms it reaches Supabase.
+
+---
+
+# Phase 2 — new products from a shipment (built 2026-09-16)
+
+Unmatched SKUs can now become real Erply products, reviewed one row at a time.
+Migration `0049_shipment_new_products.sql`.
+
+## Where each field comes from
+
+| Field | Source |
+|---|---|
+| SKU, pieces, cartons | Arrival/Original List |
+| Pieces per case (`cs.N`) | Derived as pieces / cartons — not read from the sheet's own `pk/cs` column, whose meaning is ambiguous. Verified: S162782 ships 1,920 in 80 cartons and its `pk/cs` reads 24 = 1920/80 |
+| English name | Commercial Invoice `Descriptions of Goods`, rewritten by `normalizeDescriptor()` |
+| Colour / variant | The SKU suffix (`-WN` → Wine). Unknown codes pass through verbatim |
+| Pieces per pack | **The admin.** Nothing in the paperwork says how a case is split into packs |
+| Category, price | **The admin.** Categories come from Erply's own group tree |
+
+## The invoice join
+
+The invoice has no SKU column at all — `Item#` is empty on every row and the
+leading number is a line counter. Rows also **group colourways**: row 1 of
+EGSU9522424 is 50 cartons / 600 pieces, exactly the four `F288023-*` rows
+(15+15+15+5 cartons, 180+180+180+60 pieces).
+
+So `joinInvoiceToLines()` matches by arithmetic, strictest tier first: a single
+SKU matching cartons AND pieces; then a base-SKU family summing to a row; then
+a unique pieces-only match. A tie matches nothing — the same "unique or hold"
+rule as the QuickBooks customer matcher. The basis is shown in the UI, never
+hidden, because a family-share match is an inference.
+
+## What is deliberately not automatic
+
+Names are proposed as a **descriptor only**, with no pack spec. The sheet says
+how many pieces are in a case but never how they're packed, and a name
+asserting "12/pk" that nobody checked would be an invented fact. The UI
+assembles the full house-standard name once the admin supplies pieces-per-pack,
+and refuses a value that doesn't divide the case evenly (`cs.N = pk × bx`).
+
+## Verified against live Erply (read-only)
+
+`getProductGroups` returns 19 top-level groups (Drinkware, Florals/Gifts,
+LED/Electronics, Seasonal Items, Toys, 3D, …). That response corrected two
+assumptions: there is no `nameEN` field on this account, and groups are a
+**tree** — `subGroups` are flattened into path-style labels so a child
+category is reachable in the picker.
+
+## NOT yet verified
+
+`createErplyProduct()` (`saveProduct`) has **never been called**. It sends
+`code`, `name`, `groupID`, `price`, `status` and optionally `code2`, and
+deliberately touches no other price field — on 2026-08-04 a wrong saveProduct
+parameter zeroed all 2,871 selling prices. **Create exactly one product first
+and check it in Erply before trusting a batch.** Creation is one-way; this
+repo cannot delete an Erply product.

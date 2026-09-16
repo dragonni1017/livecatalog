@@ -1,6 +1,6 @@
 ---
 name: project-receiving-phase-1
-description: 2026-09-16 — /admin/receiving (packing list → Erply stock) built; migration 0048 applied + verified; apply still needs Erply creds, which Vercel production lacks
+description: 2026-09-16 — /admin/receiving Phase 1 (stock) + Phase 2 (new products) built; 0048 applied, 0049 NOT applied; saveProduct never yet called
 type: project
 ---
 
@@ -45,9 +45,12 @@ would inject phantom stock for inventory already sold.
 **How to apply:** never write `products.stock_qty` from receiving — it's
 excluded from the Erply→Supabase sync on purpose (0042's anchored delta) and a
 direct write would fight the order-fulfillment decrement. Stock lands in Erply
-and the catalog catches up on the next sync; the UI says so explicitly. New
-products from packing lists are still out of scope (Phase 2) — the sheets
-carry no English name, category, or price, which is why unmatched SKUs stage
-but never apply. See [[project-packing-list-importer]] for the file-format
+and the catalog catches up on the next sync; the UI says so explicitly. An
+unmatched SKU still never has its stock applied — it has to become a product
+first, then be received on a later pass.
+
+**Phase 2 (same day):** unmatched SKUs can become Erply products — migration 0049 (NOT applied yet), lib/commercial-invoice.ts, app/admin/api/shipments/new-products. Two things to know: the real 2026 files head the piece count 总PCS, not the English QTY the 2023 container used (the parser threw on every current file until that was fixed), and createErplyProduct/saveProduct has NEVER been called — create exactly one product and check it in Erply before trusting a batch, given the 2026-08-04 incident where a wrong saveProduct parameter zeroed 2,871 selling prices. getProductGroups IS verified live (19 groups, no nameEN field, tree-shaped with subGroups).
+
+See [[project-packing-list-importer]] for the file-format
 findings this builds on and [[project-product-measurements]] for the
 inches/pounds unit trap.

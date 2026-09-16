@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import NewProductsPanel from './NewProductsPanel'
 
 // Client-side workbook read, same approach as components/admin/ExcelDropzone.tsx:
 // SheetJS runs in the browser and only the raw cell grid is POSTed, so every
@@ -27,6 +28,21 @@ export interface ShipmentLine {
   erply_stock_after: number | null
   applied_at: string | null
   apply_error: string | null
+  // Phase 2 (migration 0049) — null on a shipment staged before it, and on
+  // every line until a Commercial Invoice is attached.
+  cartons: number | null
+  pieces_per_case: number | null
+  invoice_line_no: number | null
+  invoice_description: string | null
+  invoice_unit_price_cents: number | null
+  invoice_match_basis: string | null
+  proposed_name: string | null
+  proposed_category: string | null
+  proposed_price_cents: number | null
+  proposed_pieces_per_pack: number | null
+  erply_created_product_id: number | null
+  created_product_at: string | null
+  create_error: string | null
 }
 
 export interface Shipment {
@@ -439,14 +455,19 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
                 {lines.some((l) => l.match_status !== 'matched') && (
                   <p className="mt-3 text-xs text-gray-500">
                     {lines.filter((l) => l.match_status !== 'matched').length} line(s) are excluded from apply — a SKU
-                    that isn&apos;t in the catalog, or a UPC that disagrees with the one on file. Creating new products
-                    from a packing list is a later phase; the sheets carry no English name, category, or price.
+                    that isn&apos;t in the catalog, or a UPC that disagrees with the one on file. Create them below
+                    first; their stock can be applied on a later pass.
                   </p>
                 )}
               </>
             )}
           </div>
         </div>
+      )}
+
+      {/* ── New products (Phase 2) ─────────────────────────────────────── */}
+      {shipment && (
+        <NewProductsPanel shipmentId={shipment.id} lines={lines} onLines={setLines} />
       )}
 
       {/* ── History ────────────────────────────────────────────────────── */}
