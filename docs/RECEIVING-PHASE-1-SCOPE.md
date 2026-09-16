@@ -251,9 +251,14 @@ prices on this account at some point. If that's still true elsewhere and not
 here, something about the account's pricing configuration changed in between —
 a question for Erply support, and the cheapest next step.
 
-Until it's resolved: a product created by this app has **no price**, the
-create route flags it per line, and the price must be set in the Erply back
-office by hand.
+A product created by this app therefore has **no price**, and the create route
+flags each one per line.
+
+**DECIDED 2026-09-16 (Dragon): pricing is set by hand in Erply.** This is not
+an open blocker and does not need chasing — don't re-probe the Erply pricing
+service or re-litigate the `saveProduct` parameter. The price a line carries
+(`shipment_lines.proposed_price_cents`) is a record of the intended price and
+a worklist for the manual pass, not something the app can push.
 
 ### One pass, both kinds of line (2026-09-16)
 
