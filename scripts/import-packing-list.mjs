@@ -34,6 +34,15 @@
 // real barcode-collision history (see docs/memory), so a mismatch is a
 // signal the SKU mapping is wrong, not noise to override.
 //
+// THE PARSING RULES NOW HAVE A CANONICAL COPY IN lib/packing-list.ts, used by
+// the /admin/receiving screen (migration 0048). This script is kept as a
+// mirror because a .mjs can't import TypeScript. One deliberate difference:
+// the lib locates dimension columns by name alone ('长') and then REQUIRES a
+// unit in that header, while COLUMN below matches ['长', 'cm'] -- so an
+// inch-labelled sheet errors here but parses there. Port fixes to the lib
+// first; it has test coverage in tests/packing-list.test.ts, including the
+// real EMCU8402359 container this script was validated against.
+//
 // CANONICAL VERSION OF THE PLAUSIBILITY RULE LIVES IN lib/measurements.ts
 // (implausibleCaseMeasurement). This is a fourth mirror, because .mjs can't
 // import TypeScript -- same constraint noted in that file and in

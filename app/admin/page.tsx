@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 export default async function AdminDashboard() {
   let qbPending = 0
   let creditPending = 0
+  let stagedShipments = 0
   try {
     const db = getAdminClient()
     const { count } = await db
@@ -23,6 +24,12 @@ export default async function AdminDashboard() {
       .select('id')
       .eq('status', 'pending')
     creditPending = creditRows?.length ?? 0
+
+    const { data: stagedRows } = await db
+      .from('shipments')
+      .select('id')
+      .eq('status', 'staged')
+    stagedShipments = stagedRows?.length ?? 0
   } catch {
     // non-fatal — dashboard still renders without the count
   }
@@ -130,6 +137,33 @@ export default async function AdminDashboard() {
               <p className="text-sm text-gray-500 mt-0.5">
                 Buyers who created an account — sign-up date, last login, and order history
               </p>
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/receiving"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Receiving
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Upload a supplier packing list and register an arriving shipment as stock
+              </p>
+              {stagedShipments > 0 && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700">
+                  {stagedShipments} shipment{stagedShipments !== 1 ? 's' : ''} staged, not yet applied
+                </p>
+              )}
             </div>
             <svg
               className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"

@@ -18,7 +18,7 @@ const PAGE_SIZE = 1000
  * 1000-row response cap. `makeQuery` must return a fresh range-limited query
  * each call (a query builder is single-use).
  */
-async function selectAll<T>(
+export async function selectAll<T>(
   makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
 ): Promise<T[]> {
   const all: T[] = []

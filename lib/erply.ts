@@ -282,6 +282,247 @@ export async function getErplyStock(warehouseId = 1): Promise<ErplyStockRow[]> {
     .filter((r) => r.sku)
 }
 
+// ── Receiving: stock registration (see docs/RECEIVING-PHASE-1-SCOPE.md) ───────
+
+export interface ErplyStockIndexRow {
+  productId: number
+  sku: string
+  name: string
+  stockQty: number
+}
+
+/**
+ * Same paginated getProducts walk as getErplyStock, but keyed by SKU and
+ * carrying productID and name. Receiving needs the productID (that's what
+ * saveInventoryRegistration takes, not the code) and the before-stock, so the
+ * effect of an apply can be verified afterward.
+ *
+ * Ported from scripts/add-stock-from-packing-list.mjs's fetchAllErplyProducts.
+ */
+export async function getErplyStockIndex(warehouseId = 1): Promise<Map<string, ErplyStockIndexRow>> {
+  const bySku = new Map<string, ErplyStockIndexRow>()
+  if (!isConfigured()) return bySku
+
+  const sessionKey = await getSessionKey()
+  let page = 1
+  let total = Infinity
+  const all: ErplyProduct[] = []
+
+  // getStockInfo=1 silently caps each page at 200 regardless of recordsOnPage,
+  // so the loop is driven by what came back, never by a precomputed page count
+  // -- same caution as fetchProductPage/getErplyStock above.
+  while (all.length < total) {
+    const data = await erplyPost<ErplyProduct>({
+      request: 'getProducts',
+      sessionKey,
+      recordsOnPage: String(PAGE_SIZE),
+      pageNo: String(page),
+      getStockInfo: '1',
+      active: '1',
+    })
+    total = data.status.recordsTotal ?? 0
+    if (data.records.length === 0) break
+    all.push(...data.records)
+    page++
+  }
+
+  for (const p of all) {
+    const sku = (p.code || String(p.productID)).trim()
+    if (!sku) continue
+    // Upper-cased key so a packing list's "f123456" finds Erply's "F123456";
+    // groupLinesBySku in lib/packing-list.ts groups on the same casing.
+    bySku.set(sku.toUpperCase(), {
+      productId: p.productID,
+      sku,
+      name: p.name,
+      stockQty: p.warehouses?.[String(warehouseId)]?.totalInStock ?? 0,
+    })
+  }
+  return bySku
+}
+
+export interface StockRegistrationItem {
+  productId: number
+  addQty: number
+}
+
+/**
+ * Adds stock in Erply. Erply has no "set stock to N" call — only deltas
+ * (saveInventoryRegistration to add, saveInventoryWriteOff to remove) — which
+ * is precisely why the caller must guarantee it runs once per shipment line
+ * (see shipment_lines.applied_at, migration 0048). Calling this twice doubles
+ * the stock, silently and legitimately.
+ *
+ * Batched 50 per request, matching the script this is ported from. Returns
+ * nothing useful from Erply: the registration response carries a document ID
+ * but not per-line results, so the caller verifies by re-reading stock.
+ */
+const REGISTRATION_BATCH_SIZE = 50
+
+export async function saveInventoryRegistration(
+  items: StockRegistrationItem[],
+  warehouseId = 1,
+): Promise<{ batches: number }> {
+  if (!isConfigured()) {
+    throw new Error(
+      'Erply is not configured in this environment (ERPLY_CLIENT_CODE / ERPLY_USERNAME / ERPLY_PASSWORD). Stock was NOT registered.',
+    )
+  }
+  if (items.length === 0) return { batches: 0 }
+
+  const sessionKey = await getSessionKey()
+  let batches = 0
+
+  for (let i = 0; i < items.length; i += REGISTRATION_BATCH_SIZE) {
+    const chunk = items.slice(i, i + REGISTRATION_BATCH_SIZE)
+    const params: Record<string, string> = {
+      request: 'saveInventoryRegistration',
+      sessionKey,
+      warehouseID: String(warehouseId),
+    }
+    chunk.forEach((c, idx) => {
+      params[`productID${idx + 1}`] = String(c.productId)
+      params[`amount${idx + 1}`] = String(c.addQty)
+    })
+    await erplyPost(params)
+    batches++
+  }
+
+  return { batches }
+}
+
+// ── Receiving Phase 2: product creation ──────────────────────────────────────
+
+export interface ErplyProductGroup {
+  id: number
+  name: string
+}
+
+interface ErplyProductGroupRecord {
+  productGroupID: number
+  name: string
+  subGroups?: ErplyProductGroupRecord[]
+}
+
+/**
+ * Erply's product groups — what `groupName` on a synced product comes from,
+ * and what maps to our `category`. saveProduct takes a groupID, not a name,
+ * so a new product needs this lookup first.
+ *
+ * Verified live 2026-09-16 (19 top-level groups: Drinkware, Florals/Gifts,
+ * LED/Electronics, Seasonal Items, Toys, 3D, …). Two things that response
+ * settled, rather than being assumed:
+ *  - There is no `nameEN` field on this account; the only name is `name`.
+ *  - Groups are a TREE — each record can carry `subGroups`. They're
+ *    flattened here, because a product commonly belongs to a child group and
+ *    a picker offering only parents would quietly make that unreachable.
+ */
+export async function getErplyProductGroups(): Promise<ErplyProductGroup[]> {
+  if (!isConfigured()) return []
+  const sessionKey = await getSessionKey()
+  const data = await erplyPost<ErplyProductGroupRecord>({
+    request: 'getProductGroups',
+    sessionKey,
+  })
+
+  const out: ErplyProductGroup[] = []
+  const walk = (records: ErplyProductGroupRecord[] | undefined, prefix: string) => {
+    for (const g of records ?? []) {
+      const name = (g.name ?? '').trim()
+      if (!g.productGroupID || !name) continue
+      // Child groups are shown path-style so two same-named children under
+      // different parents stay distinguishable in the picker.
+      const label = prefix ? `${prefix} / ${name}` : name
+      out.push({ id: g.productGroupID, name: label })
+      walk(g.subGroups, label)
+    }
+  }
+  walk(data.records, '')
+  return out
+}
+
+/**
+ * One product by its code (our SKU), without walking the whole catalog the
+ * way getErplyStockIndex has to. Used to read a product back immediately
+ * after creating it — see the price warning in the create route.
+ */
+export async function getErplyProductByCode(
+  code: string,
+): Promise<{ productId: number; name: string; price: number; groupName: string } | null> {
+  if (!isConfigured()) return null
+  const sessionKey = await getSessionKey()
+  const data = await erplyPost<ErplyProduct>({ request: 'getProducts', sessionKey, code })
+  const rec = data.records?.[0]
+  if (!rec) return null
+  return {
+    productId: rec.productID,
+    name: rec.name,
+    price: rec.price ?? 0,
+    groupName: rec.groupName ?? '',
+  }
+}
+
+export interface CreateErplyProductInput {
+  /** Becomes Erply's `code`, which the sync reads back as products.sku. */
+  sku: string
+  name: string
+  /** Erply's `code2`, read back as products.barcode. */
+  barcode?: string | null
+  groupId: number
+  /** Selling price in dollars, matching getErplyProducts' `price`. */
+  priceDollars: number
+}
+
+/**
+ * Creates one product in Erply.
+ *
+ * Erply is the master for product data — the catalog's name, price and
+ * category are all overwritten from it on every sync (lib/product-sync.ts) —
+ * so a new product has to be born here, not in Supabase.
+ *
+ * Deliberately one product per call rather than a batch: saveProduct returns
+ * the new productID per request, and the caller records it per shipment line
+ * so a failure halfway through a container doesn't lose track of which SKUs
+ * already exist. Creating a duplicate product in Erply is not something this
+ * repo can undo (cf. the 1,121 duplicate customers incident, 2026-08-07).
+ */
+export async function createErplyProduct(input: CreateErplyProductInput): Promise<{ productId: number }> {
+  if (!isConfigured()) {
+    throw new Error(
+      'Erply is not configured in this environment (ERPLY_CLIENT_CODE / ERPLY_USERNAME / ERPLY_PASSWORD). No product was created.',
+    )
+  }
+
+  const sessionKey = await getSessionKey()
+  const params: Record<string, string> = {
+    request: 'saveProduct',
+    sessionKey,
+    code: input.sku,
+    name: input.name,
+    groupID: String(input.groupId),
+    // `price` is the plain selling price. Deliberately not touching
+    // priceWithVat / discountPercent: the 2026-08-04 incident zeroed all
+    // 2,871 selling prices by sending the wrong price parameter, so this
+    // sends exactly one and nothing else.
+    // CONFIRMED NOT TO WORK ON THIS ACCOUNT, 2026-09-16: a product created
+    // with price '1.23' came back from getProducts with price 0 AND
+    // priceWithVat 0 (test product ZZTESTCLAUDE0916, Erply #3081, since
+    // archived), while real products carry a non-zero price. The parameter
+    // is still sent because it is the documented one and costs nothing if a
+    // later account configuration honours it — but the caller MUST read the
+    // product back and warn when the price didn't land, rather than leaving
+    // a $0.00 product to reach the catalog. See the create route.
+    price: input.priceDollars.toFixed(2),
+    status: 'ACTIVE',
+  }
+  if (input.barcode) params.code2 = input.barcode
+
+  const data = await erplyPost<{ productID: number }>(params)
+  const productId = data.records?.[0]?.productID
+  if (!productId) throw new Error('Erply accepted saveProduct but returned no productID')
+  return { productId }
+}
+
 // ── Customer sync (Erply <-> WooCommerce bridge, see lib/tier-mapping.ts) ──────
 
 /**

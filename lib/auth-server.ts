@@ -31,3 +31,22 @@ export async function getSessionUser(): Promise<User | null> {
   const { data: { user } } = await supabase.auth.getUser()
   return user
 }
+
+/**
+ * Who to record as having performed an action, for an audit trail or a
+ * *_by column. Never throws: attribution is metadata, and a route that
+ * already passed the middleware's admin gate should not fail outright
+ * because the session lookup did.
+ *
+ * Do NOT use this where the identity is a security decision — the self-target
+ * guards in app/admin/api/accounts stay on getSessionUser, where a failure
+ * must not silently become "some admin".
+ */
+export async function getActorEmail(fallback = 'admin'): Promise<string> {
+  try {
+    const user = await getSessionUser()
+    return user?.email ?? fallback
+  } catch {
+    return fallback
+  }
+}
