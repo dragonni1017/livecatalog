@@ -512,6 +512,10 @@ export async function createErplyProduct(input: CreateErplyProductInput): Promis
     // later account configuration honours it — but the caller MUST read the
     // product back and warn when the price didn't land, rather than leaving
     // a $0.00 product to reach the catalog. See the create route.
+    //
+    // Pricing is a DECIDED manual step (Dragon, 2026-09-16): the receiving
+    // screen collects the intended price, records it on the shipment line and
+    // hands back a worklist to type into Erply. Don't re-probe this.
     price: input.priceDollars.toFixed(2),
     status: 'ACTIVE',
   }

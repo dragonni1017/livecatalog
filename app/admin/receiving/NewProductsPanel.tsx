@@ -53,6 +53,10 @@ export default function NewProductsPanel({
   const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  // SKU + intended price for every product just created, since Erply won't
+  // take a price through its API on this account (see lib/erply.ts).
+  const [priceWorklist, setPriceWorklist] = useState<string[]>([])
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     fetch('/admin/api/shipments/new-products')
@@ -207,6 +211,16 @@ export default function NewProductsPanel({
       setSelected(new Set())
       const failed = json.failed?.length ? ` ${json.failed.length} failed: ${json.failed.map((f: { sku: string }) => f.sku).join(', ')}.` : ''
       setFlash(`Created ${json.created?.length ?? 0} product(s) in Erply.${failed} ${json.note}`)
+
+      // Erply discards a price sent through its API on this account, so the
+      // prices just approved have to be typed in by hand (Dragon's call
+      // 2026-09-16). Build that worklist here rather than making someone read
+      // it back off individual rows.
+      const createdSkus: string[] = (json.created ?? []).map((c: { sku: string }) => c.sku)
+      const worklist = ((json.lines ?? []) as ShipmentLine[])
+        .filter((l) => createdSkus.includes(l.sku) && l.proposed_price_cents != null)
+        .map((l) => `${l.sku}\t${((l.proposed_price_cents as number) / 100).toFixed(2)}`)
+      setPriceWorklist(worklist)
     } catch {
       setError(TRANSPORT_ERROR)
     } finally {
@@ -245,6 +259,38 @@ export default function NewProductsPanel({
 
       {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm whitespace-pre-wrap text-red-700">{error}</div>}
       {flash && <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{flash}</div>}
+
+      {/* The one thing creating a product can't do for you. Kept as
+          tab-separated text so it pastes straight into a spreadsheet. */}
+      {priceWorklist.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                Set these {priceWorklist.length} price{priceWorklist.length !== 1 ? 's' : ''} in Erply by hand
+              </p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                Erply ignores a price sent through its API on this account, so the products were created without one.
+                Until these are set, they are $0.00.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(priceWorklist.join('\n')).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                )
+              }}
+              className="shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+            >
+              {copied ? 'Copied' : 'Copy list'}
+            </button>
+          </div>
+          <pre className="mt-3 max-h-48 overflow-auto rounded border border-amber-200 bg-white px-3 py-2 text-xs text-gray-800">
+{priceWorklist.join('\n')}
+          </pre>
+        </div>
+      )}
 
       <div className="space-y-3">
         {unmatched.map((line) => {
@@ -353,7 +399,12 @@ export default function NewProductsPanel({
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <label className="text-sm">
-                        <span className="text-xs font-medium text-gray-600">Price (USD)</span>
+                        <span
+                          className="text-xs font-medium text-gray-600"
+                          title="Erply ignores a price sent through its API on this account, so this is recorded here and typed into Erply by hand. Required, because it's the worklist for that pass."
+                        >
+                          Intended price (USD) *
+                        </span>
                         <input
                           value={draft.priceDollars}
                           onChange={(e) => setDraft(line, { priceDollars: e.target.value })}
@@ -402,7 +453,8 @@ export default function NewProductsPanel({
           {busy === 'save' ? 'Saving…' : 'Save drafts'}
         </button>
         <p className="text-xs text-gray-500">
-          Creating is one-way — a product can&apos;t be un-created from here. Stock is still applied separately above.
+          Creating is one-way — a product can&apos;t be un-created from here. Prices are recorded here but set in Erply
+          by hand, and you&apos;ll get the list to work through afterwards. Once created, apply the stock above.
         </p>
       </div>
     </div>
