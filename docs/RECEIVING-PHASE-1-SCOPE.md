@@ -200,3 +200,53 @@ be sellable for nothing, so this is not a cosmetic warning.
 
 Determining the right parameter needs more writes against live Erply and was
 not attempted.
+
+### Price probe, 2026-09-16 — saveProduct cannot set price on this account
+
+Probed against test product #3081 only (archived throughout, except for one
+deliberate ACTIVE window of a few seconds to rule out status as the cause;
+re-archived and verified in the same run).
+
+Six attempts, **every one returned `responseStatus: ok` and left the price at 0**:
+
+| Attempt | Result |
+|---|---|
+| `price=1.23` | ok, price stayed 0 |
+| `priceWithVat=2.34` | ok, price stayed 0 |
+| `vatrateID=1` + `price=3.45` | ok, price stayed 0 |
+| `vatrateID=1` + `priceWithVat=4.56` | ok, price stayed 0 |
+| `status=ACTIVE` + `price=5.67` | ok, price stayed 0 |
+| `price=6.78` while ACTIVE | ok, price stayed 0 |
+
+Ruled out:
+
+- **Permissions.** The API user is "Dragon Ni", group *administrators /
+  management*, with `rightChangePrices=1`, `rightEditStockAndProductCost=1`.
+- **Archived status.** Same silent no-op while ACTIVE.
+- **Missing VAT rate.** The product already carries `vatrateID=1`, same as a
+  real product; sending it explicitly changed nothing.
+
+What prices look like when they DO exist: `getProductPrices` for F287491
+returns `defaultPrice: "11.0000"`, `specialPrice: "11.00"`. The account has
+nine price lists — Distribution / Wholesale / Chains / Inclusive / Retail plus
+four derived percentage ones ("Wholesale (base +20%)" etc.) — and
+`getPriceLists` returns **no per-product rules** for them, so per-product
+prices don't live there either.
+
+**The lead:** `getServiceEndpoints` shows this account has a dedicated
+**`pricing`** service at `https://api-pricing-us.erply.com/`, alongside `pim`,
+`inventory`, `sales` and the `crm` one this repo already uses for customer
+groups. Product prices almost certainly belong to it, which would explain the
+classic API's silent no-op. Its route shape is unknown — three guessed paths
+returned 404 and probing stopped there rather than fire blind writes at a live
+service.
+
+Worth noting as evidence: the 2026-08-04 incident (a wrong `saveProduct`
+parameter zeroing all 2,871 selling prices) means `saveProduct` DID write
+prices on this account at some point. If that's still true elsewhere and not
+here, something about the account's pricing configuration changed in between —
+a question for Erply support, and the cheapest next step.
+
+Until it's resolved: a product created by this app has **no price**, the
+create route flags it per line, and the price must be set in the Erply back
+office by hand.
