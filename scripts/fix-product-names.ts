@@ -179,6 +179,26 @@ const CHANGES: Change[] = [
     to: "Clear Watermelon Print Fan - 12/pk 25bx/cs cs.25pk",
     why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
   },
+  // The one name of the 203 without a standard spec that can be fixed
+  // mechanically: it already carries a COMPLETE spec in an older notation.
+  // 12 per box x 24 boxes = 288 per case, which the name itself states, so
+  // nothing is inferred -- only reformatted into the house shape.
+  //
+  // The trailing "25x25x25 42lbs" is dropped because no other catalog name
+  // carries carton dimensions. NOTE those figures exist NOWHERE else: this
+  // product's case_length_in / case_width_in / case_height_in /
+  // case_weight_lb are all null. They survive in git history and in
+  // data/product-name-fixes-applied.csv, but deliberately are NOT written to
+  // the measurement columns, because "25x25x25" states no unit -- inches is
+  // likely given "42lbs", but bin-capacity maths reads those columns and a
+  // cm/inch mix-up there is silent and wrong (see migration 0045).
+  {
+    sku: 'P257281',
+    expect: 'Kappy Fur Pen Giant 12pcs/bx 24bx/cs 288/cs 25x25x25 42lbs',
+    to: 'Kappy Fur Pen Giant - 12/pk 24bx/cs cs.288',
+    why: 'same spec in an older notation (12pcs/bx 24bx/cs 288/cs), reformatted; 12 x 24 = 288 confirms it',
+  },
+
 ]
 
 const APPLY = process.argv.includes('--apply')

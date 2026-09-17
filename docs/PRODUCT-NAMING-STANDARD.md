@@ -87,7 +87,7 @@ because neither states how the product is sold.
 | | Count |
 |---|---|
 | Compliant | 3,021 |
-| No pack spec at all | 203 |
+| No pack spec at all | 202 |
 | **Fits neither convention** | **0** |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
@@ -114,6 +114,46 @@ corrected; Erply and Woo are untouched. Being missing from Erply is the bigger
 issue for those two, since the sync deactivates SKUs absent from the incoming
 set.
 
+
+## The 202 with no pack spec
+
+Investigated 2026-09-17. Only a handful have any pack data in the name:
+
+| | Count |
+|---|---|
+| No numbers at all — "Pink Solid Wrapping Paper" | 154 |
+| Digits that are sizes, not pack data — `80cm`, `1.5"`, `20"` | 42 |
+| `N/cs` only — `96/cs`, `240/cs` | 3 |
+| `N/pk` only — `20/pk` | 3 |
+| Fully specified in an older notation | 1 — **fixed** |
+
+The one that could be fixed mechanically was `P257281`, which already stated a
+complete spec in an older form:
+
+```
+Kappy Fur Pen Giant 12pcs/bx 24bx/cs 288/cs 25x25x25 42lbs
+   ->  Kappy Fur Pen Giant - 12/pk 24bx/cs cs.288
+```
+
+12 x 24 = 288 confirmed it, so nothing was inferred. Its trailing
+`25x25x25 42lbs` was dropped (no other name carries carton figures) and
+**deliberately not written to the `case_*` columns**: "25x25x25" states no
+unit, inches is only likely, and those columns feed bin-capacity maths where a
+cm/inch mix-up is silent and wrong. Those were the product's only carton
+figures — `case_*` is null — so they now live in git history and
+`data/product-name-fixes-applied.csv` only.
+
+**The remaining 201 can't be fixed from the name**, and the data has to come
+from somewhere else. The supplier documents get part-way: **167 of the 203 had
+an agreed case quantity** (12 disagree across shipments, 24 appear in no
+document). But a case quantity alone doesn't make a name — `cs.60` still needs
+either `pk` (piece-sold) or the pack count (pack-sold), and the paperwork never
+states pack size. That's the same gap that makes `/admin/receiving` ask for
+pieces-per-pack.
+
+The workable route, if it's ever picked up: group the 167 by their document
+case quantity (all the wrapping papers are 60/carton) and get ONE pack size per
+group, rather than 167 separate decisions.
 
 ## Where names live
 
