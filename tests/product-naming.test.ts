@@ -3,9 +3,8 @@ import {
   auditProductName,
   buildProductName,
   formatPackSpec,
-  isSoldByPack,
   normalizeDescriptor,
-  PACK_SOLD_SKUS,
+  packSpecConvention,
   parseProductName,
 } from '@/lib/product-naming'
 
@@ -116,32 +115,50 @@ describe('auditProductName', () => {
   })
 })
 
-describe('pack-sold exception', () => {
-  // The 8 Gift Bows were deliberately renamed to "20/pk 100bx/cs cs.100" in an
-  // earlier session: 20 per pack, 100 PACKS per case, so cs.N is not pk x bx.
-  // Before this exception existed, the verification tool proposed cs.1000 for
-  // them — reverting a decision that had already been made on purpose.
-  const bowName = '10" Gold Gift Bow - 20/pk 100bx/cs cs.100'
+describe('the two conventions', () => {
+  // PIECE-SOLD: cs.N counts pieces, so cs = pk x bx.
+  // PACK-SOLD:  cs.N counts packs,  so cs = bx.
+  // Both are real. The Gift Bows are pack-sold ("20/pk 100bx/cs cs.100" = 20
+  // per pack, 100 packs per case) and so are the floral papers — Dragon
+  // confirmed each. Treating cs = pk x bx as the only rule flagged all 600
+  // pack-sold names as broken and produced "corrections" that would have
+  // rewritten correct ones.
+  const bow = '10" Gold Gift Bow - 20/pk 100bx/cs cs.100'
+  const bear = 'Foam Bear with Heart 7cm - 12/pk 10bx/cs cs.120'
 
-  it('does not flag a pack-sold SKU for a case total that is not pk x bx', () => {
-    expect(auditProductName(bowName, { sku: 'F286801' }).issues).toEqual([])
+  it('accepts a piece-sold spec', () => {
+    expect(packSpecConvention(parseProductName(bear).spec!)).toBe('piece')
+    expect(auditProductName(bear).issues).toEqual([])
   })
 
-  it('is case-insensitive about the SKU', () => {
-    expect(auditProductName(bowName, { sku: 'f286801' }).issues).toEqual([])
+  it('accepts a pack-sold spec', () => {
+    expect(packSpecConvention(parseProductName(bow).spec!)).toBe('pack')
+    expect(auditProductName(bow).issues).toEqual([])
   })
 
-  it('still flags the same shape for a piece-sold SKU', () => {
-    expect(auditProductName(bowName, { sku: 'F287684' }).issues).toContain('case_total_mismatch')
+  it('reports "either" when pk is 1, since the two agree', () => {
+    const name = 'Magic Gold Heart Ribbon Gift Box - 1/pk 36bx/cs cs.36'
+    expect(packSpecConvention(parseProductName(name).spec!)).toBe('either')
+    expect(auditProductName(name).issues).toEqual([])
   })
 
-  it('flags it when no SKU is supplied, since the name alone cannot say', () => {
-    expect(auditProductName(bowName).issues).toContain('case_total_mismatch')
+  it('flags a spec that fits neither, and proposes nothing', () => {
+    // Real defect: 15 x 3 = 45, and cs.36 isn't bx either.
+    const name = 'Brown Small Ribbon 1.5" - 15/pk 3bx/cs cs.36'
+    const audit = auditProductName(name)
+    expect(packSpecConvention(parseProductName(name).spec!)).toBe('inconsistent')
+    expect(audit.issues).toContain('case_total_mismatch')
+    expect(audit.suggestion).toBeNull()
   })
 
-  it('exposes the list so tools can report rather than silently skip', () => {
-    expect(isSoldByPack('F286796')).toBe(true)
-    expect(isSoldByPack('F287684')).toBe(false)
-    expect(PACK_SOLD_SKUS.size).toBe(8)
+  it('exposes the convention on the audit result', () => {
+    expect(auditProductName(bow).convention).toBe('pack')
+    expect(auditProductName('Pizza Squishy').convention).toBeNull()
+  })
+
+  it('does not need a SKU to judge a name', () => {
+    // The shape itself identifies the convention, so no hand-maintained list
+    // of pack-sold SKUs is required — an earlier version had one.
+    expect(auditProductName(bow).issues).toEqual([])
   })
 })

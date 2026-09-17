@@ -51,7 +51,7 @@ for (let from = 0; ; from += 1000) {
 
 const ISSUE_LABEL: Record<NameIssue, string> = {
   missing_pack_spec: 'no pack spec (cannot be auto-fixed — the counts are not in the name)',
-  case_total_mismatch: 'cs.N is not pk x bx',
+  case_total_mismatch: 'cs.N fits NEITHER convention (neither pk x bx nor bx)',
   all_caps: 'ALL CAPS',
   leading_sku_digits: 'legacy "1234 - " prefix',
   invoice_material_tail: 'supplier "100% material" tail',
@@ -59,19 +59,35 @@ const ISSUE_LABEL: Record<NameIssue, string> = {
 }
 
 const counts = new Map<NameIssue, number>()
-const rows: Array<{ sku: string; name: string; issues: string; suggestion: string }> = []
+const conventions = new Map<string, number>()
+const rows: Array<{ sku: string; name: string; convention: string; issues: string; suggestion: string }> = []
 
 for (const p of products) {
   const name = p.name ?? ''
-  const audit = auditProductName(name, { sku: p.sku })
+  const audit = auditProductName(name)
+  if (audit.convention) conventions.set(audit.convention, (conventions.get(audit.convention) ?? 0) + 1)
   if (audit.issues.length === 0) continue
   for (const issue of audit.issues) counts.set(issue, (counts.get(issue) ?? 0) + 1)
-  rows.push({ sku: p.sku, name, issues: audit.issues.join('|'), suggestion: audit.suggestion ?? '' })
+  rows.push({
+    sku: p.sku,
+    name,
+    convention: audit.convention ?? '',
+    issues: audit.issues.join('|'),
+    suggestion: audit.suggestion ?? '',
+  })
 }
 
 console.log(`Audited ${products.length} product names against the house standard.\n`)
 console.log(`Compliant:     ${products.length - rows.length}`)
 console.log(`Non-compliant: ${rows.length}\n`)
+
+// Both conventions are valid, so the split is information rather than a
+// problem list — see lib/product-naming.ts.
+console.log('Pack-spec convention in use:')
+console.log(`  ${String(conventions.get('piece') ?? 0).padStart(5)}  piece-sold (cs.N = pieces per case, cs = pk x bx)`)
+console.log(`  ${String(conventions.get('pack') ?? 0).padStart(5)}  pack-sold  (cs.N = packs per case, cs = bx)`)
+console.log(`  ${String(conventions.get('either') ?? 0).padStart(5)}  either     (pk = 1, so the two agree)`)
+console.log(`  ${String(conventions.get('inconsistent') ?? 0).padStart(5)}  NEITHER    <- the real defects\n`)
 
 for (const [issue, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
   console.log(`  ${String(count).padStart(5)}  ${ISSUE_LABEL[issue]}`)
@@ -88,7 +104,7 @@ for (const r of fixable.slice(0, 10)) {
 
 if (WRITE_CSV) {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
-  const out = ['sku,name,issues,suggestion', ...rows.map((r) => [r.sku, esc(r.name), r.issues, esc(r.suggestion)].join(','))]
+  const out = ['sku,name,convention,issues,suggestion', ...rows.map((r) => [r.sku, esc(r.name), r.convention, r.issues, esc(r.suggestion)].join(','))]
   const dest = path.join(ROOT, 'data', 'product-name-audit.csv')
   fs.mkdirSync(path.dirname(dest), { recursive: true })
   fs.writeFileSync(dest, out.join('\n') + '\n')

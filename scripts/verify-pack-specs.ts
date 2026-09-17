@@ -1,30 +1,30 @@
 // verify-pack-specs.ts
 // Run with: node scripts/verify-pack-specs.ts
-//           node scripts/verify-pack-specs.ts --csv
+//           node scripts/verify-pack-specs.ts --csv --xlsx
 //           node scripts/verify-pack-specs.ts --dir="<folder of supplier workbooks>"
 //
-// REPORT ONLY. Writes nothing to Supabase, Erply or WooCommerce.
+// REPORT ONLY. Writes nothing to Supabase, Erply or WooCommerce, and
+// deliberately proposes no corrected names -- see the warning below.
 //
-// Answers the question the name audit deliberately refuses to guess at: for a
-// product whose name says `cs.N` that isn't pk x bx, what IS the real number
-// of pieces per case?
+// Gathers, for each name that fits NEITHER pack-spec convention, whatever the
+// supplier documents say about it. Every "Original List" / "Arrival List"
+// workbook states total pieces and carton count per SKU, so pieces / cartons
+// gives the PIECES PER CARTON for that shipment.
 //
-// The supplier documents know. Every "Original List" / "Arrival List"
-// workbook states, per SKU, the total pieces and the carton count for that
-// shipment -- and pieces / cartons is the per-case quantity, arithmetic that
-// can't be misread the way the sheet's own pk/cs column can. Proven on
-// container EGSU9522424: S162782 ships 1,920 pieces in 80 cartons and its
-// pk/cs column reads 24, which is exactly 1920/80.
+// *** THAT IS NOT NECESSARILY THE SELLING CASE QUANTITY. ***
 //
-// So this scans the whole folder, indexes SKU -> per-case quantity per
-// document, and reports for each flagged name whether the documents CONFIRM a
-// figure, DISAGREE with each other, or say nothing at all. A disagreement is
-// reported, never averaged: packing genuinely changes between shipments, and
-// picking one would be the same guess this exists to avoid.
+// An earlier version of this script treated it as exactly that and generated
+// 264 "confirmed corrections". Wrong: for a PACK-SOLD product cs.N counts
+// packs, not pieces. Dragon confirmed 2026-09-17 that the floral papers are 20
+// per pack with 60 PACKS per case, while their documents read 60 pieces per
+// carton — so applying those corrections would have rewritten 225 correct
+// names. An even earlier version proposed reverting the deliberate Gift Bow
+// renames.
 //
-// See docs/PRODUCT-NAMING-STANDARD.md for why cs.N cannot be recomputed from
-// pk x bx: F287672 physically arrives 150 per case and reads "48/pk 150bx/cs
-// cs.150", so the arithmetic "fix" would have written cs.7200.
+// So these figures are CONTEXT for a human, not an answer.
+// scripts/audit-product-names.ts identifies which names actually need looking
+// at (both conventions considered); this says what the paperwork shows for
+// them.
 
 import fs from 'fs'
 import path from 'path'
@@ -67,7 +67,7 @@ interface Observation {
   file: string
   pieces: number
   cartons: number
-  perCase: number
+  perCarton: number
 }
 
 const bySku = new Map<string, Observation[]>()
@@ -86,9 +86,9 @@ for (const file of files) {
       if (!hasSku) continue
 
       for (const line of groupLinesBySku(parsePackingListSheet(rows).lines)) {
-        // Only a whole-number per-case figure is evidence. A line whose
-        // pieces don't divide evenly by cartons is a mixed carton, and
-        // rounding it would invent the very number this is checking.
+        // Only a whole-number figure is evidence. A line whose pieces don't
+        // divide evenly by cartons is a mixed carton, and rounding it would
+        // invent a number.
         if (!line.cartons || line.piecesPerCase == null) continue
         const key = line.sku.toUpperCase()
         if (!bySku.has(key)) bySku.set(key, [])
@@ -96,7 +96,7 @@ for (const file of files) {
           file,
           pieces: line.qtyShipped,
           cartons: line.cartons,
-          perCase: line.piecesPerCase,
+          perCarton: line.piecesPerCase,
         })
       }
       found = true
@@ -112,7 +112,7 @@ for (const file of files) {
 console.log(`  parsed ${parsed}, skipped ${skipped.length}`)
 console.log(`  ${bySku.size} distinct SKUs observed across those documents\n`)
 
-// ── The flagged names ─────────────────────────────────────────────────────
+// ── The names that fit neither convention ────────────────────────────────
 
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -126,51 +126,45 @@ for (let from = 0; ; from += 1000) {
   if (data.length < 1000) break
 }
 
-type Verdict = 'confirmed' | 'conflicting' | 'no-evidence'
+type Verdict = 'documents-agree' | 'documents-disagree' | 'no-document'
 
 interface Row {
   sku: string
   name: string
-  namedCase: number
-  /** What the supplier documents say, when they agree. */
-  documentCase: number | null
+  csInName: number
+  /** Pieces per carton, when every document agrees. NOT the case quantity. */
+  piecesPerCarton: number | null
   verdict: Verdict
   evidence: string
-  suggestion: string
   note: string
 }
 
 const rows: Row[] = []
 
 for (const p of products) {
-  const audit = auditProductName(p.name ?? '', { sku: p.sku })
+  const audit = auditProductName(p.name ?? '')
   if (!audit.issues.includes('case_total_mismatch')) continue
 
   const spec = audit.parsed.spec!
   const obs = bySku.get(p.sku.toUpperCase()) ?? []
-  const distinct = [...new Set(obs.map((o) => o.perCase))].sort((a, b) => a - b)
+  const distinct = [...new Set(obs.map((o) => o.perCarton))].sort((a, b) => a - b)
 
-  let verdict: Verdict = 'no-evidence'
-  let suggestion = ''
+  let verdict: Verdict = 'no-document'
   let note = ''
 
   if (distinct.length === 1) {
-    verdict = 'confirmed'
-    const trueCase = distinct[0]
+    verdict = 'documents-agree'
+    const perCarton = distinct[0]
     const pk = spec.piecesPerPack
-    if (trueCase % pk === 0) {
-      // The pack size divides the real case quantity, so only bx and cs.N
-      // were wrong.
-      suggestion = `${audit.parsed.base} - ${pk}/pk ${trueCase / pk}bx/cs cs.${trueCase}`
-      note = `documents agree on ${trueCase}/case; keeping ${pk}/pk gives ${trueCase / pk}bx/cs`
-    } else {
-      note =
-        `documents agree on ${trueCase}/case, but the name's ${pk}/pk doesn't divide it ` +
-        `— the pack size is wrong too, so a human has to say what a pack is`
-    }
+    note =
+      `${perCarton} pieces per carton. ` +
+      (perCarton % pk === 0
+        ? `Piece-sold, that reads ${pk}/pk ${perCarton / pk}bx/cs cs.${perCarton}; pack-sold, cs.${perCarton / pk}.`
+        : `The name's ${pk}/pk doesn't divide ${perCarton}, so the pack size looks wrong too.`) +
+      ` Which convention applies is a human call.`
   } else if (distinct.length > 1) {
-    verdict = 'conflicting'
-    note = `documents disagree: ${distinct.join(', ')} per case across ${obs.length} shipment(s) — packing changed, needs a decision`
+    verdict = 'documents-disagree'
+    note = `${distinct.join(', ')} pieces per carton across ${obs.length} shipment(s) — packing changed between shipments`
   } else {
     note = 'this SKU appears in none of the supplier documents scanned'
   }
@@ -178,87 +172,45 @@ for (const p of products) {
   rows.push({
     sku: p.sku,
     name: p.name ?? '',
-    namedCase: spec.piecesPerCase,
-    documentCase: distinct.length === 1 ? distinct[0] : null,
+    csInName: spec.piecesPerCase,
+    piecesPerCarton: distinct.length === 1 ? distinct[0] : null,
     verdict,
-    evidence: obs.map((o) => `${o.perCase}/case (${o.pieces}pcs/${o.cartons}ctn) ${o.file.slice(0, 40)}`).join(' | '),
-    suggestion,
+    evidence: obs.map((o) => `${o.perCarton}/ctn (${o.pieces}pcs/${o.cartons}ctn) ${o.file.slice(0, 40)}`).join(' | '),
     note,
   })
 }
 
 const byVerdict = (v: Verdict) => rows.filter((r) => r.verdict === v)
-const confirmed = byVerdict('confirmed')
-const fixable = confirmed.filter((r) => r.suggestion)
 
-console.log(`${rows.length} names have cs.N that isn't pk x bx.\n`)
-console.log(`  confirmed by documents       : ${confirmed.length}  (${fixable.length} with a complete corrected name)`)
-console.log(`  documents disagree           : ${byVerdict('conflicting').length}`)
-console.log(`  not in any document scanned  : ${byVerdict('no-evidence').length}\n`)
-
-console.log('Examples where the documents settle it:')
-for (const r of fixable.slice(0, 12)) {
-  console.log(`  ${r.sku}`)
-  console.log(`    now: ${r.name}`)
-  console.log(`    ->   ${r.suggestion}`)
-  console.log(`    why: ${r.note}`)
+console.log(`${rows.length} name(s) fit neither pack-spec convention:\n`)
+for (const r of rows) {
+  console.log(`  ${r.sku}  ${r.name}`)
+  console.log(`      ${r.note}`)
 }
+console.log(
+  `\n  documents agree: ${byVerdict('documents-agree').length}` +
+    `   disagree: ${byVerdict('documents-disagree').length}` +
+    `   no document: ${byVerdict('no-document').length}`,
+)
 
-if (byVerdict('conflicting').length) {
-  console.log('\nExamples where documents disagree (left alone):')
-  for (const r of byVerdict('conflicting').slice(0, 6)) {
-    console.log(`  ${r.sku}: ${r.note}`)
-  }
-}
+const sheetRows = (subset: Row[]) =>
+  subset.map((r) => ({
+    SKU: r.sku,
+    'Current name': r.name,
+    'cs.N in name': r.csInName,
+    'Pieces per carton (documents)': r.piecesPerCarton ?? '',
+    Note: r.note,
+    Evidence: r.evidence,
+  }))
 
-// An .xlsx as well as the CSV, because this list is worked through by hand in
-// Excel: one tab per verdict so the actionable 300 aren't mixed with the ones
-// still needing a decision, plus a pattern summary — the 271 corrections are
-// only 14 distinct shapes, and the largest covers 225 products, so reviewing
-// the patterns is far quicker than reading 271 rows.
+// One tab per verdict. NO corrected-name column, deliberately: the documents
+// give pieces per carton, which is the case quantity only for a piece-sold
+// product, and nothing here can tell which convention a SKU follows.
 if (WRITE_XLSX) {
-  const SPEC = /(\d+)\/pk\s+(\d+)bx\/cs\s+cs\.(\d+)/
-
-  const sheetRows = (subset: Row[]) =>
-    subset.map((r) => ({
-      SKU: r.sku,
-      'Current name': r.name,
-      'Case qty in name': r.namedCase,
-      'Case qty per documents': r.documentCase ?? '',
-      'Corrected name': r.suggestion,
-      'Field that was wrong':
-        r.suggestion && r.documentCase != null
-          ? r.documentCase === r.namedCase
-            ? 'bx (cs.N was right)'
-            : 'cs.N'
-          : '',
-      Note: r.note,
-      Evidence: r.evidence,
-    }))
-
-  const patterns = new Map<string, number>()
-  for (const r of rows) {
-    if (!r.suggestion) continue
-    const a = SPEC.exec(r.name)
-    const b = SPEC.exec(r.suggestion)
-    if (!a || !b) continue
-    const key = `${a[1]}/pk ${a[2]}bx/cs cs.${a[3]}  ->  ${b[1]}/pk ${b[2]}bx/cs cs.${b[3]}`
-    patterns.set(key, (patterns.get(key) ?? 0) + 1)
-  }
-
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.json_to_sheet(
-      [...patterns.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([pattern, count]) => ({ Products: count, Correction: pattern })),
-    ),
-    'Patterns',
-  )
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('confirmed'))), 'Confirmed')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('conflicting'))), 'Documents disagree')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('no-evidence'))), 'No document found')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('documents-agree'))), 'Documents agree')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('documents-disagree'))), 'Documents disagree')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('no-document'))), 'No document found')
 
   const dest = path.join(ROOT, 'data', 'pack-spec-verification.xlsx')
   fs.mkdirSync(path.dirname(dest), { recursive: true })
@@ -269,9 +221,17 @@ if (WRITE_XLSX) {
 if (WRITE_CSV) {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
   const out = [
-    'sku,current_name,named_case_qty,document_case_qty,verdict,suggested_name,note,evidence',
+    'sku,current_name,cs_in_name,pieces_per_carton_documents,verdict,note,evidence',
     ...rows.map((r) =>
-      [r.sku, esc(r.name), String(r.namedCase), String(r.documentCase ?? ''), r.verdict, esc(r.suggestion), esc(r.note), esc(r.evidence)].join(','),
+      [
+        r.sku,
+        esc(r.name),
+        String(r.csInName),
+        String(r.piecesPerCarton ?? ''),
+        r.verdict,
+        esc(r.note),
+        esc(r.evidence),
+      ].join(','),
     ),
   ]
   const dest = path.join(ROOT, 'data', 'pack-spec-verification.csv')
@@ -280,4 +240,4 @@ if (WRITE_CSV) {
   console.log(`\nFull list written to ${dest}`)
 }
 
-console.log('\nNothing was changed. Names are synced from Erply, so any correction must be made there.')
+console.log('\nNothing was changed, and no name is proposed. Names are synced from Erply.')
