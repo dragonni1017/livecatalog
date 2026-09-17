@@ -80,41 +80,40 @@ Both attempts looked well-evidenced. The lesson is narrow and worth keeping: a
 pack spec can't be validated from the name alone *or* from shipping paperwork,
 because neither states how the product is sold.
 
-## What actually needs fixing: 19 names
+## The defect class is empty (2026-09-17)
 
-`node scripts/audit-product-names.ts` reports them. Current state:
+`node scripts/audit-product-names.ts`:
 
 | | Count |
 |---|---|
-| Compliant | 3,003 |
+| Compliant | 3,021 |
 | No pack spec at all | 203 |
-| **Fits neither convention** | **18** |
+| **Fits neither convention** | **0** |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
-They fall into four remaining groups (a fifth, `T641077`, is fixed) and read
-like typos rather than a third convention:
+All 19 inconsistent names were corrected. `T641077` settled itself by stating
+its own unit; the other 18 were confirmed **pack-sold** by Dragon, so `cs.N`
+took the `bx` value the name already carried, written with its unit:
 
-| Count | Shape | Piece-sold would be | Pack-sold would be |
-|---|---|---|---|
-| 7 | `15/pk 3bx/cs cs.36` (ribbons F287101–107, F287110) | `cs.45` | `cs.3` |
-| 5 | `20/pk 7bx/cs cs.300` (Ribbon 2.5cm F287331–334) | `cs.140` | `cs.7` |
-| 5 | `12/pk 25bx/cs cs.288` (fans, leis, headband) | `cs.300` | `cs.25` |
-| 1 | `12/pk 22bx/cs cs.256` (F287267) | `cs.264` | `cs.22` |
-| ~~1~~ | ~~`12/pk 48bx/cs cs.24bx` (T641077)~~ | — | **FIXED 2026-09-17** to `cs.48bx` in Erply, WooCommerce and Supabase |
+```
+White Small Ribbon 1.5" - 15/pk 3bx/cs cs.36     ->  ...cs.3pk
+Ribbon 2.5cm - 20/pk 7bx/cs cs.300               ->  ...cs.7pk
+Solid Purple Flower Lei - 12/pk 25bx/cs cs.288   ->  ...cs.25pk
+Strawberry Crochet Flower - 12/pk 22bx/cs cs.256 ->  ...cs.22pk
+```
 
-The 7 ribbons are interesting: `15/pk` doesn't divide 36, but `12/pk` would
-(12 × 3 = 36), so the typo may be in the pack size rather than the total.
-That's a guess, not a finding.
+The assumption, since a name can't prove it: `bx` was taken as correct and
+`cs.N` as the typo. The reverse would mean cases of 300 packs of 20, or 288
+packs of 12 — implausibly large and unsupported by the supplier documents.
 
-`auditProductName` deliberately proposes **no** correction for these — the
-spec tells you a name is inconsistent, not which of its three numbers is
-wrong.
+Applied to Erply, WooCommerce and Supabase: 16 / 16 / 18 updated and verified,
+1 already correct, and **2 skipped by the guard** — `F284020-LP` and
+`T641546-1` are **absent from Erply entirely**, and their WooCommerce names
+carry a `SKU - ` prefix the catalog version lacks. Their Supabase names are
+corrected; Erply and Woo are untouched. Being missing from Erply is the bigger
+issue for those two, since the sync deactivates SKUs absent from the incoming
+set.
 
-`node scripts/verify-pack-specs.ts [--csv --xlsx]` adds context from the
-supplier paperwork for those 19: documents agree for 2, disagree for 7 (e.g.
-`F287106` shows 36 and 40 pieces per carton across three shipments), and 9
-appear in no scanned document. It proposes no names either, for the reason
-above.
 
 ## Where names live
 

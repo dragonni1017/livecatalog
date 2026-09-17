@@ -59,6 +59,126 @@ const CHANGES: Change[] = [
     // needed. Dragon approved 2026-09-17.
     why: 'states bx, so cs.N must equal bx (48); cs.24 contradicted the name itself',
   },
+
+  // The remaining 18, all confirmed PACK-SOLD by Dragon 2026-09-17 (the
+  // ribbons, Ribbon 2.5cm, the fans/leis/headband group, and the crochet
+  // flower). Pack-sold means cs.N counts packs per case, and the name already
+  // states that as bx -- so cs.N takes the bx value, written with its unit,
+  // which is the form 87 other catalog names use and stops the ambiguity
+  // recurring.
+  //
+  // ASSUMPTION, recorded because the name cannot prove it: bx is taken as
+  // correct and cs.N as the typo. The reverse (bx <- cs.N) would mean cases of
+  // 300 packs of 20 or 288 packs of 12 -- implausibly large, and unsupported
+  // by the supplier documents.
+  {
+    sku: 'F284020',
+    expect: "Solid Purple Flower Lei - 12/pk 25bx/cs cs.288",
+    to: "Solid Purple Flower Lei - 12/pk 25bx/cs cs.25pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
+  },
+  {
+    sku: 'F284020-LP',
+    expect: "Solid Light Purple Flower Leis - 12/pk 25bx/cs cs.288",
+    to: "Solid Light Purple Flower Leis - 12/pk 25bx/cs cs.25pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
+  },
+  {
+    sku: 'F287101',
+    expect: "White Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "White Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287102',
+    expect: "Brown Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Brown Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287103',
+    expect: "Pink Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Pink Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287104',
+    expect: "Blue Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Blue Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287105',
+    expect: "Red Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Red Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287106',
+    expect: "Lavender Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Lavender Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287107',
+    expect: "Fuchsia Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36",
+    to: "Fuchsia Small Ribbon 1.5\" - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287110',
+    expect: "Gold Ribbon 1.5inch - 15/pk 3bx/cs cs.36",
+    to: "Gold Ribbon 1.5inch - 15/pk 3bx/cs cs.3pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 3bx',
+  },
+  {
+    sku: 'F287267',
+    expect: "Strawberry Crochet Flower - 12/pk 22bx/cs cs.256",
+    to: "Strawberry Crochet Flower - 12/pk 22bx/cs cs.22pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 22bx',
+  },
+  {
+    sku: 'F287331',
+    expect: "Ribbon 2.5cm - 20/pk 7bx/cs cs.300",
+    to: "Ribbon 2.5cm - 20/pk 7bx/cs cs.7pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 7bx',
+  },
+  {
+    sku: 'F287332',
+    expect: "Ribbon 2.5cm - 20/pk 7bx/cs cs.300",
+    to: "Ribbon 2.5cm - 20/pk 7bx/cs cs.7pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 7bx',
+  },
+  {
+    sku: 'F287333',
+    expect: "Ribbon 2.5cm - 20/pk 7bx/cs cs.300",
+    to: "Ribbon 2.5cm - 20/pk 7bx/cs cs.7pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 7bx',
+  },
+  {
+    sku: 'F287334',
+    expect: "Ribbon 2.5cm - 20/pk 7bx/cs cs.300",
+    to: "Ribbon 2.5cm - 20/pk 7bx/cs cs.7pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 7bx',
+  },
+  {
+    sku: 'H424249',
+    expect: "LED Bunny Moving Headband - 12/pk 25bx/cs cs.288",
+    to: "LED Bunny Moving Headband - 12/pk 25bx/cs cs.25pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
+  },
+  {
+    sku: 'T641546',
+    expect: "Clear Strawberry Print Fan 9\" - 12/pk 25bx/cs cs.288",
+    to: "Clear Strawberry Print Fan 9\" - 12/pk 25bx/cs cs.25pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
+  },
+  {
+    sku: 'T641546-1',
+    expect: "Clear Watermelon Print Fan - 12/pk 25bx/cs cs.288",
+    to: "Clear Watermelon Print Fan - 12/pk 25bx/cs cs.25pk",
+    why: 'pack-sold: cs.N counts packs per case, which the name states as 25bx',
+  },
 ]
 
 const APPLY = process.argv.includes('--apply')
