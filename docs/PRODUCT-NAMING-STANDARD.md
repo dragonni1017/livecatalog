@@ -91,8 +91,8 @@ because neither states how the product is sold.
 | **Fits neither convention** | **18** |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
-They fall into five groups and read like typos rather than a third
-convention:
+They fall into four remaining groups (a fifth, `T641077`, is fixed) and read
+like typos rather than a third convention:
 
 | Count | Shape | Piece-sold would be | Pack-sold would be |
 |---|---|---|---|
