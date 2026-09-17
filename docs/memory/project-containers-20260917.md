@@ -30,10 +30,20 @@ Zero parse rejections on all three; `总PCS` format throughout, cm/kg headers.
 
 **Data problems these files exposed (not fixed — need a human call):**
 
-- **K229480's stored barcode is truncated**: Supabase has 11 digits
-  (`73787910121`), the sheet has the full 12 (`737879101216`), and its
-  neighbour K229479 is `737879101209` — same series, so the sheet is almost
-  certainly right and the DB lost the check digit.
+- **K229480's truncated barcode — FIXED 2026-09-17.** Both systems held 11
+  digits (`73787910121`); the sheet's `737879101216` check-digit-validates and
+  its neighbour K229479 is the adjacent `737879101209`, so the stored value
+  had lost its check digit. Corrected via `scripts/fix-k229480-barcode.mjs`.
+  **Erply was written first, and that ordering is the point**: the daily sync
+  reads Erply's `code2` back into `products.barcode`
+  (`app/api/sync/route.ts`), so any Supabase-only barcode fix reverts within a
+  day. The script snapshots the whole Erply record and diffs every field after
+  `saveProduct` (0 drifted here) because of the 2026-08-04 incident in
+  [[project-retail-anchor-pricing-flip]].
+  Three other 11-digit barcodes remain — K02565, L61981, K01873, all
+  `manually_hidden`, all on the unrelated `91671…` prefix. Deliberately left
+  alone: K229480 was only safe to correct because a container sheet and an
+  adjacent SKU independently agreed, and these three have no second source.
 - **K229479 is a genuine mismatch**, correctly flagged: sheet says
   `0034635763`, catalog says `737879101209` — a different UPC series
   entirely, not a formatting difference.
