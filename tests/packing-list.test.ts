@@ -105,6 +105,14 @@ describe('normalizeBarcode', () => {
     expect(normalizeBarcode(712345678901)).toBe('712345678901')
     expect(normalizeBarcode(null)).toBe('')
   })
+
+  // Real value off container EGSU1396926's arrival list, where T641449's UPC
+  // is typed with spaces inside it. Before this, the spaces survived and the
+  // line was excluded from apply as a barcode_mismatch against an identical
+  // stored barcode.
+  it('ignores whitespace typed inside a UPC', () => {
+    expect(normalizeBarcode('6  8140239892 8')).toBe(normalizeBarcode('681402398928'))
+  })
 })
 
 // ── Real supplier file ────────────────────────────────────────────────────
