@@ -30,9 +30,9 @@ A name is consistent if **either** test passes. Current measurement:
 | | Count |
 |---|---|
 | Piece-sold | 1,653 |
-| Pack-sold | 635 |
+| Pack-sold | 636 |
 | Either (`pk = 1`, so the two agree) | 715 |
-| **Neither — the real defects** | **19** |
+| **Neither — the real defects** | **18** |
 
 **The convention is self-identifying from the shape**, so no list of pack-sold
 SKUs is needed. An earlier version of this file carried one; it was removed
@@ -86,13 +86,13 @@ because neither states how the product is sold.
 
 | | Count |
 |---|---|
-| Compliant | 3,002 |
+| Compliant | 3,003 |
 | No pack spec at all | 203 |
-| **Fits neither convention** | **19** |
+| **Fits neither convention** | **18** |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
-They fall into five groups and read like typos rather than a third
-convention:
+They fall into four remaining groups (a fifth, `T641077`, is fixed) and read
+like typos rather than a third convention:
 
 | Count | Shape | Piece-sold would be | Pack-sold would be |
 |---|---|---|---|
@@ -100,7 +100,7 @@ convention:
 | 5 | `20/pk 7bx/cs cs.300` (Ribbon 2.5cm F287331–334) | `cs.140` | `cs.7` |
 | 5 | `12/pk 25bx/cs cs.288` (fans, leis, headband) | `cs.300` | `cs.25` |
 | 1 | `12/pk 22bx/cs cs.256` (F287267) | `cs.264` | `cs.22` |
-| 1 | `12/pk 48bx/cs cs.24bx` (T641077) | — | `cs.48`, since it states `bx` |
+| ~~1~~ | ~~`12/pk 48bx/cs cs.24bx` (T641077)~~ | — | **FIXED 2026-09-17** to `cs.48bx` in Erply, WooCommerce and Supabase |
 
 The 7 ribbons are interesting: `15/pk` doesn't divide 36, but `12/pk` would
 (12 × 3 = 36), so the typo may be in the pack size rather than the total.
@@ -152,3 +152,29 @@ That is why generated names go behind the review screen in `/admin/receiving`,
 never an automatic write. Receiving assembles a **piece-sold** spec from
 pieces-per-case ÷ pieces-per-pack; if a new product turns out to be pack-sold,
 the name needs adjusting by hand.
+
+## Applying an agreed correction
+
+`node scripts/fix-product-names.ts [--apply] [--only=SKU]` — dry run by
+default. Generalised from `scripts/fix-bows-pack-spec-erply-woo.mjs`, which
+did the same job for the 8 Gift Bows.
+
+It writes all three systems, each for its own reason: **Erply** because it's
+the master and a Supabase-only rename is undone by the next sync;
+**WooCommerce** directly, because Erply's WooCommerce Integration product sync
+has been unreliable and manual-trigger-only; **Supabase** so the catalog shows
+the corrected name immediately rather than waiting for 08:00 UTC (the next
+sync writes the same value, so there's no fight).
+
+Every entry declares the name it expects to find. If the live name differs —
+edited by hand, or already corrected — that system is **skipped and reported**,
+never overwritten. So it's safe to re-run, and each write is verified by an
+independent re-read rather than trusting the API's own response.
+
+Corrections live in the `CHANGES` array in that script, each with its
+reasoning, because nothing here is inferred: the audit proposes no fix for an
+inconsistent spec, so every entry is a human decision.
+
+Applied so far: **T641077** (2026-09-17) — `cs.24bx` → `cs.48bx`, the one of
+the 19 that settled itself by stating its own unit. Verified in all three
+systems.
