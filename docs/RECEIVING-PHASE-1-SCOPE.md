@@ -158,7 +158,13 @@ Names are proposed as a **descriptor only**, with no pack spec. The sheet says
 how many pieces are in a case but never how they're packed, and a name
 asserting "12/pk" that nobody checked would be an invented fact. The UI
 assembles the full house-standard name once the admin supplies pieces-per-pack,
-and refuses a value that doesn't divide the case evenly (`cs.N = pk × bx`).
+and refuses a value that doesn't divide the case evenly.
+
+Note the spec it builds is the **piece-sold** one (`cs.N = pk × bx`). That is
+the right default for a new product, but this business also sells some ranges
+by the pack, where `cs.N` counts packs instead — see
+docs/PRODUCT-NAMING-STANDARD.md. A pack-sold new product needs its name
+adjusted by hand afterwards; nothing in the paperwork says which a product is.
 
 ## Verified against live Erply (read-only)
 

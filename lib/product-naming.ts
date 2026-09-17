@@ -8,12 +8,28 @@
  * 3,013 of them (93%) already carry the full pack-spec suffix, exactly one is
  * ALL CAPS, and sizes appear as inches (315), cm (131) or feet (29).
  *
- * THE INVARIANT: cs.N is ALWAYS the total pieces per case, so cs === pk * bx.
- * Dragon's call, 2026-09-16. It settles a real split in the live data — 2,394
- * names already meant pieces, but 600 used cs.N for the box count and 19 were
- * neither (e.g. "Brown Small Ribbon 1.5\" - 15/pk 3bx/cs cs.36", where
- * 15 x 3 = 45). Those 619 are wrong under this standard; scripts/audit-product-names.mjs
- * lists them.
+ * TWO CONVENTIONS, both valid, because this business sells some products by
+ * the piece and others by the pack:
+ *
+ *   PIECE-SOLD  cs.N is the total PIECES per case, so cs === pk * bx
+ *               "Foam Bear with Heart 7cm - 12/pk 10bx/cs cs.120"
+ *
+ *   PACK-SOLD   cs.N is the number of PACKS per case, so cs === bx
+ *               "10\" Gold Gift Bow - 20/pk 100bx/cs cs.100"
+ *               (20 per pack, 100 packs per case — Dragon, confirmed twice:
+ *                for the Gift Bows and again for the floral papers)
+ *
+ * A name is consistent if EITHER holds. Measured over the 3,013 live names
+ * carrying a full spec: 1,653 piece-sold, 600 pack-sold, 741 where pk = 1 so
+ * the two agree, and 19 consistent under neither — those 19 are the real
+ * defects, and scripts/audit-product-names.ts lists them.
+ *
+ * This replaces an earlier, narrower reading of the standard that treated
+ * cs === pk * bx as the only rule. It flagged all 600 pack-sold names as
+ * broken, and a verification pass built on it proposed "corrections" that
+ * would have rewritten correct names — including reverting the Gift Bow
+ * renames made deliberately in an earlier session. The pack-sold shape is
+ * self-identifying (cs === bx), so no hand-maintained SKU list is needed.
  *
  * NAMES LIVE IN ERPLY. products.name is overwritten from Erply on every sync
  * (lib/product-sync.ts — name is not in skipFields), so correcting a name in
@@ -30,8 +46,29 @@ export interface PackSpec {
   piecesPerPack: number
   /** Packs ("boxes") in a case. */
   boxesPerCase: number
-  /** Total pieces in a case. Always piecesPerPack * boxesPerCase. */
+  /**
+   * The cs.N figure as written. PIECES per case for a piece-sold product,
+   * PACKS per case for a pack-sold one — `packSpecConvention` says which.
+   */
   piecesPerCase: number
+}
+
+export type PackConvention = 'piece' | 'pack' | 'either' | 'inconsistent'
+
+/**
+ * Which convention a spec satisfies.
+ *
+ * 'either' means pk is 1, so pieces and packs per case are the same number
+ * and the name doesn't distinguish them — 741 live names are in that state,
+ * and nothing needs deciding for them.
+ */
+export function packSpecConvention(spec: PackSpec): PackConvention {
+  const piece = spec.piecesPerCase === spec.piecesPerPack * spec.boxesPerCase
+  const pack = spec.piecesPerCase === spec.boxesPerCase
+  if (piece && pack) return 'either'
+  if (piece) return 'piece'
+  if (pack) return 'pack'
+  return 'inconsistent'
 }
 
 export interface ParsedProductName {
@@ -96,39 +133,13 @@ export function normalizeDescriptor(raw: string): string {
     .trim()
 }
 
-/**
- * SKUs sold BY THE PACK rather than by the piece, where `cs.N` counts packs
- * and therefore does NOT equal pk × bx.
- *
- * This is a real, Dragon-confirmed exception, not a set of mistakes: the 8
- * Gift Bows were deliberately renamed to "20/pk 100bx/cs cs.100" in an
- * earlier session — 20 per pack, 100 packs per case — and
- * `scripts/fix-bows-pack-spec-erply-woo.mjs` records the reasoning. Treating
- * them as inconsistent would propose reverting that decision (the
- * verification tool did exactly that before this list existed, suggesting
- * cs.1000).
- *
- * The list is explicit rather than pattern-matched because nothing in a SKU
- * or a name says how a product is sold — only a human knows. Add to it when
- * another range is confirmed as pack-sold; don't infer membership.
- */
-export const PACK_SOLD_SKUS = new Set<string>([
-  'F286796', // 10" Red Gift Bow
-  'F286797', // 10" Fuchsia Gift Bow
-  'F286798', // 10" Pink Gift Bow
-  'F286799', // 10" White Gift Bow
-  'F286800', // 10" Silver Gift Bow
-  'F286801', // 10" Gold Gift Bow
-  'F286802', // 10" Royal Blue Gift Bow
-  'F286803', // 10" Sky Blue Gift Bow
-])
-
-export function isSoldByPack(sku: string): boolean {
-  return PACK_SOLD_SKUS.has(sku.toUpperCase())
-}
-
 export type NameIssue =
   | 'missing_pack_spec'
+  /**
+   * The spec satisfies neither convention — cs.N is neither pk × bx (pieces
+   * per case) nor bx (packs per case). 19 live names are in this state and
+   * they read like typos, not a third convention.
+   */
   | 'case_total_mismatch'
   | 'all_caps'
   | 'leading_sku_digits'
@@ -138,6 +149,8 @@ export type NameIssue =
 export interface NameAudit {
   issues: NameIssue[]
   parsed: ParsedProductName
+  /** Which convention the spec satisfies; null when there's no spec at all. */
+  convention: PackConvention | null
   /** What the name should be, when that can be determined mechanically. */
   suggestion: string | null
 }
@@ -145,23 +158,16 @@ export interface NameAudit {
 /**
  * Checks one name against the standard. Only returns a suggestion where the
  * fix is unambiguous — a missing pack spec can't be invented, since the
- * pack/case counts aren't in the name to begin with.
+ * pack/case counts aren't in the name to begin with, and a spec that fits
+ * neither convention doesn't say which of its three numbers is wrong.
  */
-export function auditProductName(name: string, opts: { sku?: string } = {}): NameAudit {
+export function auditProductName(name: string): NameAudit {
   const parsed = parseProductName(name)
   const issues: NameIssue[] = []
-  // A pack-sold product's cs.N counts packs, so pk x bx is the wrong test for
-  // it — see PACK_SOLD_SKUS. Pass the SKU to get that right; without one, a
-  // pack-sold name reads as inconsistent.
-  const soldByPack = opts.sku ? isSoldByPack(opts.sku) : false
+  const convention = parsed.spec ? packSpecConvention(parsed.spec) : null
 
   if (!parsed.spec) issues.push('missing_pack_spec')
-  else if (
-    !soldByPack &&
-    parsed.spec.piecesPerCase !== parsed.spec.piecesPerPack * parsed.spec.boxesPerCase
-  ) {
-    issues.push('case_total_mismatch')
-  }
+  else if (convention === 'inconsistent') issues.push('case_total_mismatch')
 
   const trimmed = (name ?? '').trim()
   if (trimmed && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) issues.push('all_caps')
@@ -169,21 +175,20 @@ export function auditProductName(name: string, opts: { sku?: string } = {}): Nam
   if (/\b100\s*%/.test(trimmed)) issues.push('invoice_material_tail')
   if (trimmed !== name || /\s{2,}/.test(name ?? '')) issues.push('untidy_whitespace')
 
-  // A suggestion is only offered for COSMETIC problems. A cs.N that isn't
-  // pk x bx tells you the name is internally inconsistent — it does NOT tell
-  // you which of the three numbers is wrong, and recomputing cs.N from pk and
-  // bx is demonstrably the wrong guess for a large class of them.
+  // A suggestion is only offered for COSMETIC problems. A spec that fits
+  // neither convention says the name is internally inconsistent; it does NOT
+  // say which of its three numbers is wrong, so there is nothing to propose.
   //
-  // Checked against real shipments 2026-09-16: F287672 arrived as 10 cartons
-  // of 1,500 pieces — 150 per case — and its name reads "48/pk 150bx/cs
-  // cs.150". There, cs.N is the truthful figure and `bx` is the field holding
-  // the wrong value; recomputing would have rewritten it to cs.7200, a 48x
-  // overstatement. F287778 is the same. Meanwhile T642121 ("12/pk 5bx/cs
-  // cs.60", 60/carton) and F287491 ("1/pk 36bx/cs cs.36", 36/carton) are
-  // internally consistent AND match their shipments.
-  //
-  // So these need a physical or supplier-document check per SKU, not
-  // arithmetic. The invariant governs names written from here on.
+  // Two separate attempts to be cleverer here both turned out wrong, which is
+  // why this stays deliberately unhelpful:
+  //   - Recomputing cs.N as pk x bx: F287672 arrives 150 per case and reads
+  //     "48/pk 150bx/cs cs.150", so that would have written cs.7200.
+  //   - Treating a supplier document's pieces-per-carton as the case quantity:
+  //     it isn't, for a pack-sold product. Dragon confirmed the floral papers
+  //     are 20 per pack with 60 packs per case, while their documents read 60
+  //     pieces per carton — so a "correction" built on that evidence would
+  //     have rewritten 225 correct names.
+  // The 19 genuinely inconsistent names need a human per SKU.
   const cosmetic = issues.filter(
     (i) => i !== 'missing_pack_spec' && i !== 'case_total_mismatch',
   )
@@ -193,5 +198,5 @@ export function auditProductName(name: string, opts: { sku?: string } = {}): Nam
     if (rebuilt !== name) suggestion = rebuilt
   }
 
-  return { issues, parsed, suggestion }
+  return { issues, parsed, convention, suggestion }
 }
