@@ -51,7 +51,21 @@ export interface PackSpec {
    * PACKS per case for a pack-sold one — `packSpecConvention` says which.
    */
   piecesPerCase: number
+  /**
+   * The unit written after cs.N when the name states it: "cs.50pk",
+   * "cs.18bx", "cs.16set". 219 live names do this, and it removes the
+   * ambiguity outright — 'pk', 'bx' and 'set' all count containers rather
+   * than pieces, so cs.N should equal bx.
+   *
+   * null means unstated, which is the common case and the ambiguous one.
+   * This is the clearest form in the catalog, and an earlier version of this
+   * parser didn't recognise it at all — all 219 were misread as having no
+   * pack spec.
+   */
+  caseUnit: CaseUnit | null
 }
+
+export type CaseUnit = 'pk' | 'bx' | 'set' | 'pcs'
 
 export type PackConvention = 'piece' | 'pack' | 'either' | 'inconsistent'
 
@@ -65,6 +79,12 @@ export type PackConvention = 'piece' | 'pack' | 'either' | 'inconsistent'
 export function packSpecConvention(spec: PackSpec): PackConvention {
   const piece = spec.piecesPerCase === spec.piecesPerPack * spec.boxesPerCase
   const pack = spec.piecesPerCase === spec.boxesPerCase
+
+  // A stated unit is the author saying which convention applies, so only that
+  // test runs — no falling back to the other, and never 'either'.
+  if (spec.caseUnit === 'pcs') return piece ? 'piece' : 'inconsistent'
+  if (spec.caseUnit) return pack ? 'pack' : 'inconsistent'
+
   if (piece && pack) return 'either'
   if (piece) return 'piece'
   if (pack) return 'pack'
@@ -80,7 +100,7 @@ export interface ParsedProductName {
 
 // Tolerant on input (spacing, capitalisation) so the audit reads real names
 // as they are; strict on output via formatPackSpec.
-const SPEC_RE = /\s*-\s*(\d+)\s*\/pk\s+(\d+)\s*bx\/cs(?:\s+cs\.(\d+))?\s*$/i
+const SPEC_RE = /\s*-\s*(\d+)\s*\/pk\s+(\d+)\s*bx\/cs(?:\s+cs\.(\d+)\s*(pk|bx|set|pcs|pc)?)?\s*$/i
 
 export function formatPackSpec(piecesPerPack: number, boxesPerCase: number): string {
   return `${piecesPerPack}/pk ${boxesPerCase}bx/cs cs.${piecesPerPack * boxesPerCase}`
@@ -95,10 +115,13 @@ export function parseProductName(name: string): ParsedProductName {
   // A name ending "12/pk 10bx/cs" with no cs.N still parses; the total is
   // implied by the invariant rather than read.
   const piecesPerCase = match[3] != null ? Number(match[3]) : piecesPerPack * boxesPerCase
+  // "cs.24bx" and "cs.24 bx" both count boxes; "pc" is accepted as "pcs".
+  const rawUnit = match[4]?.toLowerCase()
+  const caseUnit: CaseUnit | null = rawUnit ? (rawUnit === 'pc' ? 'pcs' : (rawUnit as CaseUnit)) : null
 
   return {
     base: name.slice(0, match.index).trim(),
-    spec: { piecesPerPack, boxesPerCase, piecesPerCase },
+    spec: { piecesPerPack, boxesPerCase, piecesPerCase, caseUnit },
   }
 }
 
