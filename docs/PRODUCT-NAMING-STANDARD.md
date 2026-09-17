@@ -136,12 +136,16 @@ Kappy Fur Pen Giant 12pcs/bx 24bx/cs 288/cs 25x25x25 42lbs
 ```
 
 12 x 24 = 288 confirmed it, so nothing was inferred. Its trailing
-`25x25x25 42lbs` was dropped (no other name carries carton figures) and
-**deliberately not written to the `case_*` columns**: "25x25x25" states no
-unit, inches is only likely, and those columns feed bin-capacity maths where a
-cm/inch mix-up is silent and wrong. Those were the product's only carton
-figures — `case_*` is null — so they now live in git history and
-`data/product-name-fixes-applied.csv` only.
+`25x25x25 42lbs` was dropped from the name, since no other name carries carton
+figures — but those were the product's ONLY carton figures, so they were not
+discarded: Dragon confirmed 2026-09-17 that the dimensions are inches, and they
+are now stored as `25 x 25 x 25 in / 42 lb` with
+`measurements_source = 'manual'` and `measurements_updated_by =
+'legacy-name:P257281'`. They passed `implausibleCaseMeasurement` first.
+
+They were deliberately NOT written before that confirmation: "25x25x25" states
+no unit, and `case_*` feeds bin-capacity maths where a cm/inch mix-up is
+silent and wrong — the trap migration 0045 exists to guard.
 
 **The remaining 201 can't be fixed from the name**, and the data has to come
 from somewhere else. The supplier documents get part-way: **167 of the 203 had
