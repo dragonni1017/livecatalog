@@ -163,9 +163,15 @@ const round2 = (n: number) => Math.round(n * 100) / 100
  * Barcodes have a documented leading-zero gap in this project (see
  * docs/memory/reference-barcode-backfill-handoff.md) — compare digits only,
  * with leading zeros stripped, rather than exact string equality.
+ *
+ * "Digits only" means every non-digit is dropped, not just the surrounding
+ * whitespace: supplier sheets type UPCs with spaces inside them (EGSU1396926
+ * ships T641449 as "6  8140239892 8"), and reading that as different from the
+ * stored 681402398928 would strand a good line as a barcode_mismatch and
+ * exclude it from apply.
  */
 export function normalizeBarcode(v: unknown): string {
-  return String(v ?? '').trim().replace(/^0+/, '')
+  return String(v ?? '').replace(/\D/g, '').replace(/^0+/, '')
 }
 
 /**

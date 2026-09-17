@@ -98,10 +98,17 @@ export async function POST(request: NextRequest) {
     // rule as the dimensions importer: a mismatch means the SKU mapping is
     // probably wrong, and this business has real barcode-collision history —
     // so the line is staged but excluded from apply, not silently trusted.
+    //
+    // Ask for both the sheet's casing and an upper-cased copy: the map below
+    // is keyed upper-case so the comparison is case-insensitive, but Postgres
+    // `in` is not, so a lower-cased SKU on the sheet (p273762 on EMCU8323054)
+    // would never be fetched — the line would read as unmatched_sku, strand
+    // its pieces, and be offered for creation as a duplicate product.
     const skus = grouped.map((l) => l.sku)
+    const lookupSkus = [...new Set(skus.flatMap((s) => [s, s.toUpperCase()]))]
     const catalog = new Map<string, { sku: string; name: string; barcode: string | null }>()
-    for (let i = 0; i < skus.length; i += 200) {
-      const chunk = skus.slice(i, i + 200)
+    for (let i = 0; i < lookupSkus.length; i += 200) {
+      const chunk = lookupSkus.slice(i, i + 200)
       const { data } = await db.from('products').select('sku, name, barcode').in('sku', chunk)
       for (const row of data ?? []) catalog.set(row.sku.toUpperCase(), row)
     }
