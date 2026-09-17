@@ -10,11 +10,23 @@ lists every suffixed SKU that carries the same barcode as its own base SKU.
 variants (`F286557`, `F286459`, `F286567` have four each), so pair count and
 group count differ.
 
-**The only one that matters today: `F286411-M`.** It is the sole VISIBLE
-variant, it is in Erply, and it shares a barcode with `F286411` — "Metallic
-Flower Without The Box" versus "Iridescent Artificial Flowers with LED
-Lights", two genuinely different products. A scan cannot distinguish them,
-which is a live picking and receiving hazard.
+**No storefront hazard — corrected 2026-09-17.** `F286411-M` was the only
+VISIBLE variant ("Metallic Flower Without The Box" versus its base
+`F286411`, "Iridescent Artificial Flowers with LED Lights" — genuinely
+different products sharing one barcode). But **the base was already hidden**,
+so the pair was never both-visible on the catalog. The first version of this
+audit reported only the variant's state and never the base's, which is what
+made it look live. It now tracks both, and counts BOTH-visible separately:
+that figure is **0**, and was 0 before anything was changed.
+
+`F286411-M` was hidden anyway on 2026-09-17, since it was visible carrying a
+barcode that isn't its own. It also carries `stock_qty = 1000`, so it is one of
+the fake-stock rows — see [[project-fake-stock-1000-hold]].
+
+**Where the collision does persist:** both SKUs are ACTIVE in Erply (#626) and
+PUBLISHED in WooCommerce (#50515). Hiding in the catalog touches neither, so
+the scan ambiguity is still real in the warehouse and on the Woo storefront
+another team runs. Fixing that needs the variant's own barcode.
 
 The other 51 are inert: `manually_hidden` since the August orphan review, 43 of
 them absent from Erply entirely, and **no variant has ever been ordered** (4

@@ -115,6 +115,13 @@ interface Row {
   variantStock: number | null
   baseSku: string
   baseName: string
+  /**
+   * The base's catalog state matters as much as the variant's: the storefront
+   * hazard is only real when BOTH are visible. An earlier version of this
+   * audit reported only the variant, which led to F286411-M being described as
+   * a live pair when its base was already hidden.
+   */
+  baseState: string
   baseInErply: string
   verdict: string
   everOrdered: string
@@ -145,6 +152,7 @@ for (const [barcode, group] of byBarcode) {
       variantStock: variant.stock_qty,
       baseSku: base.sku,
       baseName: base.name ?? '',
+      baseState: base.manually_hidden ? 'hidden' : base.is_active ? 'VISIBLE' : 'inactive',
       baseInErply: inErply.has(base.sku.toUpperCase()) ? 'yes' : 'NO',
       verdict:
         stripSpec(base.name) === stripSpec(variant.name)
@@ -158,7 +166,9 @@ for (const [barcode, group] of byBarcode) {
 rows.sort((a, b) => a.variantSku.localeCompare(b.variantSku))
 
 console.log(`${rows.length} suffixed SKUs share a barcode with their own base SKU.\n`)
-console.log(`  variant VISIBLE in the catalog : ${rows.filter((r) => r.variantState === 'VISIBLE').length}   <- a scan cannot tell these apart`)
+console.log(`  BOTH visible in the catalog    : ${rows.filter((r) => r.variantState === 'VISIBLE' && r.baseState === 'VISIBLE').length}   <- the storefront hazard`)
+console.log(`  variant visible, base not      : ${rows.filter((r) => r.variantState === 'VISIBLE' && r.baseState !== 'VISIBLE').length}`)
+console.log(`  neither visible                : ${rows.filter((r) => r.variantState !== 'VISIBLE' && r.baseState !== 'VISIBLE').length}   <- but the barcode still collides in Erply and Woo`)
 console.log(`  variant missing from Erply     : ${rows.filter((r) => r.variantInErply === 'NO').length}`)
 console.log(`  same description as its base   : ${rows.filter((r) => r.verdict.startsWith('same')).length}   <- likely duplicate listings`)
 console.log(`  ever ordered (base or variant) : ${rows.filter((r) => r.everOrdered !== 'never').length}\n`)
@@ -166,7 +176,7 @@ console.log(`  ever ordered (base or variant) : ${rows.filter((r) => r.everOrder
 for (const r of rows) {
   console.log(`  ${r.variantSku.padEnd(16)} ${r.variantState.padEnd(8)} erply:${r.variantInErply.padEnd(4)} ${r.verdict}`)
   console.log(`      ${r.variantName}`)
-  console.log(`      base ${r.baseSku} (erply:${r.baseInErply}) — ${r.baseName}`)
+  console.log(`      base ${r.baseSku} [${r.baseState}, erply:${r.baseInErply}] — ${r.baseName}`)
   console.log(`      barcode ${r.barcode} · ordered: ${r.everOrdered}`)
 }
 
@@ -179,6 +189,7 @@ const sheet = rows.map((r) => ({
   'Variant stock': r.variantStock ?? '',
   'Base SKU': r.baseSku,
   'Base name': r.baseName,
+  'Base in catalog': r.baseState,
   'Base in Erply': r.baseInErply,
   Verdict: r.verdict,
   'Ever ordered': r.everOrdered,
