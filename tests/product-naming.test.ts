@@ -19,7 +19,7 @@ describe('parseProductName', () => {
   it('splits a compliant name into base and spec', () => {
     const { base, spec } = parseProductName('Foam Bear with Heart 7cm - 12/pk 10bx/cs cs.120')
     expect(base).toBe('Foam Bear with Heart 7cm')
-    expect(spec).toEqual({ piecesPerPack: 12, boxesPerCase: 10, piecesPerCase: 120 })
+    expect(spec).toEqual({ piecesPerPack: 12, boxesPerCase: 10, piecesPerCase: 120, caseUnit: null })
   })
 
   it('reads a name with no cs.N, implying the total from the invariant', () => {
@@ -27,6 +27,7 @@ describe('parseProductName', () => {
       piecesPerPack: 1,
       boxesPerCase: 1,
       piecesPerCase: 1,
+      caseUnit: null,
     })
   })
 
@@ -160,5 +161,56 @@ describe('the two conventions', () => {
     // The shape itself identifies the convention, so no hand-maintained list
     // of pack-sold SKUs is required — an earlier version had one.
     expect(auditProductName(bow).issues).toEqual([])
+  })
+})
+
+describe('an explicitly stated cs.N unit', () => {
+  // 219 live names say what cs.N counts — "cs.50pk", "cs.18bx", "cs.16set".
+  // That removes the ambiguity the rest of this file wrestles with, and an
+  // earlier parser didn't recognise the form at all, so all 219 were misread
+  // as having no pack spec.
+  it('parses the unit', () => {
+    expect(parseProductName('Happy Face Graduation Pen - 12/pk 50bx/cs cs.50pk').spec).toEqual({
+      piecesPerPack: 12,
+      boxesPerCase: 50,
+      piecesPerCase: 50,
+      caseUnit: 'pk',
+    })
+  })
+
+  it('treats pk, bx and set alike — all count containers, so cs = bx', () => {
+    for (const name of [
+      'Happy Face Graduation Pen - 12/pk 50bx/cs cs.50pk',
+      'Safari Friends Animal Pen - 36/pk 18bx/cs cs.18bx',
+      '2-in-1 Round Concave Woven Baskets - 1/pk 16bx/cs cs.16set',
+    ]) {
+      const audit = auditProductName(name)
+      expect(audit.convention).toBe('pack')
+      expect(audit.issues).toEqual([])
+    }
+  })
+
+  it('applies only the stated convention, never falling back to the other', () => {
+    // 12 x 48 = 576, so this would pass the piece test if cs.N were 576 —
+    // but the name says "bx", so the only valid figure is bx itself (48).
+    const audit = auditProductName('Medium Sound Tube - 12/pk 48bx/cs cs.24bx')
+    expect(audit.convention).toBe('inconsistent')
+    expect(audit.issues).toContain('case_total_mismatch')
+  })
+
+  it('reads an explicit pcs as piece-sold', () => {
+    const audit = auditProductName('Widget - 12/pk 10bx/cs cs.120pcs')
+    expect(audit.convention).toBe('piece')
+    expect(audit.issues).toEqual([])
+  })
+
+  it('never reports "either" for a stated unit, even when pk is 1', () => {
+    // Without a unit this would be 'either'; the unit settles it.
+    expect(auditProductName('Basket Set - 1/pk 16bx/cs cs.16set').convention).toBe('pack')
+    expect(auditProductName('Basket Set - 1/pk 16bx/cs cs.16').convention).toBe('either')
+  })
+
+  it('leaves caseUnit null when the name does not say', () => {
+    expect(parseProductName('Pizza Squishy - 12/pk 8bx/cs cs.96').spec?.caseUnit).toBeNull()
   })
 })

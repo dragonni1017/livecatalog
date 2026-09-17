@@ -25,19 +25,41 @@ naming reflects that:
 The bows are 20 per pack with 100 packs per case; the floral papers are 20 per
 pack with 60 packs per case. Dragon confirmed each.
 
-A name is consistent if **either** test passes. Measured over the 3,013 live
-names carrying a full spec:
+A name is consistent if **either** test passes. Current measurement:
 
 | | Count |
 |---|---|
 | Piece-sold | 1,653 |
-| Pack-sold | 600 |
-| Either (`pk = 1`, so the two agree) | 741 |
+| Pack-sold | 635 |
+| Either (`pk = 1`, so the two agree) | 715 |
 | **Neither — the real defects** | **19** |
 
 **The convention is self-identifying from the shape**, so no list of pack-sold
 SKUs is needed. An earlier version of this file carried one; it was removed
 along with the single-rule reading.
+
+## Better: state the unit. 219 names already do
+
+```
+Happy Face Graduation Pen - 12/pk 50bx/cs cs.50pk        <- 50 packs
+Safari Friends Animal Pen - 36/pk 18bx/cs cs.18bx        <- 18 boxes
+2-in-1 Round Concave Woven Baskets - 1/pk 16bx/cs cs.16set   <- 16 sets
+```
+
+97 use `bx`, 87 use `pk`, 35 use `set`. **This is the clearest form in the
+catalog and the one to prefer for new names**, because it removes the
+ambiguity that everything above is working around — `cs.60pk` on the floral
+papers would have answered the question outright.
+
+`pk`, `bx` and `set` all count containers rather than pieces, so a stated unit
+means `cs = bx`. An explicit `pcs` means the piece test instead. When a unit is
+stated, **only** that test is applied — no falling back to the other, and never
+"either", even when `pk = 1`.
+
+Worth knowing how this was found: the parser originally didn't recognise the
+form at all, so all 219 were misread as having **no pack spec** and sat in the
+422-name "no spec" bucket for a day. Teaching it the suffix moved compliant
+names from 2,784 to 3,002 and cut that bucket to 203.
 
 ## Two wrong turns, recorded so they aren't repeated
 
@@ -64,20 +86,25 @@ because neither states how the product is sold.
 
 | | Count |
 |---|---|
-| Compliant | 2,784 |
-| No pack spec at all | 422 |
-| **Fits neither convention** | **18** |
-| Malformed spec (`T641077` — `cs.24bx`) | 1 |
+| Compliant | 3,002 |
+| No pack spec at all | 203 |
+| **Fits neither convention** | **19** |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
-They read like typos rather than a third convention:
+They fall into five groups and read like typos rather than a third
+convention:
 
-```
-F287102  Brown Small Ribbon 1.5" - 15/pk 3bx/cs cs.36        (15x3=45, and 36≠3)
-F287332  Ribbon 2.5cm - 20/pk 7bx/cs cs.300                  (20x7=140)
-F287267  Strawberry Crochet Flower - 12/pk 22bx/cs cs.256    (12x22=264)
-T641077  Medium Sound Tube - 12/pk 48bx/cs cs.24bx           (malformed)
-```
+| Count | Shape | Piece-sold would be | Pack-sold would be |
+|---|---|---|---|
+| 7 | `15/pk 3bx/cs cs.36` (ribbons F287101–107, F287110) | `cs.45` | `cs.3` |
+| 5 | `20/pk 7bx/cs cs.300` (Ribbon 2.5cm F287331–334) | `cs.140` | `cs.7` |
+| 5 | `12/pk 25bx/cs cs.288` (fans, leis, headband) | `cs.300` | `cs.25` |
+| 1 | `12/pk 22bx/cs cs.256` (F287267) | `cs.264` | `cs.22` |
+| 1 | `12/pk 48bx/cs cs.24bx` (T641077) | — | `cs.48`, since it states `bx` |
+
+The 7 ribbons are interesting: `15/pk` doesn't divide 36, but `12/pk` would
+(12 × 3 = 36), so the typo may be in the pack size rather than the total.
+That's a guess, not a finding.
 
 `auditProductName` deliberately proposes **no** correction for these — the
 spec tells you a name is inconsistent, not which of its three numbers is
