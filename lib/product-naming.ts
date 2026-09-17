@@ -96,6 +96,37 @@ export function normalizeDescriptor(raw: string): string {
     .trim()
 }
 
+/**
+ * SKUs sold BY THE PACK rather than by the piece, where `cs.N` counts packs
+ * and therefore does NOT equal pk × bx.
+ *
+ * This is a real, Dragon-confirmed exception, not a set of mistakes: the 8
+ * Gift Bows were deliberately renamed to "20/pk 100bx/cs cs.100" in an
+ * earlier session — 20 per pack, 100 packs per case — and
+ * `scripts/fix-bows-pack-spec-erply-woo.mjs` records the reasoning. Treating
+ * them as inconsistent would propose reverting that decision (the
+ * verification tool did exactly that before this list existed, suggesting
+ * cs.1000).
+ *
+ * The list is explicit rather than pattern-matched because nothing in a SKU
+ * or a name says how a product is sold — only a human knows. Add to it when
+ * another range is confirmed as pack-sold; don't infer membership.
+ */
+export const PACK_SOLD_SKUS = new Set<string>([
+  'F286796', // 10" Red Gift Bow
+  'F286797', // 10" Fuchsia Gift Bow
+  'F286798', // 10" Pink Gift Bow
+  'F286799', // 10" White Gift Bow
+  'F286800', // 10" Silver Gift Bow
+  'F286801', // 10" Gold Gift Bow
+  'F286802', // 10" Royal Blue Gift Bow
+  'F286803', // 10" Sky Blue Gift Bow
+])
+
+export function isSoldByPack(sku: string): boolean {
+  return PACK_SOLD_SKUS.has(sku.toUpperCase())
+}
+
 export type NameIssue =
   | 'missing_pack_spec'
   | 'case_total_mismatch'
@@ -116,12 +147,19 @@ export interface NameAudit {
  * fix is unambiguous — a missing pack spec can't be invented, since the
  * pack/case counts aren't in the name to begin with.
  */
-export function auditProductName(name: string): NameAudit {
+export function auditProductName(name: string, opts: { sku?: string } = {}): NameAudit {
   const parsed = parseProductName(name)
   const issues: NameIssue[] = []
+  // A pack-sold product's cs.N counts packs, so pk x bx is the wrong test for
+  // it — see PACK_SOLD_SKUS. Pass the SKU to get that right; without one, a
+  // pack-sold name reads as inconsistent.
+  const soldByPack = opts.sku ? isSoldByPack(opts.sku) : false
 
   if (!parsed.spec) issues.push('missing_pack_spec')
-  else if (parsed.spec.piecesPerCase !== parsed.spec.piecesPerPack * parsed.spec.boxesPerCase) {
+  else if (
+    !soldByPack &&
+    parsed.spec.piecesPerCase !== parsed.spec.piecesPerPack * parsed.spec.boxesPerCase
+  ) {
     issues.push('case_total_mismatch')
   }
 

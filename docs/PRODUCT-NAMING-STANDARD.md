@@ -15,9 +15,40 @@ Party Crown Tiara 15cm - 144/pk 10bx/cs cs.1440
 Pizza Squishy - 12/pk 8bx/cs cs.96
 ```
 
-**`cs.N` is always the total pieces per case, so `cs === pk × bx`** (Dragon,
+**`cs.N` is the total pieces per case, so `cs === pk × bx`** (Dragon,
 2026-09-16). Title Case, never ALL CAPS. Size is written as the product is
 sold — inches, cm or feet — and is not converted.
+
+## The pack-sold exception — read this before "fixing" any name
+
+That invariant holds for products sold **by the piece**. For products sold
+**by the pack**, `cs.N` counts **packs**, and `cs ≠ pk × bx` is correct.
+
+This is established, not hypothetical. The 8 Gift Bows were deliberately
+renamed in an earlier session to `20/pk 100bx/cs cs.100` — 20 per pack, 100
+packs per case — and `scripts/fix-bows-pack-spec-erply-woo.mjs` records the
+reasoning ("Dragon confirmed: bows are sold by the pack of 20, not by the
+piece; a case is 100 packs. cs.100 intentionally does NOT equal 20*100").
+
+**This was nearly undone.** Before the exception was encoded, the verification
+tool listed all 8 bows among the names to correct and proposed `cs.1000` for
+each — reverting a deliberate decision. Found 2026-09-17 only because the
+tracked `data/bows-pack-spec-fix/planned-changes.csv` happened to be noticed.
+
+So `lib/product-naming.ts` carries an explicit `PACK_SOLD_SKUS` list, and
+`auditProductName(name, { sku })` suppresses `case_total_mismatch` for those
+SKUs. Pass the SKU — without it, a pack-sold name still reads as inconsistent,
+because nothing in the name itself says how a product is sold.
+
+**The list is explicit and hand-maintained on purpose.** Membership can't be
+inferred from a SKU or a name; only a human knows how a product is sold. Add a
+range when it's confirmed pack-sold.
+
+**Still unresolved:** whether any of the remaining flagged ranges are pack-sold
+too. The 225-product floral-paper group is the open question — the documents
+say 60 pieces per carton, which with 20 per pack is 3 packs, so the piece-sold
+name is `20/pk 3bx/cs cs.60` and the pack-sold name would be
+`20/pk 3bx/cs cs.3`. Nothing in the data distinguishes them.
 
 This is not invented: of the 3,225 live catalog names, 3,013 (93%) already
 carry the pack-spec suffix, exactly one is ALL CAPS, and sizes appear as
@@ -62,12 +93,12 @@ write.
 
 | | count |
 |---|---|
-| Compliant | 2,367 |
-| `cs.N` is not `pk × bx` | 435 |
+| Compliant | 2,375 |
+| `cs.N` is not `pk × bx` | 427 (the 8 pack-sold bows are no longer counted) |
 | No pack spec at all | 422 |
 | Cosmetic (whitespace, ALL CAPS, digit prefix) | 4 |
 
-**Do not bulk-fix the 435 by recomputing `cs.N` as `pk × bx`.** The mismatch
+**Do not bulk-fix the 427 by recomputing `cs.N` as `pk × bx`.** The mismatch
 proves the name is internally inconsistent; it does not say which of the three
 numbers is wrong, and recomputing is the wrong guess for a large class of them.
 
@@ -82,14 +113,14 @@ Verified against real shipments on 2026-09-16:
 
 So `auditProductName()` deliberately offers **no suggestion** for a
 `case_total_mismatch` — only for unambiguous cosmetic problems. Fixing those
-435 needs a per-SKU check against a supplier document or a physical count. The
+427 needs a per-SKU check against a supplier document or a physical count. The
 invariant governs names written from here on.
 
 The cross-check method that produced that table: read `pk/cs`, `箱数 CTN` and
 `总PCS` from a container's Arrival/Original List, divide pieces by cartons to
 get the true per-case count, and compare against the name's parsed spec.
 
-## Verifying the 435 against supplier documents (2026-09-16)
+## Verifying the flagged names against supplier documents (2026-09-16)
 
 A physical count wasn't available, so the check was done against the supplier
 paperwork instead — `node scripts/verify-pack-specs.ts [--csv]`, report-only.
@@ -103,16 +134,16 @@ distinct SKUs of evidence.
 
 | Verdict | Count |
 |---|---|
-| **Confirmed** by the documents | 300 (271 with a complete corrected name) |
+| **Confirmed** by the documents | 293 (264 with a complete corrected name) |
 | Documents **disagree** with each other | 26 |
-| SKU in **no** document scanned | 109 |
+| SKU in **no** document scanned | 108 |
 
 **Which field is wrong varies — that's the whole reason a document has to
-decide it.** Of the 271:
+decide it.** Of the 264 (the 8 pack-sold Gift Bows are excluded — see the exception above):
 
 - **235: `cs.N` was already right and `bx` was the wrong field**, holding the
   case total instead of the box count.
-- **36: `cs.N` itself was wrong.** In 23 of those the document's figure equals
+- **29: `cs.N` itself was wrong.** In 23 of those the document's figure equals
   the original `pk × bx`, so for those specific SKUs the arithmetic fix would
   have been correct.
 
@@ -141,7 +172,7 @@ By correction pattern:
 |---|---|
 | 225 | `20/pk 60bx/cs cs.60` → `20/pk 3bx/cs cs.60` |
 | 18 | `20/pk 50bx/cs cs.50` → `20/pk 50bx/cs cs.1000` |
-| 8 | `20/pk 100bx/cs cs.100` → `20/pk 50bx/cs cs.1000` |
+| 1 | `20/pk 100bx/cs cs.100` → `20/pk 50bx/cs cs.1000` — was 9 until the 8 pack-sold bows were excluded |
 | 6 | `10/pk 100bx/cs cs.100` → `10/pk 10bx/cs cs.100` |
 | 3 | `12/pk 120bx/cs cs.120` → `12/pk 10bx/cs cs.120` |
 | 2 | `60/pk 20bx/cs cs.20` → `60/pk 20bx/cs cs.1200` |

@@ -63,7 +63,7 @@ const rows: Array<{ sku: string; name: string; issues: string; suggestion: strin
 
 for (const p of products) {
   const name = p.name ?? ''
-  const audit = auditProductName(name)
+  const audit = auditProductName(name, { sku: p.sku })
   if (audit.issues.length === 0) continue
   for (const issue of audit.issues) counts.set(issue, (counts.get(issue) ?? 0) + 1)
   rows.push({ sku: p.sku, name, issues: audit.issues.join('|'), suggestion: audit.suggestion ?? '' })
