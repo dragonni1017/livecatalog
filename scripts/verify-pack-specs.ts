@@ -32,7 +32,7 @@ import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { createRequire } from 'module'
-import { auditProductName, parseProductName } from '../lib/product-naming.ts'
+import { auditProductName } from '../lib/product-naming.ts'
 import { groupLinesBySku, parsePackingListSheet, type SheetRow } from '../lib/packing-list.ts'
 
 const require = createRequire(import.meta.url)
@@ -44,6 +44,7 @@ const ROOT = path.join(__dirname, '..')
 config({ path: path.join(ROOT, '.env.local'), quiet: true })
 
 const WRITE_CSV = process.argv.includes('--csv')
+const WRITE_XLSX = process.argv.includes('--xlsx')
 const DEFAULT_DIR = 'C:/Users/Dragon/OneDrive - L&Y USA/L&Y/L&Y/import documents'
 const DIR = process.argv.find((a) => a.startsWith('--dir='))?.slice('--dir='.length) ?? DEFAULT_DIR
 
@@ -131,6 +132,8 @@ interface Row {
   sku: string
   name: string
   namedCase: number
+  /** What the supplier documents say, when they agree. */
+  documentCase: number | null
   verdict: Verdict
   evidence: string
   suggestion: string
@@ -140,7 +143,7 @@ interface Row {
 const rows: Row[] = []
 
 for (const p of products) {
-  const audit = auditProductName(p.name ?? '')
+  const audit = auditProductName(p.name ?? '', { sku: p.sku })
   if (!audit.issues.includes('case_total_mismatch')) continue
 
   const spec = audit.parsed.spec!
@@ -176,6 +179,7 @@ for (const p of products) {
     sku: p.sku,
     name: p.name ?? '',
     namedCase: spec.piecesPerCase,
+    documentCase: distinct.length === 1 ? distinct[0] : null,
     verdict,
     evidence: obs.map((o) => `${o.perCase}/case (${o.pieces}pcs/${o.cartons}ctn) ${o.file.slice(0, 40)}`).join(' | '),
     suggestion,
@@ -207,12 +211,67 @@ if (byVerdict('conflicting').length) {
   }
 }
 
+// An .xlsx as well as the CSV, because this list is worked through by hand in
+// Excel: one tab per verdict so the actionable 300 aren't mixed with the ones
+// still needing a decision, plus a pattern summary — the 271 corrections are
+// only 14 distinct shapes, and the largest covers 225 products, so reviewing
+// the patterns is far quicker than reading 271 rows.
+if (WRITE_XLSX) {
+  const SPEC = /(\d+)\/pk\s+(\d+)bx\/cs\s+cs\.(\d+)/
+
+  const sheetRows = (subset: Row[]) =>
+    subset.map((r) => ({
+      SKU: r.sku,
+      'Current name': r.name,
+      'Case qty in name': r.namedCase,
+      'Case qty per documents': r.documentCase ?? '',
+      'Corrected name': r.suggestion,
+      'Field that was wrong':
+        r.suggestion && r.documentCase != null
+          ? r.documentCase === r.namedCase
+            ? 'bx (cs.N was right)'
+            : 'cs.N'
+          : '',
+      Note: r.note,
+      Evidence: r.evidence,
+    }))
+
+  const patterns = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.suggestion) continue
+    const a = SPEC.exec(r.name)
+    const b = SPEC.exec(r.suggestion)
+    if (!a || !b) continue
+    const key = `${a[1]}/pk ${a[2]}bx/cs cs.${a[3]}  ->  ${b[1]}/pk ${b[2]}bx/cs cs.${b[3]}`
+    patterns.set(key, (patterns.get(key) ?? 0) + 1)
+  }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet(
+      [...patterns.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([pattern, count]) => ({ Products: count, Correction: pattern })),
+    ),
+    'Patterns',
+  )
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('confirmed'))), 'Confirmed')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('conflicting'))), 'Documents disagree')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows(byVerdict('no-evidence'))), 'No document found')
+
+  const dest = path.join(ROOT, 'data', 'pack-spec-verification.xlsx')
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  XLSX.writeFile(wb, dest)
+  console.log(`\nWorkbook written to ${dest}`)
+}
+
 if (WRITE_CSV) {
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
   const out = [
-    'sku,current_name,named_case_qty,verdict,suggested_name,note,evidence',
+    'sku,current_name,named_case_qty,document_case_qty,verdict,suggested_name,note,evidence',
     ...rows.map((r) =>
-      [r.sku, esc(r.name), String(r.namedCase), r.verdict, esc(r.suggestion), esc(r.note), esc(r.evidence)].join(','),
+      [r.sku, esc(r.name), String(r.namedCase), String(r.documentCase ?? ''), r.verdict, esc(r.suggestion), esc(r.note), esc(r.evidence)].join(','),
     ),
   ]
   const dest = path.join(ROOT, 'data', 'pack-spec-verification.csv')

@@ -3,7 +3,9 @@ import {
   auditProductName,
   buildProductName,
   formatPackSpec,
+  isSoldByPack,
   normalizeDescriptor,
+  PACK_SOLD_SKUS,
   parseProductName,
 } from '@/lib/product-naming'
 
@@ -111,5 +113,35 @@ describe('auditProductName', () => {
 
   it('leaves a compliant name without a suggestion', () => {
     expect(auditProductName('Pizza Squishy - 12/pk 8bx/cs cs.96').suggestion).toBeNull()
+  })
+})
+
+describe('pack-sold exception', () => {
+  // The 8 Gift Bows were deliberately renamed to "20/pk 100bx/cs cs.100" in an
+  // earlier session: 20 per pack, 100 PACKS per case, so cs.N is not pk x bx.
+  // Before this exception existed, the verification tool proposed cs.1000 for
+  // them — reverting a decision that had already been made on purpose.
+  const bowName = '10" Gold Gift Bow - 20/pk 100bx/cs cs.100'
+
+  it('does not flag a pack-sold SKU for a case total that is not pk x bx', () => {
+    expect(auditProductName(bowName, { sku: 'F286801' }).issues).toEqual([])
+  })
+
+  it('is case-insensitive about the SKU', () => {
+    expect(auditProductName(bowName, { sku: 'f286801' }).issues).toEqual([])
+  })
+
+  it('still flags the same shape for a piece-sold SKU', () => {
+    expect(auditProductName(bowName, { sku: 'F287684' }).issues).toContain('case_total_mismatch')
+  })
+
+  it('flags it when no SKU is supplied, since the name alone cannot say', () => {
+    expect(auditProductName(bowName).issues).toContain('case_total_mismatch')
+  })
+
+  it('exposes the list so tools can report rather than silently skip', () => {
+    expect(isSoldByPack('F286796')).toBe(true)
+    expect(isSoldByPack('F287684')).toBe(false)
+    expect(PACK_SOLD_SKUS.size).toBe(8)
   })
 })
