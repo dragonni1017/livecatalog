@@ -4,7 +4,10 @@ import {
   buildCustomerFullQueryRq,
   buildCustomerQueryRq,
   buildItemAddRq,
+  buildItemFullQueryRq,
   buildItemQueryRq,
+  parseItemFullQueryRs,
+  skuFromItemFullName,
   buildSalesOrderAddRq,
   compactRefNumber,
   fallbackPoNumber,
@@ -385,5 +388,108 @@ describe('parseSalesOrderAddRs', () => {
     expect(result.status.ok).toBe(false)
     expect(result.status.code).toBe(3140)
     expect(result.txnId).toBeUndefined()
+  })
+})
+
+describe('buildItemFullQueryRq', () => {
+  it('starts an unfiltered, paged query that includes inactive items', () => {
+    const xml = buildItemFullQueryRq({ iterator: 'Start', maxReturned: 100 })
+    expect(xml).toContain('<ItemQueryRq requestID="1" iterator="Start">')
+    expect(xml).toContain('<MaxReturned>100</MaxReturned>')
+    // A discontinued item is exactly the one you want to recognise rather
+    // than silently re-create, so the default ActiveOnly is overridden.
+    expect(xml).toContain('<ActiveStatus>All</ActiveStatus>')
+    expect(xml).not.toContain('<FullName>')
+  })
+
+  it('resumes with the iteratorID QuickBooks handed back', () => {
+    const xml = buildItemFullQueryRq({ iterator: 'Continue', iteratorID: '{iter-9}', maxReturned: 100 })
+    expect(xml).toContain('iterator="Continue"')
+    expect(xml).toContain('iteratorID="{iter-9}"')
+  })
+
+  it('falls back to Start when asked to continue with no iteratorID', () => {
+    // Resuming without one would be rejected by QuickBooks; starting over is
+    // the recoverable behaviour.
+    expect(buildItemFullQueryRq({ iterator: 'Continue', iteratorID: null })).toContain('iterator="Start"')
+  })
+})
+
+describe('skuFromItemFullName', () => {
+  // QuickBooks sub-items carry their parent in FullName. A QBD Item List
+  // export needed 813 of these stripped before it matched the catalog.
+  it('strips a parent-item prefix', () => {
+    expect(skuFromItemFullName('Backpack:F286716')).toBe('F286716')
+  })
+
+  it('leaves a plain SKU alone and keeps hyphenated variants intact', () => {
+    expect(skuFromItemFullName('F286716')).toBe('F286716')
+    expect(skuFromItemFullName('Plush:P273814-60cm')).toBe('P273814-60cm')
+  })
+})
+
+describe('parseItemFullQueryRs', () => {
+  it('collects every item type, not just one Ret element', () => {
+    // An unfiltered item query returns a different element per item type.
+    // Assuming one would silently drop most of the list.
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorRemainingCount="0">
+        <ItemInventoryRet><ListID>80000001-1</ListID><FullName>F287759</FullName><SalesDesc>White Heart Triple Set Fuzzy-24pcs/cs</SalesDesc><SalesPrice>12.50</SalesPrice><IsActive>true</IsActive></ItemInventoryRet>
+        <ItemNonInventoryRet><ListID>80000002-2</ListID><FullName>Backpack:F286716</FullName><SalesOrPurchase><Desc>Kids Backpack</Desc><Price>7.25</Price></SalesOrPurchase></ItemNonInventoryRet>
+        <ItemServiceRet><ListID>80000003-3</ListID><FullName>Freight</FullName><SalesOrPurchase><Desc>Freight charge</Desc></SalesOrPurchase></ItemServiceRet>
+      </ItemQueryRs></QBXMLMsgsRs></QBXML>`
+    const r = parseItemFullQueryRs(xml)
+
+    expect(r.status.ok).toBe(true)
+    expect(r.items).toHaveLength(3)
+    expect(r.items.map((i) => i.itemType).sort()).toEqual(['Inventory', 'NonInventory', 'Service'])
+  })
+
+  it('normalises the description whether it is SalesDesc or nested under SalesOrPurchase', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <ItemInventoryRet><ListID>1</ListID><FullName>A</FullName><SalesDesc>inventory desc</SalesDesc><SalesPrice>3</SalesPrice></ItemInventoryRet>
+        <ItemNonInventoryRet><ListID>2</ListID><FullName>B</FullName><SalesOrPurchase><Desc>non-inventory desc</Desc><Price>4.5</Price></SalesOrPurchase></ItemNonInventoryRet>
+      </ItemQueryRs></QBXMLMsgsRs></QBXML>`
+    const r = parseItemFullQueryRs(xml)
+
+    expect(r.items.find((i) => i.fullName === 'A')).toMatchObject({ salesDesc: 'inventory desc', salesPrice: 3 })
+    expect(r.items.find((i) => i.fullName === 'B')).toMatchObject({ salesDesc: 'non-inventory desc', salesPrice: 4.5 })
+  })
+
+  it('derives sku from a parent-prefixed FullName while keeping the original', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <ItemInventoryRet><ListID>1</ListID><FullName>Backpack:F286716</FullName></ItemInventoryRet>
+      </ItemQueryRs></QBXMLMsgsRs></QBXML>`
+    expect(parseItemFullQueryRs(xml).items[0]).toMatchObject({ fullName: 'Backpack:F286716', sku: 'F286716' })
+  })
+
+  it('reads the iterator so a multi-page pull can resume', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorID="{iter-7}" iteratorRemainingCount="5517">
+        <ItemInventoryRet><ListID>1</ListID><FullName>A</FullName></ItemInventoryRet>
+      </ItemQueryRs></QBXMLMsgsRs></QBXML>`
+    const r = parseItemFullQueryRs(xml)
+    expect(r.iteratorId).toBe('{iter-7}')
+    expect(r.remainingCount).toBe(5517)
+  })
+
+  it('returns no items on an error status rather than a partial page', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="3100" statusSeverity="Error" statusMessage="Something failed" />
+      </QBXMLMsgsRs></QBXML>`
+    const r = parseItemFullQueryRs(xml)
+    expect(r.status.ok).toBe(false)
+    expect(r.items).toEqual([])
+  })
+
+  it('skips a Ret with no ListID or FullName instead of writing a junk row', () => {
+    const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs>
+      <ItemQueryRs requestID="1" statusCode="0" statusSeverity="Info" statusMessage="Status OK">
+        <ItemInventoryRet><ListID>1</ListID></ItemInventoryRet>
+        <ItemInventoryRet><ListID>2</ListID><FullName>Good</FullName></ItemInventoryRet>
+      </ItemQueryRs></QBXMLMsgsRs></QBXML>`
+    expect(parseItemFullQueryRs(xml).items.map((i) => i.fullName)).toEqual(['Good'])
   })
 })
