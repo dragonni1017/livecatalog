@@ -10,6 +10,7 @@ import {
   PackingListError,
   type SheetRow,
 } from '@/lib/packing-list'
+import { blockersForDelete } from '@/lib/receiving'
 
 export const dynamic = 'force-dynamic'
 
@@ -266,5 +267,82 @@ export async function PATCH(request: NextRequest) {
   } catch (err) {
     console.error('[admin/shipments PATCH] error:', err)
     return NextResponse.json({ error: 'Failed to update the shipment.' }, { status: 500 })
+  }
+}
+
+// DELETE ?shipment_id=… — discard a staged shipment so its file can be
+// re-staged from scratch.
+//
+// This exists for a classification that has gone stale, not for undoing a
+// receipt: `match_status` is decided once at staging, and the unique
+// `file_hash` makes a re-upload reopen the same rows rather than re-resolve
+// them, so a shipment staged before a matching rule changed can otherwise
+// only be cleared in the SQL editor. `abandoned` doesn't release the file
+// either, because the POST lookup above doesn't filter on status.
+//
+// The guard lives in lib/receiving.ts next to the apply/create predicates, so
+// the UI and this route can't disagree about what's safe to remove.
+export async function DELETE(request: NextRequest) {
+  try {
+    const shipmentId = request.nextUrl.searchParams.get('shipment_id')
+    if (!shipmentId) return NextResponse.json({ error: 'Missing shipment_id' }, { status: 400 })
+
+    const db = getAdminClient()
+    const { data: shipment } = await db.from('shipments').select('*').eq('id', shipmentId).maybeSingle()
+    if (!shipment) return NextResponse.json({ error: 'Shipment not found.' }, { status: 404 })
+
+    const { data: lines, error: linesError } = await db
+      .from('shipment_lines')
+      .select('*')
+      .eq('shipment_id', shipmentId)
+    // Read the lines before deciding. Treating a failed read as "no lines"
+    // would turn a transient error into permission to delete a shipment whose
+    // stock is already in Erply.
+    if (linesError) return NextResponse.json({ error: linesError.message }, { status: 400 })
+
+    const blockers = blockersForDelete(shipment, lines ?? [])
+    if (blockers.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            `This shipment can't be deleted: ${blockers.join('; ')}. ` +
+            `Registering stock and creating products are one-way actions in Erply, and these rows are the record that they happened — ` +
+            `deleting them would hide the receipt, not reverse it.`,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Re-check the guard inside the delete itself. Between the read above and
+    // this write, an apply could have landed; `status` is what that sets, so
+    // matching on it makes the delete a no-op rather than a race.
+    const { data: deleted, error } = await db
+      .from('shipments')
+      .delete()
+      .eq('id', shipmentId)
+      .eq('status', shipment.status)
+      .select('id')
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (!deleted || deleted.length === 0) {
+      return NextResponse.json(
+        { error: 'The shipment changed while it was being deleted — reload and check its status before retrying.' },
+        { status: 409 },
+      )
+    }
+
+    const actor = await getActorEmail()
+    await logAudit({
+      action: 'shipment_deleted',
+      entity_type: 'shipment',
+      entity_id: shipmentId,
+      entity_label: shipment.container_ref || shipment.file_name,
+      old_value: `${shipment.status}, ${lines?.length ?? 0} lines`,
+      performed_by: actor,
+    })
+
+    return NextResponse.json({ ok: true, deleted_lines: lines?.length ?? 0 })
+  } catch (err) {
+    console.error('[admin/shipments DELETE] error:', err)
+    return NextResponse.json({ error: 'Failed to delete the shipment.' }, { status: 500 })
   }
 }
