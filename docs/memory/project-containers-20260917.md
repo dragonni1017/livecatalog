@@ -108,6 +108,23 @@ either, because the POST lookup doesn't filter on status. **There is no DELETE
 route** — `app/admin/api/shipments/route.ts` has GET/POST/PATCH only, so
 removing a stale shipment needs SQL:
 `delete from shipments where id = 'a6b93a58-090e-4e3c-8b19-3968f5ac96ed';`
-(lines cascade). Worth adding a guarded DELETE for `staged` shipments with no
-`applied_at` and no `erply_created_product_id`, since this will recur every
-time a classification rule changes.
+(lines cascade). **RESOLVED 2026-09-18:** the stale shipment was deleted, and
+`app/admin/api/shipments` now has a guarded `DELETE ?shipment_id=`, so this no
+longer needs the SQL editor. The guard is `blockersForDelete` in
+`lib/receiving.ts`, next to the apply/create predicates so the UI and the
+route can't drift. It blocks on ANY irreversible work — an applied status, any
+`applied_at`, any `erply_created_product_id` — because those rows are the only
+record that a one-way Erply add happened: deleting them would hide the receipt
+rather than reverse it, and would let the same file be staged and applied a
+second time. Verified live against a throwaway row: a delete guarded on a
+stale status returns 0 rows without erroring (so the route 409s rather than
+silently reporting success), the matching status returns 1, lines cascade with
+no orphans, and the freed `file_hash` re-stages. The "Previous shipments"
+table on `/admin/receiving` calls it, running the same predicate client-side
+to decide whether to offer the button — the history rows don't carry their
+lines, so it sees status alone for every row but the one currently open, and
+the server is what actually refuses. A blocked row reads "kept as a receipt"
+with the reasons in its title. Note this is distinct from **abandon**, which
+sets `status='abandoned'` but leaves the row holding the `file_hash`, so a
+re-upload reopens the abandoned shipment with its stale classification —
+abandon is not a way to re-stage a file.

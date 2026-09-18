@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { isCreatable, isStockAppliable, missingForCreate, type ReceivingLine } from '@/lib/receiving'
+import {
+  blockersForDelete,
+  isCreatable,
+  isStockAppliable,
+  missingForCreate,
+  type ReceivingLine,
+} from '@/lib/receiving'
 
 const line = (over: Partial<ReceivingLine> = {}): ReceivingLine => ({
   match_status: 'matched',
@@ -102,5 +108,45 @@ describe('missingForCreate', () => {
         line({ match_status: 'unmatched_sku', proposed_name: 'X', proposed_category: 'Toys', proposed_price_cents: 0 }),
       ),
     ).toEqual([])
+  })
+})
+
+describe('blockersForDelete', () => {
+  const staged = { status: 'staged' }
+
+  it('allows deleting a staged shipment that has done nothing irreversible', () => {
+    // The EMCU8323054 case: staged before the SKU-casing fix, so its
+    // match_status was stale, but no stock registered and no product created.
+    expect(blockersForDelete(staged, [line({ match_status: 'unmatched_sku' }), line()])).toEqual([])
+  })
+
+  it('allows deleting a shipment with no lines at all', () => {
+    expect(blockersForDelete(staged, [])).toEqual([])
+  })
+
+  it('refuses once any line has registered stock', () => {
+    // These rows are the only record that a one-way Erply add happened.
+    // Deleting them would hide the receipt, not reverse it — and would let
+    // the same file be staged and applied again.
+    const blockers = blockersForDelete(staged, [line(), line({ applied_at: '2026-09-18T00:00:00Z' })])
+    expect(blockers).toHaveLength(1)
+    expect(blockers[0]).toMatch(/1 line\(s\) have already had their stock registered/)
+  })
+
+  it('refuses once any line created a product', () => {
+    const blockers = blockersForDelete(staged, [line({ erply_created_product_id: 3081 })])
+    expect(blockers[0]).toMatch(/created a product/)
+  })
+
+  it('refuses an applied shipment even if its lines look clean', () => {
+    expect(blockersForDelete({ status: 'applied' }, [line()])).toEqual(['the shipment is marked applied'])
+  })
+
+  it('reports every reason at once rather than the first', () => {
+    const blockers = blockersForDelete({ status: 'applied' }, [
+      line({ applied_at: '2026-09-18T00:00:00Z' }),
+      line({ erply_created_product_id: 3081 }),
+    ])
+    expect(blockers).toHaveLength(3)
   })
 })

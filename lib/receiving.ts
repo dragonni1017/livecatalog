@@ -61,3 +61,41 @@ export function missingForCreate(line: ReceivingLine): string[] {
   if (line.proposed_price_cents == null) missing.push('price')
   return missing
 }
+
+export interface ReceivingShipment {
+  status: string
+}
+
+/**
+ * Why a shipment may NOT be deleted — empty means it may.
+ *
+ * Deleting is for a shipment staged against rules that have since changed:
+ * `match_status` is decided once at staging and never revisited, and the
+ * unique `file_hash` means re-uploading the same workbook reopens the same
+ * stale rows rather than reclassifying them. `abandoned` doesn't help either,
+ * because the POST lookup doesn't filter on status — so without this, a stale
+ * shipment can only be cleared in the SQL editor. That happened for real on
+ * EMCU8323054: staged hours before the SKU-casing fix, it had frozen
+ * `p273762` as unmatched and would have created a duplicate of the existing
+ * P273762 (docs/memory/project-containers-20260917.md).
+ *
+ * What it is NOT for is undoing a receipt. Registered stock and created
+ * products are one-way facts that live in Erply, and these rows are the only
+ * record that they happened — deleting that record wouldn't reverse the
+ * action, just hide it, and the next upload of the same file would happily
+ * register the whole container a second time. So any irreversible work at all
+ * blocks the delete, and the reasons are returned rather than collapsed into
+ * a boolean so the caller can say which one applies.
+ */
+export function blockersForDelete(shipment: ReceivingShipment, lines: ReceivingLine[]): string[] {
+  const blockers: string[] = []
+  if (shipment.status === 'applied') blockers.push('the shipment is marked applied')
+
+  const applied = lines.filter((l) => l.applied_at).length
+  if (applied > 0) blockers.push(`${applied} line(s) have already had their stock registered in Erply`)
+
+  const created = lines.filter((l) => l.erply_created_product_id).length
+  if (created > 0) blockers.push(`${created} line(s) created a product in Erply`)
+
+  return blockers
+}
