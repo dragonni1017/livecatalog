@@ -30,20 +30,24 @@ Zero parse rejections on all three; `总PCS` format throughout, cm/kg headers.
 
 **Data problems these files exposed (not fixed — need a human call):**
 
-- **K229480's truncated barcode — FIXED 2026-09-17.** Both systems held 11
-  digits (`73787910121`); the sheet's `737879101216` check-digit-validates and
-  its neighbour K229479 is the adjacent `737879101209`, so the stored value
-  had lost its check digit. Corrected via `scripts/fix-k229480-barcode.mjs`.
-  **Erply was written first, and that ordering is the point**: the daily sync
-  reads Erply's `code2` back into `products.barcode`
-  (`app/api/sync/route.ts`), so any Supabase-only barcode fix reverts within a
-  day. The script snapshots the whole Erply record and diffs every field after
-  `saveProduct` (0 drifted here) because of the 2026-08-04 incident in
-  [[project-retail-anchor-pricing-flip]].
-  Three other 11-digit barcodes remain — K02565, L61981, K01873, all
-  `manually_hidden`, all on the unrelated `91671…` prefix. Deliberately left
-  alone: K229480 was only safe to correct because a container sheet and an
-  adjacent SKU independently agreed, and these three have no second source.
+- **K229480's short barcode — "fixed" 2026-09-17, REVERTED 2026-09-18. Do not
+  redo this.** Both systems held 11 digits (`73787910121`) against the arrival
+  list's `737879101216`, and that was rewritten in Erply and Supabase on the
+  theory that a UPC-A had lost its check digit. **The theory was wrong.**
+  Barcode length varies legitimately on this account depending on when the
+  product was set up (Dragon, 2026-09-18) — 11 digits is not evidence of
+  truncation. The supporting arguments were both hollow: a check digit that
+  "validates" proves nothing, because appending the correct check digit to
+  *any* 11 digits yields a valid UPC-A, and a neighbouring SKU sharing a
+  prefix is not a second source. Restored verbatim in Erply then Supabase, 0
+  other fields drifted; both one-shot scripts deleted.
+  A paginated census (11 short barcodes, not the 4 first reported — that
+  count came from an unpaginated query silently capped at PostgREST's 1000
+  rows) shows the shape: `11:11, 12:2929, 13:3, 14:1` across 2,944 barcoded
+  products. The 11 under-12s are F286653-WT, K01873, K01881, K01885, K02203,
+  K02311, K02561, K02565, K229480, L61981, T642055 — i.e. a whole `91671…`
+  cohort *and* several `73787…`, which is exactly what an era-of-setup
+  difference looks like rather than a set of individual typos.
 - **K229479 is a genuine mismatch**, correctly flagged: sheet says
   `0034635763`, catalog says `737879101209` — a different UPC series
   entirely, not a formatting difference.
