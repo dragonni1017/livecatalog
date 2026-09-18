@@ -68,6 +68,44 @@ describe('parsePackingListSheet', () => {
     expect(parsed.problems[2].problem).toMatch(/fractional/)
   })
 
+  // The 2026 supplier format puts a combined product-spec header
+  // (产品规格尺寸长*宽*高（CM）) to the LEFT of the real carton columns. It
+  // contains 长, 宽, 高 and "CM", so matching the first hit pointed all three
+  // axes at it — silently nulling cartons when the cell is text, and
+  // inventing an L=W=H cube when it's a number. 外箱 ("outer carton") is what
+  // tells the two apart.
+  it('reads carton dimensions past a combined product-spec column', () => {
+    const header = ['货号', 'UPC', '总PCS', '产品规格尺寸长*宽*高（CM）', ...HEADER.slice(3)]
+    const parsed = parsePackingListSheet([
+      header,
+      ['F288116', '737879112175', 1800, '57*57CM', 62, 32, 15, 17],
+    ])
+
+    expect(parsed.problems).toEqual([])
+    expect(parsed.lines[0]).toMatchObject({
+      sku: 'F288116',
+      qtyShipped: 1800,
+      caseLengthIn: 24.41,
+      caseWidthIn: 12.6,
+      caseHeightIn: 5.91,
+      caseWeightLb: 37.48,
+    })
+  })
+
+  it('does not mistake a numeric product-spec cell for a cube-shaped carton', () => {
+    const header = ['货号', 'UPC', '总PCS', '产品规格尺寸长*宽*高（CM）', ...HEADER.slice(3)]
+    const parsed = parsePackingListSheet([header, ['S121037', '1', 36000, 8.5, 62, 32, 15, 19]])
+
+    const line = parsed.lines[0]
+    expect(line.caseLengthIn).not.toBe(line.caseWidthIn)
+    expect(line.caseLengthIn).toBe(24.41)
+  })
+
+  it('refuses to choose between two unmarked dimension columns', () => {
+    const header = ['货号', '总PCS', '长(A)cm', '长(B)cm', '宽cm', '高cm', '毛重KG']
+    expect(() => parsePackingListSheet([header, ['F1', 10, 1, 2, 3, 4, 5]])).toThrow(/Ambiguous length/)
+  })
+
   it('treats a quantities-only sheet as valid, with null cartons', () => {
     const parsed = parsePackingListSheet([['货号', 'QTY'], ['F123456', 48]])
     expect(parsed.unitNote).toBeNull()

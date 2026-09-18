@@ -119,6 +119,36 @@ function findCol(headerRow, substrings) {
   return -1
 }
 
+function findAllCols(headerRow, substrings) {
+  const hits = []
+  for (let i = 0; i < headerRow.length; i++) {
+    const cell = headerRow[i]
+    if (typeof cell !== 'string') continue
+    if (substrings.every((s) => cell.includes(s))) hits.push(i)
+  }
+  return hits
+}
+
+// 外箱 = "outer carton" -- what separates the carton's dimensions from the
+// PRODUCT's. Mirrors findDimensionCol in lib/packing-list.ts; see that
+// docblock for the full story.
+//
+// The 2026 supplier format heads its product-spec column
+// 产品规格尺寸长*宽*高（CM）, a single cell containing 长, 宽, 高 AND "cm", to
+// the LEFT of the real 长cm(外箱) columns. So ['长','cm'] matched the spec
+// column and all three axes collapsed onto it, yielding either null cartons
+// (the cell is text like "57*57CM") or a bogus L=W=H cube (a bare number).
+// Returns -1 when it can't tell, so the caller errors loudly.
+const CARTON_MARKER = '外箱'
+function findDimensionCol(headerRow, substrings) {
+  const candidates = findAllCols(headerRow, substrings)
+  if (candidates.length <= 1) return candidates.length === 1 ? candidates[0] : -1
+  const carton = candidates.filter((i) => String(headerRow[i]).includes(CARTON_MARKER))
+  return carton.length === 1 ? carton[0] : -1
+}
+
+const DIMENSION_FIELDS = new Set(['lengthDim', 'widthDim', 'heightDim'])
+
 // Unit is read off the header text itself, never assumed. Returns the
 // factor to multiply by to get inches/pounds, or an error if the header
 // doesn't name a unit this script recognises.
@@ -171,7 +201,12 @@ const round2 = (n) => Math.round(n * 100) / 100
 // Barcodes have a documented leading-zero gap in this project (see
 // docs/memory/reference-barcode-backfill-handoff.md) -- compare digits only,
 // with leading zeros stripped, rather than exact string equality.
-const normalizeBarcode = (v) => String(v ?? '').trim().replace(/^0+/, '')
+// Digits only, leading zeros stripped -- mirrors normalizeBarcode in
+// lib/packing-list.ts. Every non-digit is dropped, not just the surrounding
+// whitespace: supplier sheets type UPCs with spaces inside them
+// (EGSU1396926 ships T641449 as "6  8140239892 8"), which is the same
+// barcode as the stored 681402398928.
+const normalizeBarcode = (v) => String(v ?? '').replace(/\D/g, '').replace(/^0+/, '')
 
 async function fetchCatalog(skus) {
   const bySku = new Map()
@@ -204,9 +239,15 @@ async function main() {
   const headerRow = sheetRows[headerRowIndex]
   const colIndex = {}
   for (const [field, substrings] of Object.entries(COLUMN)) {
-    const idx = findCol(headerRow, substrings)
+    const isDim = DIMENSION_FIELDS.has(field)
+    const idx = isDim ? findDimensionCol(headerRow, substrings) : findCol(headerRow, substrings)
     if (idx < 0) {
-      console.error(`Could not find a column for ${field} (looking for ${substrings.join(' + ')}) in the header row: ${JSON.stringify(headerRow)}`)
+      const matches = findAllCols(headerRow, substrings)
+      const why =
+        isDim && matches.length > 1
+          ? `${matches.length} headers match and ${matches.filter((i) => String(headerRow[i]).includes(CARTON_MARKER)).length} say ${CARTON_MARKER} (outer carton), so the carton column can't be told from the product one: ${matches.map((i) => `col ${i} ${JSON.stringify(headerRow[i])}`).join(', ')}`
+          : `looking for ${substrings.join(' + ')}`
+      console.error(`Could not find a column for ${field} (${why}) in the header row: ${JSON.stringify(headerRow)}`)
       process.exit(1)
     }
     colIndex[field] = idx
