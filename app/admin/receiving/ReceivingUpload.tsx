@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import { blockersForDelete } from '@/lib/receiving'
 import NewProductsPanel from './NewProductsPanel'
 
 // Client-side workbook read, same approach as components/admin/ExcelDropzone.tsx:
@@ -85,6 +86,7 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
   const [confirmNotReceived, setConfirmNotReceived] = useState(false)
   const [containerRef, setContainerRef] = useState('')
   const [notes, setNotes] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const eligible = lines.filter((l) => l.match_status === 'matched' && l.qty_received > 0 && !l.applied_at)
   const totalPieces = eligible.reduce((sum, l) => sum + l.qty_received, 0)
@@ -146,6 +148,62 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       setError('Could not read that file. Is it a real .xlsx/.xls workbook?')
     } finally {
       setParsing(false)
+    }
+  }
+
+  // Discards a staged shipment so its file can be staged again from scratch.
+  //
+  // Needed because `match_status` is decided once at staging and the unique
+  // file_hash makes a re-upload reopen the same rows — a shipment staged
+  // before a matching rule changed is stuck wrong, and "abandon" doesn't
+  // release the file either. The real guard is server-side in
+  // blockersForDelete; this only decides whether to offer the button, and the
+  // history rows don't carry their lines, so it sees status alone for
+  // everything but the shipment currently open. Anything it lets through and
+  // the server refuses comes back as the server's own reason.
+  async function deleteShipment(s: Shipment) {
+    const known = s.id === shipment?.id ? lines : []
+    const blockers = blockersForDelete(s, known)
+    if (blockers.length > 0) {
+      setError(`This shipment can't be deleted: ${blockers.join('; ')}.`)
+      return
+    }
+    if (
+      !confirm(
+        `Delete the staged shipment "${s.container_ref || s.file_name}"?\n\n` +
+          `Its ${s.line_count} staged lines go with it. No stock has been registered and no products created, ` +
+          `so nothing in Erply changes — you can upload the same file again to re-stage it.`,
+      )
+    )
+      return
+
+    setError(null)
+    setFlash(null)
+    setDeletingId(s.id)
+    try {
+      const res = await fetch(`/admin/api/shipments?shipment_id=${encodeURIComponent(s.id)}`, { method: 'DELETE' })
+      const err = await readApiError(res, 'Could not delete that shipment.')
+      if (err) {
+        setError(err)
+        return
+      }
+      setShipments((prev) => prev.filter((x) => x.id !== s.id))
+      // Clear the editor too if that's the shipment it was showing, or it
+      // would keep offering Apply for rows that no longer exist.
+      if (shipment?.id === s.id) {
+        setShipment(null)
+        setLines([])
+        setProblems([])
+        setUnitNote(null)
+        setContainerRef('')
+        setNotes('')
+        setConfirmNotReceived(false)
+      }
+      setFlash(`Deleted "${s.container_ref || s.file_name}". Upload the file again to re-stage it.`)
+    } catch {
+      setError(TRANSPORT_ERROR)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -499,6 +557,31 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
                     </td>
                     <td className="px-4 py-2 text-xs text-gray-500">
                       {new Date(s.applied_at ?? s.staged_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {(() => {
+                        // Same predicate the route enforces. Applied
+                        // shipments are the record of a one-way Erply add, so
+                        // the control says why rather than disappearing.
+                        const blockers = blockersForDelete(s, s.id === shipment?.id ? lines : [])
+                        if (blockers.length > 0) {
+                          return (
+                            <span className="text-xs text-gray-400" title={blockers.join('; ')}>
+                              kept as a receipt
+                            </span>
+                          )
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => deleteShipment(s)}
+                            disabled={deletingId === s.id}
+                            className="text-xs font-medium text-red-600 hover:text-red-800 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
+                          >
+                            {deletingId === s.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )
+                      })()}
                     </td>
                   </tr>
                 ))}

@@ -119,5 +119,12 @@ rather than reverse it, and would let the same file be staged and applied a
 second time. Verified live against a throwaway row: a delete guarded on a
 stale status returns 0 rows without erroring (so the route 409s rather than
 silently reporting success), the matching status returns 1, lines cascade with
-no orphans, and the freed `file_hash` re-stages. **No UI button yet** — the
-route exists but nothing calls it.
+no orphans, and the freed `file_hash` re-stages. The "Previous shipments"
+table on `/admin/receiving` calls it, running the same predicate client-side
+to decide whether to offer the button — the history rows don't carry their
+lines, so it sees status alone for every row but the one currently open, and
+the server is what actually refuses. A blocked row reads "kept as a receipt"
+with the reasons in its title. Note this is distinct from **abandon**, which
+sets `status='abandoned'` but leaves the row holding the `file_hash`, so a
+re-upload reopens the abandoned shipment with its stale classification —
+abandon is not a way to re-stage a file.
