@@ -49,6 +49,15 @@ const COLUMN: Record<string, string[]> = {
   cartons: ['箱数'],
 }
 
+// Which COLUMN fields are a carton dimension axis, and the label used when
+// one can't be resolved. 毛重 is deliberately absent: it names exactly one
+// column on every known sheet.
+const DIMENSION_AXES: Record<string, string> = {
+  lengthDim: 'length (长)',
+  widthDim: 'width (宽)',
+  heightDim: 'height (高)',
+}
+
 // The piece-count column is the one header that genuinely changes between
 // suppliers and years, so it's matched against a list of ALTERNATIVES rather
 // than one pattern. Confirmed live:
@@ -136,6 +145,55 @@ function findColAny(headerRow: SheetRow, alternatives: string[][]): number {
   return -1
 }
 
+function findAllCols(headerRow: SheetRow, substrings: string[]): number[] {
+  const needles = substrings.map((s) => s.toLowerCase())
+  const hits: number[] = []
+  for (let i = 0; i < headerRow.length; i++) {
+    const cell = headerRow[i]
+    if (typeof cell !== 'string') continue
+    const haystack = cell.toLowerCase()
+    if (needles.every((s) => haystack.includes(s))) hits.push(i)
+  }
+  return hits
+}
+
+// 外箱 = "outer carton". The marker that separates the carton's dimensions
+// from the PRODUCT's, and the reason a dimension column can't just be the
+// first header containing 长.
+const CARTON_MARKER = '外箱'
+
+/**
+ * Picks the carton dimension column for one axis.
+ *
+ * The 2026 supplier format heads its product-spec column
+ * `产品规格尺寸长*宽*高（CM）` — one cell containing 长 AND 宽 AND 高 AND "CM",
+ * sitting to the LEFT of the real `长cm(外箱)` / `宽cm(外箱)` / `高cm(外箱)`
+ * columns. Taking the first match therefore pointed all three axes at that
+ * single spec column, which silently produced either null cartons (the cell
+ * is text like "57*57CM") or a bogus L=W=H cube (the cell is a bare number).
+ * Both were found on the 2026-09-17 containers; the 2023 format was unaffected
+ * because its spec column isn't labelled with 长 at all.
+ *
+ * So: prefer the column that says 外箱. Fall back to a lone candidate, since a
+ * sheet with exactly one 长 column has nothing to confuse it with. Refuse to
+ * choose between several unmarked candidates rather than guess — a wrong
+ * carton dimension feeds Erply bin capacity as fact.
+ */
+function findDimensionCol(headerRow: SheetRow, axis: string, substrings: string[]): number {
+  const candidates = findAllCols(headerRow, substrings)
+  if (candidates.length <= 1) return candidates[0] ?? -1
+
+  const carton = candidates.filter((i) => String(headerRow[i]).includes(CARTON_MARKER))
+  if (carton.length === 1) return carton[0]
+
+  throw new PackingListError(
+    `Ambiguous ${axis} column: ${candidates.length} headers match ${substrings.join('+')} and ` +
+      `${carton.length === 0 ? 'none' : carton.length} say ${CARTON_MARKER} (outer carton) — ` +
+      `${candidates.map((i) => `col ${i} ${JSON.stringify(headerRow[i])}`).join(', ')}. ` +
+      `Refusing to guess which is the carton rather than the product.`,
+  )
+}
+
 interface UnitFactor {
   factor?: number
   unit?: string
@@ -194,7 +252,11 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   const headerRow = rows[headerRowIndex] ?? []
   const colIndex: Record<string, number> = {}
   for (const [field, substrings] of Object.entries(COLUMN)) {
-    colIndex[field] = findCol(headerRow, substrings)
+    // The three axes can collide with a combined product-spec header; the
+    // other columns are matched on text that only ever names one column.
+    colIndex[field] = DIMENSION_AXES[field]
+      ? findDimensionCol(headerRow, DIMENSION_AXES[field], substrings)
+      : findCol(headerRow, substrings)
   }
   colIndex.qty = findColAny(headerRow, QTY_COLUMN_ALTERNATIVES)
 

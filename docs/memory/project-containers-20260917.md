@@ -58,16 +58,56 @@ Zero parse rejections on all three; `总PCS` format throughout, cm/kg headers.
   because the unique `file_hash` reopens it with its stale classification.
   Either stage the second container after the create, or its 2,640 pieces
   strand.
-- **S121037's carton figures are impossible**: 3.35in cube at 41.89 lb for 72
-  pieces. It's the only line on any of the three sheets with carton
-  dimensions at all (91 of 92 are blank), so nothing depends on it — same
-  class of bad upstream value as the 28 noted in
-  [[project-product-measurements]].
+- ~~S121037's carton figures are impossible~~ — **our bug, not the
+  supplier's. Fixed 2026-09-18.** The "3.35in cube at 41.89 lb" and the 91 of
+  92 blank cartons had the same cause: `lengthDim: ['长']` matched the first
+  header containing 长, which on the 2026 format is the *product*-spec column
+  `产品规格尺寸长*宽*高（CM）` sitting left of the real `长cm(外箱)`. One cell
+  contains 长, 宽, 高 and "CM", so all three axes collapsed onto it — text
+  cells like `"57*57CM"` nulled the carton silently, numeric ones produced an
+  L=W=H cube. Both copies now prefer the column marked `外箱` (outer carton)
+  and throw rather than choose between unmarked candidates. After the fix all
+  92 lines carry real cartons, 0 cubes; S121037 reads 25 x 12.6 x 9.84 in at
+  41.89 lb. Do NOT record this as bad supplier data — see
+  [[project-product-measurements]] for the 28 that genuinely are.
+
+**Commercial Invoices found 2026-09-18** in the OneDrive `import documents`
+folder (not Downloads), one per container alongside an Original List and a
+Packing List. All three parse and reconcile *exactly* — invoice cartons equal
+the `NNNctn` in the filename and invoice pieces equal the packing list's
+total, on all three. Arrival List and Original List are byte-for-byte
+equivalent for parsing purposes; either works.
+
+Auto-naming covers **34 of the 68 new SKUs** (28 priced), and the shortfall is
+structural rather than a defect: **the invoice describes goods by customs
+category, so one row covers many SKUs** — EGSU8096690's single "Garland
+Ribbons 4cm" row (247ctn/8,600pcs) spans all 20 unmatched `FD400*-25YARD` /
+`FD500*` ribbons, and EMCU8323054 has 20 invoice rows for 37 SKUs. The join
+refuses to split an aggregate row, which is correct; those SKUs need a name
+typed by hand. EGSU1396926 is the clean case at 8/8 named. The Original List
+also carries a 品名 column the parser ignores (F288116's is `金边/香槟金`,
+"gold trim / champagne gold") — that is exactly what distinguishes invoice
+lines 1-4 from each other, so it's the obvious input if auto-naming is ever
+pushed further.
 
 **How to apply:** 68 of the 92 SKUs are new, so most of these pieces can't be
-received until Phase 2 creates the products — that needs the matching
-**Commercial Invoice** for each container, which was not in the Downloads
-folder with the arrival lists. Pricing stays a manual Erply step either way.
+received until Phase 2 creates the products. Pricing stays a manual Erply step
+either way.
 Receiving on top of the fake 1000 stock is fine — see
 [[project-fake-stock-1000-hold]]. Parser/flow background in
 [[project-receiving-phase-1]].
+
+**Open, blocked on a permission prompt (2026-09-18):** a shipment for
+EMCU8323054 is already staged (`a6b93a58-090e-4e3c-8b19-3968f5ac96ed`, staged
+2026-09-17 20:25 UTC) and carries the **pre-fix classification** — it froze
+`p273762` as `unmatched_sku`, so creating products from it would duplicate the
+existing `P273762` and strand 4,800 pieces. Nothing is applied and nothing
+created, so it is safe to delete, but a re-upload cannot fix it: the unique
+`file_hash` reopens the same rows, and `abandoned` does not release the file
+either, because the POST lookup doesn't filter on status. **There is no DELETE
+route** — `app/admin/api/shipments/route.ts` has GET/POST/PATCH only, so
+removing a stale shipment needs SQL:
+`delete from shipments where id = 'a6b93a58-090e-4e3c-8b19-3968f5ac96ed';`
+(lines cascade). Worth adding a guarded DELETE for `staged` shipments with no
+`applied_at` and no `erply_created_product_id`, since this will recur every
+time a classification rule changes.
