@@ -72,6 +72,29 @@ export function buildCustomerFullQueryRq(args: {
   return wrapQbxml(`<CustomerQueryRq requestID="1"${iterAttr}>${maxReturnedXml}</CustomerQueryRq>`)
 }
 
+// Unfiltered ItemQueryRq — the item-list counterpart of
+// buildCustomerFullQueryRq, using the identical iterator protocol. Used to
+// mirror QuickBooks' item list into qb_item_directory so a SKU arriving on a
+// container can be named from the record Dragon typed in QuickBooks.
+//
+// ActiveStatus defaults to ActiveOnly; "All" is passed explicitly so a
+// deliberately inactive item still comes back — it's the discontinued ones
+// you most want to recognise rather than silently re-create.
+export function buildItemFullQueryRq(args: {
+  iterator: 'Start' | 'Continue'
+  iteratorID?: string | null
+  maxReturned?: number
+}): string {
+  const iterAttr =
+    args.iterator === 'Continue' && args.iteratorID
+      ? ` iterator="Continue" iteratorID="${xmlEscape(args.iteratorID)}"`
+      : ` iterator="Start"`
+  const maxReturnedXml = args.maxReturned ? `<MaxReturned>${args.maxReturned}</MaxReturned>` : ''
+  return wrapQbxml(
+    `<ItemQueryRq requestID="1"${iterAttr}>${maxReturnedXml}<ActiveStatus>All</ActiveStatus></ItemQueryRq>`,
+  )
+}
+
 // A name-filtered CustomerQueryRq/ItemQueryRq that finds nothing returns
 // statusCode 500 (statusSeverity "Warn"), not an empty success result — the
 // signal callers use to fall back to CustomerAddRq/ItemNonInventoryAddRq
@@ -286,6 +309,93 @@ export function parseCustomerFullQueryRs(xml: string): CustomerFullQueryResult {
   const remainingCount = remainingRaw !== undefined ? Number(remainingRaw) : undefined
 
   return { status, customers, iteratorId, remainingCount }
+}
+
+export interface QbItemDirectoryEntry {
+  listId: string
+  /** QuickBooks' FullName verbatim — "Parent:Child" for a sub-item. */
+  fullName: string
+  /** Last ":"-separated segment of fullName, which is the real SKU. */
+  sku: string
+  salesDesc?: string
+  /** 'Inventory' | 'NonInventory' | 'Service' | 'InventoryAssembly' | … */
+  itemType?: string
+  salesPrice?: number
+  isActive?: boolean
+}
+
+export interface ItemFullQueryResult {
+  status: QbxmlStatus
+  items: QbItemDirectoryEntry[]
+  iteratorId?: string
+  remainingCount?: number
+}
+
+/**
+ * "Backpack:F286716" -> "F286716".
+ *
+ * QuickBooks sub-items carry their parent in FullName. A QBD Item List
+ * export needed exactly this stripped off 813 rows before it would match the
+ * catalog (scripts/fix-fullqbd-sku-prefixes.mjs), so the pull does it once
+ * here rather than leaving every consumer to rediscover it.
+ */
+export function skuFromItemFullName(fullName: string): string {
+  const parts = String(fullName).split(':')
+  return (parts[parts.length - 1] ?? '').trim()
+}
+
+/**
+ * Parses one page of an unfiltered ItemQueryRq.
+ *
+ * Unlike CustomerQueryRs, which only ever returns CustomerRet, an item query
+ * returns a DIFFERENT element per item type — ItemInventoryRet,
+ * ItemNonInventoryRet, ItemServiceRet, ItemInventoryAssemblyRet,
+ * ItemOtherChargeRet and so on — so every *Ret key is collected rather than
+ * one being assumed (the same reasoning as parseItemQueryRs, which already
+ * had to search for the key).
+ *
+ * The description also moves: inventory items carry SalesDesc directly,
+ * while non-inventory and service items nest it under SalesOrPurchase (or
+ * SalesAndPurchase for items both bought and sold). All three are
+ * normalised to salesDesc, because a caller naming a SKU does not care which
+ * QuickBooks item type it happens to be.
+ */
+export function parseItemFullQueryRs(xml: string): ItemFullQueryResult {
+  const rs = firstRsNode(xml, 'ItemQueryRs')
+  const status = readStatus(rs)
+  if (!status.ok) return { status, items: [] }
+
+  const items: QbItemDirectoryEntry[] = []
+  for (const key of rs ? Object.keys(rs) : []) {
+    if (!key.endsWith('Ret')) continue
+    // "ItemNonInventoryRet" -> "NonInventory"
+    const itemType = key.replace(/^Item/, '').replace(/Ret$/, '') || undefined
+    const raw = rs[key]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rets: any[] = Array.isArray(raw) ? raw : raw ? [raw] : []
+    for (const r of rets) {
+      if (!r?.ListID || !r?.FullName) continue
+      const sop = r.SalesOrPurchase ?? r.SalesAndPurchase
+      const desc = r.SalesDesc ?? sop?.Desc
+      const priceRaw = r.SalesPrice ?? sop?.Price
+      const price = priceRaw !== undefined && priceRaw !== null ? Number(priceRaw) : undefined
+      items.push({
+        listId: String(r.ListID),
+        fullName: String(r.FullName),
+        sku: skuFromItemFullName(String(r.FullName)),
+        salesDesc: desc ? String(desc) : undefined,
+        itemType,
+        salesPrice: Number.isFinite(price) ? price : undefined,
+        isActive: r.IsActive === undefined ? undefined : String(r.IsActive) === 'true',
+      })
+    }
+  }
+
+  const iteratorId = rs?.['@_iteratorID'] ? String(rs['@_iteratorID']) : undefined
+  const remainingRaw = rs?.['@_iteratorRemainingCount']
+  const remainingCount = remainingRaw !== undefined ? Number(remainingRaw) : undefined
+
+  return { status, items, iteratorId, remainingCount }
 }
 
 export function parseItemQueryRs(xml: string): QbxmlLookupResult {
