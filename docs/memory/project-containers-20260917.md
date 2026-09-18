@@ -128,3 +128,29 @@ with the reasons in its title. Note this is distinct from **abandon**, which
 sets `status='abandoned'` but leaves the row holding the `file_hash`, so a
 re-upload reopens the abandoned shipment with its stale classification —
 abandon is not a way to re-stage a file.
+
+**STAGED 2026-09-18** (by dragon@ly-usa.com, from the OneDrive *Original
+List* of each): all three containers are in `shipments` as `staged`, counts
+verified against prediction row by row — 37/117,440, 40/48,456, 15/66,036,
+with 92 of 92 lines carrying real cartons and 0 cubes. Nothing applied,
+nothing created.
+
+Worth knowing for next time: a first attempt appeared to succeed on screen
+but reached no server — `shipments` stayed empty and `audit_log` had no
+`shipment_staged` row for that day. The dev server simply wasn't running, and
+`/admin/receiving` redirecting to `/admin/login` read as "localhost is
+broken". **`audit_log` filtered to `entity_type = 'shipment'` is the quickest
+way to tell whether a stage actually happened** — but note it only records
+actions taken through the routes, so a direct DB write (like the stale-row
+delete earlier that day) leaves no trace there.
+
+Also confirmed: **staging writes to the live Supabase from localhost too** —
+`.env.local` points at the same project as production (`aguorduaxfqrvvywgrdi`),
+so a local dev server is not a sandbox. Harmless while staging, which touches
+no Erply, but it is the same data Apply would act on.
+
+**Next step is NOT Apply.** 68 of the 92 SKUs still need creating, only 34 of
+those have an auto-filled name, and K229582 must be created from EMCU8323054
+before EGSU8096690's copy is worth anything — delete and re-upload that
+container afterwards so its line flips to matched. Applying now would
+register the 54,972 matched pieces and leave the rest stranded mid-container.
