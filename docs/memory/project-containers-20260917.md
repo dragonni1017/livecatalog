@@ -154,3 +154,28 @@ those have an auto-filled name, and K229582 must be created from EMCU8323054
 before EGSU8096690's copy is worth anything — delete and re-upload that
 container afterwards so its line flips to matched. Applying now would
 register the 54,972 matched pieces and leave the rest stranded mid-container.
+
+**Categories set 2026-09-22** via `scripts/set-proposed-categories-20260922.mjs`:
+57 lines / 56 SKUs, all 8 names validated against live Erply product groups
+with the same check the create route runs (Ribbons 20, Floral Papers 14,
+Plush Toys 6, Flowers 6, Keychains 5, Seasonal Items 4, Squishy / Slime 1,
+Bags/Purses 1). Two useful facts from that pass:
+
+- **Erply has 73 assignable group names, not 19** — the 19 are top-level and
+  the create route matches any node by name, subgroups included. `Floral
+  Papers` is a real group and is the right home for the 14 "Glossy Floral
+  Paper" SKUs, which a keyword rule wrongly wanted to file under `Flowers`.
+  Near-duplicate groups exist from different import eras (`TOY` vs `Toys`,
+  `Keychain` vs `Keychains`, `Ribbon` vs `Ribbons`, `Bag/Purse` vs
+  `Bags/Purses`) — the plural forms are the ones in use.
+- 11 lines deliberately left blank: 7 awaiting a category decision
+  (D701142 lights, D701141 balloon, D701140 Thanksgiving, K229580
+  Christmas keychain, F288146/F288147 brooches, F288106 cellophane) and the
+  4 with no name (F287759, S162786, CM072601, H424272).
+
+Still blocking creation: **prices are blank on all 68 lines** and the create
+route requires them, even though Erply cannot accept a price over the API —
+`proposed_price_cents` is the record of intent for the manual Erply pass.
+And **creating and applying both need Erply, which is not configured on
+Vercel**, so both steps run from a local dev server or need `ERPLY_*` added
+there. Filling names does NOT — that route only touches Supabase.
