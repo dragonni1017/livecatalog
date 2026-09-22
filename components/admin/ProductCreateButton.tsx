@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ImageUploadField from './ImageUploadField'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import { useBackdropDismiss } from '@/lib/use-backdrop-dismiss'
 
 interface VolumeTier { min_qty: number; price_cents: number }
 interface Category { id: string; name: string }
@@ -43,6 +44,7 @@ export default function ProductCreateButton({ categories }: Props) {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [tiers, setTiers] = useState<VolumeTier[]>([])
   const [saving, setSaving] = useState(false)
+  const backdrop = useBackdropDismiss(() => { if (!saving) setOpen(false) })
   const [error, setError] = useState<string | null>(null)
 
   function openModal() {
@@ -144,10 +146,9 @@ export default function ProductCreateButton({ categories }: Props) {
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => !saving && setOpen(false)}
+          {...backdrop}
         >
           <form
-            onClick={(e) => e.stopPropagation()}
             onSubmit={save}
             className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
           >

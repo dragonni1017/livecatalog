@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { StockAdjustment } from '@/lib/types'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import { useBackdropDismiss } from '@/lib/use-backdrop-dismiss'
 
 interface Props {
   id: string
@@ -17,6 +18,7 @@ export default function StockAdjuster({ id, name, stockQty }: Props) {
   const [qty, setQty] = useState('')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState<'add' | 'remove' | null>(null)
+  const backdrop = useBackdropDismiss(() => { if (!saving) setOpen(false) })
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<StockAdjustment[] | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -89,9 +91,9 @@ export default function StockAdjuster({ id, name, stockQty }: Props) {
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => !saving && setOpen(false)}
+          {...backdrop}
         >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <h2 className="mb-1 text-lg font-bold text-gray-900">Adjust stock</h2>
             <p className="mb-4 text-xs text-gray-500 truncate">{name}</p>
 
