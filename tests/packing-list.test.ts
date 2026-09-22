@@ -112,6 +112,39 @@ describe('parsePackingListSheet', () => {
     expect(parsed.lines[0]).toMatchObject({ sku: 'F123456', qtyShipped: 48, caseLengthIn: null })
   })
 
+  // The 2026-08 arrival lists up to ETD 0803 carry BOTH columns: 总PCS is the
+  // line total, Qty/cs is pieces per case. A plain 'qty' substring matches
+  // 'Qty/cs', so before QTY_COLUMN_ALTERNATIVES was ordered and filtered this
+  // staged P273842's 900 pieces as 18 — silently, with a plausible number.
+  // Header text is verbatim from that file, newline inside 箱数 and all.
+  it('prefers 总PCS over a Qty/cs column that means pieces per case', () => {
+    const header = ['货号', 'UPC', 'Qty/cs', '箱数\r\nCTN', '总PCS']
+    const parsed = parsePackingListSheet([header, ['P273842', '0712345678901', 18, 50, 900]])
+
+    expect(parsed.lines[0]).toMatchObject({ sku: 'P273842', qtyShipped: 900 })
+  })
+
+  it('ignores case in the Qty/cs header it refuses', () => {
+    for (const label of ['qty/cs', 'QTY/CS', 'Qty/Cs']) {
+      const parsed = parsePackingListSheet([['货号', label, '总PCS'], ['P1', 18, 900]])
+      expect(parsed.lines[0].qtyShipped).toBe(900)
+    }
+  })
+
+  // Only Qty/cs and no 总PCS is a sheet whose line total simply isn't there.
+  // Refusing beats registering pieces-per-case as the received quantity.
+  it('refuses a sheet whose only quantity column is Qty/cs', () => {
+    expect(() => parsePackingListSheet([['货号', 'Qty/cs'], ['P1', 18]]))
+      .toThrow(/Could not find a piece-count column/)
+  })
+
+  // Qty/cs sits to the LEFT of the real QTY here: taking the leftmost 'qty'
+  // match and giving up would miss the usable column.
+  it('looks past a disqualified Qty/cs to a real QTY further right', () => {
+    const parsed = parsePackingListSheet([['货号', 'Qty/cs', 'QTY'], ['P1', 18, 900]])
+    expect(parsed.lines[0].qtyShipped).toBe(900)
+  })
+
   it('throws when the header is found but every line below it is unusable', () => {
     expect(() => parsePackingListSheet(sheet([['F1', '1', 'n/a', 1, 1, 1, 1]]))).toThrow(/no usable line items/)
   })
