@@ -178,6 +178,20 @@ export default async function QuickBooksSetupPage() {
                 </div>
                 <span className="text-gray-400">&rarr;</span>
               </a>
+
+              <a
+                href="/admin/quickbooks/items"
+                className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 hover:border-red-300 hover:shadow-sm transition-all"
+              >
+                <div>
+                  <p className="font-semibold text-gray-900">Pull the QuickBooks item list</p>
+                  <p className="text-gray-500">
+                    Mirror every QuickBooks item here so a new SKU arriving on a container can be
+                    named from the record you typed in QuickBooks.
+                  </p>
+                </div>
+                <span className="text-gray-400">&rarr;</span>
+              </a>
             </div>
           )}
         </div>

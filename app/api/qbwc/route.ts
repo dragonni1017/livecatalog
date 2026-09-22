@@ -8,6 +8,7 @@ import {
   buildCustomerFullQueryRq,
   buildCustomerQueryRq,
   buildItemAddRq,
+  buildItemFullQueryRq,
   buildItemQueryRq,
   buildSalesOrderAddRq,
   fallbackPoNumber,
@@ -16,6 +17,7 @@ import {
   parseCustomerFullQueryRs,
   parseCustomerQueryRs,
   parseItemAddRs,
+  parseItemFullQueryRs,
   parseItemQueryRs,
   parseSalesOrderAddRs,
   xmlEscape,
@@ -23,6 +25,7 @@ import {
 } from '@/lib/qbxml'
 
 const CUSTOMER_PULL_PAGE_SIZE = 100
+const ITEM_PULL_PAGE_SIZE = 100
 
 // Income account new auto-created items post to (SalesAndPurchase/
 // IncomeAccountRef in buildItemAddRq) — must exactly match an account name
@@ -136,6 +139,9 @@ type PendingRequestKind =
   // continuation state (the iterator) lives in qb_customer_pull_state
   // instead, since it must survive across separate authenticate() tickets.
   | 'customer_full_query'
+  // Same arrangement for the item list — continuation state lives in
+  // qb_item_pull_state (migration 0050).
+  | 'item_full_query'
 
 interface QbSession {
   ticket: string
@@ -184,6 +190,31 @@ async function updateCustomerPullState(db: Db, patch: Record<string, unknown>) {
     .from('qb_customer_pull_state')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', 1)
+}
+
+// Item pull — same singleton-state shape as the customer pull above, kept as
+// its own row and helpers rather than generalised, so one pull can never
+// clobber the other's iterator mid-page.
+async function getItemPullState(db: Db): Promise<QbCustomerPullState | null> {
+  const { data } = await db
+    .from('qb_item_pull_state')
+    .select('status, iterator_id, pulled_count, requested_at')
+    .eq('id', 1)
+    .maybeSingle()
+  return data as QbCustomerPullState | null
+}
+
+async function updateItemPullState(db: Db, patch: Record<string, unknown>) {
+  await db
+    .from('qb_item_pull_state')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+}
+
+function buildItemPullRequest(pull: { iterator_id: string | null }): string {
+  return pull.iterator_id
+    ? buildItemFullQueryRq({ iterator: 'Continue', iteratorID: pull.iterator_id, maxReturned: ITEM_PULL_PAGE_SIZE })
+    : buildItemFullQueryRq({ iterator: 'Start', maxReturned: ITEM_PULL_PAGE_SIZE })
 }
 
 function buildCustomerPullRequest(pull: { iterator_id: string | null }): string {
@@ -365,13 +396,28 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
       return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerPullRequest(pull)))
     }
     await clearPending(db, ticket)
+  } else if (session.pending_request_kind === 'item_full_query') {
+    const pull = await getItemPullState(db)
+    if (pull && pull.status === 'in_progress') {
+      return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildItemPullRequest(pull)))
+    }
+    await clearPending(db, ticket)
   } else if (!session.pending_request_kind) {
     // Not mid any other flow — check whether admin has requested a pull.
+    // Customers first, then items: if both are requested they run in
+    // separate sessions rather than interleaving, since QuickBooks' two
+    // iterators would otherwise both be live across the same round trips.
     const pull = await getCustomerPullState(db)
     if (pull && (pull.status === 'requested' || pull.status === 'in_progress')) {
       if (pull.status === 'requested') await updateCustomerPullState(db, { status: 'in_progress' })
       await setPending(db, ticket, 'customer_full_query', null, null)
       return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildCustomerPullRequest(pull)))
+    }
+    const itemPull = await getItemPullState(db)
+    if (itemPull && (itemPull.status === 'requested' || itemPull.status === 'in_progress')) {
+      if (itemPull.status === 'requested') await updateItemPullState(db, { status: 'in_progress' })
+      await setPending(db, ticket, 'item_full_query', null, null)
+      return simpleResult('sendRequestXML', 'sendRequestXMLResult', xmlEscape(buildItemPullRequest(itemPull)))
     }
   }
 
@@ -643,6 +689,41 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
         // incomplete snapshot, against which every unpulled customer would
         // look retired.
         await dropLinksRetiredInQuickBooks(db, pull?.requested_at ?? null)
+      }
+    }
+  } else if (session?.pending_request_kind === 'item_full_query') {
+    const result = parseItemFullQueryRs(responseXml)
+    const pull = await getItemPullState(db)
+    const pulledSoFar = (pull?.pulled_count ?? 0) + result.items.length
+    if (!result.status.ok) {
+      await updateItemPullState(db, { status: 'error', error_message: result.status.message || 'Item pull failed' })
+    } else {
+      if (result.items.length > 0) {
+        await db.from('qb_item_directory').upsert(
+          result.items.map((i) => ({
+            qb_item_list_id: i.listId,
+            full_name: i.fullName,
+            sku: i.sku,
+            sales_desc: i.salesDesc ?? null,
+            item_type: i.itemType ?? null,
+            sales_price: i.salesPrice ?? null,
+            is_active: i.isActive ?? null,
+            pulled_at: new Date().toISOString(),
+          })),
+        )
+      }
+      if (result.iteratorId && (result.remainingCount ?? 0) > 0) {
+        // Leaving pending set is what keeps the session alive for the next
+        // page — see the progress note at the end of this function.
+        await updateItemPullState(db, { status: 'in_progress', iterator_id: result.iteratorId, pulled_count: pulledSoFar })
+        shouldClearPending = false
+      } else {
+        await updateItemPullState(db, {
+          status: 'done',
+          iterator_id: null,
+          pulled_count: pulledSoFar,
+          completed_at: new Date().toISOString(),
+        })
       }
     }
   }
