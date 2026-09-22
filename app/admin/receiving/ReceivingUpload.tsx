@@ -87,6 +87,7 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
   const [containerRef, setContainerRef] = useState('')
   const [notes, setNotes] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [loadingId, setLoadingId] = useState<string | null>(null)
 
   const eligible = lines.filter((l) => l.match_status === 'matched' && l.qty_received > 0 && !l.applied_at)
   const totalPieces = eligible.reduce((sum, l) => sum + l.qty_received, 0)
@@ -148,6 +149,41 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       setError('Could not read that file. Is it a real .xlsx/.xls workbook?')
     } finally {
       setParsing(false)
+    }
+  }
+
+  // Reopens a shipment from the history table.
+  //
+  // Read-only: it loads the same state handleFile sets, so every downstream
+  // gate is unchanged — apply still re-reads the lines server-side and still
+  // refuses an already-applied shipment. `problems`/`unitNote` describe the
+  // parse that staged it and aren't stored, so they reset rather than
+  // carrying the previous shipment's values over.
+  async function openShipment(s: Shipment) {
+    if (s.id === shipment?.id || loadingId) return
+    setError(null)
+    setFlash(null)
+    setLoadingId(s.id)
+    try {
+      const res = await fetch(`/admin/api/shipments/${s.id}`)
+      const err = await readApiError(res, 'Could not open that shipment.')
+      if (err) {
+        setError(err)
+        return
+      }
+      const json = await res.json()
+      setShipment(json.shipment)
+      setLines(json.lines ?? [])
+      setProblems([])
+      setUnitNote(null)
+      setNotes(json.shipment?.notes ?? '')
+      setContainerRef(json.shipment?.container_ref ?? '')
+      setConfirmNotReceived(false)
+      setShipments((prev) => prev.map((p) => (p.id === json.shipment.id ? json.shipment : p)))
+    } catch {
+      setError(TRANSPORT_ERROR)
+    } finally {
+      setLoadingId(null)
     }
   }
 
@@ -536,10 +572,28 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
                 {shipments.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
+                  <tr key={s.id} className={s.id === shipment?.id ? 'bg-red-50' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-2">
-                      <p className="font-medium text-gray-900">{s.container_ref || s.file_name}</p>
-                      <p className="text-xs text-gray-400">{s.file_name}</p>
+                      {/* A button rather than a click on the whole row: the row
+                          also carries the delete control, and this keeps the
+                          open action reachable from the keyboard. */}
+                      <button
+                        type="button"
+                        onClick={() => openShipment(s)}
+                        disabled={loadingId !== null || s.id === shipment?.id}
+                        className="text-left disabled:cursor-default"
+                      >
+                        <p className="font-medium text-gray-900 hover:text-red-700">
+                          {s.container_ref || s.file_name}
+                          {s.id === shipment?.id && (
+                            <span className="ml-2 text-xs font-normal text-gray-500">open below</span>
+                          )}
+                          {loadingId === s.id && (
+                            <span className="ml-2 text-xs font-normal text-gray-500">opening…</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-400">{s.file_name}</p>
+                      </button>
                     </td>
                     <td className="px-4 py-2 text-gray-500">{s.line_count} SKUs</td>
                     <td className="px-4 py-2">
