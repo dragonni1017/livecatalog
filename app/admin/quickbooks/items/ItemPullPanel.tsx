@@ -22,6 +22,8 @@ interface PullInfo {
   ambiguousSkus: string[]
   /** In QuickBooks but with no description to use as a name. */
   noDescriptionSkus: string[]
+  /** A record exists but quotes a different case pack — likely a different product. */
+  packMismatchSkus: string[]
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -174,6 +176,17 @@ export default function ItemPullPanel({ initial }: { initial: PullInfo }) {
               won&apos;t be filled automatically — naming them from the wrong record is worse than
               leaving them blank:{' '}
               <span className="font-mono text-xs text-blue-900">{info.ambiguousSkus.join(', ')}</span>
+            </p>
+          )}
+          {info.packMismatchSkus.length > 0 && (
+            <p className="rounded-md bg-amber-100 px-3 py-2 text-amber-900">
+              <strong>
+                {info.packMismatchSkus.length} have a QuickBooks record that quotes a different case
+                pack
+              </strong>{' '}
+              than the container ships, so it&apos;s probably a different product — left blank
+              rather than named wrongly. Check these by hand:{' '}
+              <span className="font-mono text-xs">{info.packMismatchSkus.join(', ')}</span>
             </p>
           )}
           {info.noDescriptionSkus.length > 0 && (
