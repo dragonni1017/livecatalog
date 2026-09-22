@@ -179,3 +179,29 @@ route requires them, even though Erply cannot accept a price over the API —
 And **creating and applying both need Erply, which is not configured on
 Vercel**, so both steps run from a local dev server or need `ERPLY_*` added
 there. Filling names does NOT — that route only touches Supabase.
+
+**Names filled and price placeholdered 2026-09-22.** The QuickBooks fill ran
+through the UI (audit: `63 SKUs / 64 lines` — 64 because K229582 is named on
+both containers), leaving only F287759, S162786, CM072601 and H424272
+nameless. Price was then the single blocker on 57 lines, so
+`scripts/price-worklist-20260922.mjs` set **`proposed_price_cents = 0` as a
+placeholder** and exported `data/price-worklist-20260922.xlsx` (67 SKUs, one
+row per SKU) for a human to price.
+
+**The 0 is safe but must not be read as a decision.** Erply cannot accept a
+price over the API on this account, so every product is created at 0
+whatever this field says — the placeholder only satisfies the create route's
+validation, and the xlsx is the real worklist. DECIDED by Dragon
+2026-09-22: placeholder now, human pricing pass afterwards.
+
+**The worklist's invoice-price column came out empty**, because
+`invoice_unit_price_cents` is only populated when a Commercial Invoice is
+attached to a shipment in the New products panel, which hasn't been done.
+The invoices do carry unit prices ($0.70, $0.35, $2.10 …). Attaching each
+container's invoice would fill that column through the tested path —
+deliberately NOT re-parsed inside the worklist script, since that would
+duplicate `lib/commercial-invoice.ts` rather than use it.
+
+State after this pass: **57 of 68 lines creatable** (EGSU8096690 32,
+EMCU8323054 19, EGSU1396926 6). The 11 blocked are the 7 awaiting a category
+and the 4 with no name.
