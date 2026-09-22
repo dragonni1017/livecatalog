@@ -205,3 +205,39 @@ duplicate `lib/commercial-invoice.ts` rather than use it.
 State after this pass: **57 of 68 lines creatable** (EGSU8096690 32,
 EMCU8323054 19, EGSU1396926 6). The 11 blocked are the 7 awaiting a category
 and the 4 with no name.
+
+## Erply categories must be PATH LABELS, not bare group names
+
+Found 2026-09-22 by the single-SKU canary, which is the whole argument for
+doing one before fifty-seven.
+
+`lib/erply.ts getErplyProductGroups()` deliberately flattens the group tree
+into `Parent / Child` labels so two same-named children under different
+parents stay distinguishable, and the create route validates
+`proposed_category` against **those** labels. So a bare `Keychains` is
+rejected with *'category "Keychains" is not an Erply product group'* — which
+reads like the group is missing when it plainly exists as
+`General Merchandise / Keychains`.
+
+`set-proposed-categories-20260922.mjs` wrote bare names and "verified" them
+against a flat list of raw `g.name` values. **That is the wrong name set and
+it passed everything.** 38 of 56 lines would have failed at create time.
+Only top-level groups (`Seasonal Items`, `Floral Papers`) were unaffected —
+for those, label == name. Repaired by
+`scripts/fix-proposed-category-paths.mjs`, which resolves every target
+against a live walk using the same algorithm as `lib/erply.ts` and refuses
+to write a label that walk doesn't produce.
+
+Two things to carry forward:
+
+- **Validate against `getErplyProductGroups()`, never against raw
+  `getProductGroups` records.** The API's tree and the app's label set are
+  different things.
+- `Squishy / Slime` is itself a group name containing " / ", so its label is
+  `Toys / Squishy / Slime`. No split-on-separator heuristic survives that —
+  map such names explicitly.
+
+The canary itself (K229581 -> Erply **#3082**) came out correct: code,
+`code2` barcode 737879111864, the QuickBooks name verbatim, group Keychains
+(33), price 0 as expected since Erply refuses prices over the API, ACTIVE,
+and its line flipped to `matched` so the 7,200 pieces became appliable.
