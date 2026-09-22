@@ -16,6 +16,12 @@ interface PullInfo {
   directoryCount: number
   blankSkuCount: number
   blankSkusInQuickBooks: number
+  /** Not in QuickBooks at all — the list to go and enter. */
+  missingSkus: string[]
+  /** More than one QuickBooks item reduces to this SKU; never auto-filled. */
+  ambiguousSkus: string[]
+  /** In QuickBooks but with no description to use as a name. */
+  noDescriptionSkus: string[]
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -37,6 +43,8 @@ const STATUS_STYLE: Record<string, string> = {
 export default function ItemPullPanel({ initial }: { initial: PullInfo }) {
   const [info, setInfo] = useState<PullInfo>(initial)
   const [busy, setBusy] = useState(false)
+  const [filling, setFilling] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -77,7 +85,33 @@ export default function ItemPullPanel({ initial }: { initial: PullInfo }) {
     }
   }
 
+  async function fillNames() {
+    setError(null)
+    setFlash(null)
+    setFilling(true)
+    try {
+      const res = await fetch('/admin/api/qbwc/item-pull', { method: 'PUT' })
+      const err = await readApiError(res, 'Could not fill the names.')
+      if (err) {
+        setError(err)
+        return
+      }
+      const json = await res.json()
+      setFlash(
+        json.filled > 0
+          ? `Named ${json.filled} SKU${json.filled === 1 ? '' : 's'} across ${json.lines} shipment line${json.lines === 1 ? '' : 's'}. Review them on the receiving screen before creating the products.`
+          : 'Nothing to fill — no blank SKU had a usable QuickBooks description.',
+      )
+      await refresh()
+    } catch {
+      setError(TRANSPORT_ERROR)
+    } finally {
+      setFilling(false)
+    }
+  }
+
   const status = info.pull?.status ?? 'idle'
+  const canFill = info.blankSkusInQuickBooks > 0 && !filling && !live
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -112,21 +146,48 @@ export default function ItemPullPanel({ initial }: { initial: PullInfo }) {
       </div>
 
       {info.blankSkuCount > 0 && (
-        <p className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+        <div className="mb-4 space-y-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           {info.blankSkusInQuickBooks === 0 ? (
-            <>
+            <p>
               None of the {info.blankSkuCount} unnamed SKUs are in the mirrored list yet. If you have
               since set them up in QuickBooks, pull again — otherwise they still need entering there.
-            </>
+            </p>
           ) : (
-            <>
-              <strong>{info.blankSkusInQuickBooks}</strong> of {info.blankSkuCount} unnamed SKUs have a
-              QuickBooks record. The remaining{' '}
-              <strong>{info.blankSkuCount - info.blankSkusInQuickBooks}</strong> aren&apos;t in
-              QuickBooks and need entering there first.
-            </>
+            <p>
+              <strong>{info.blankSkusInQuickBooks}</strong> of {info.blankSkuCount} unnamed SKUs can be
+              named from QuickBooks.
+            </p>
           )}
-        </p>
+
+          {/* Each of the three reasons needs a different action, so they're
+              listed apart rather than summed into one "not found" count. */}
+          {info.missingSkus.length > 0 && (
+            <p>
+              <strong>{info.missingSkus.length} not in QuickBooks</strong> — enter these there, then
+              pull again:{' '}
+              <span className="font-mono text-xs text-blue-900">{info.missingSkus.join(', ')}</span>
+            </p>
+          )}
+          {info.ambiguousSkus.length > 0 && (
+            <p>
+              <strong>{info.ambiguousSkus.length} match more than one QuickBooks item</strong> and
+              won&apos;t be filled automatically — naming them from the wrong record is worse than
+              leaving them blank:{' '}
+              <span className="font-mono text-xs text-blue-900">{info.ambiguousSkus.join(', ')}</span>
+            </p>
+          )}
+          {info.noDescriptionSkus.length > 0 && (
+            <p>
+              <strong>{info.noDescriptionSkus.length} exist in QuickBooks but have no description</strong>{' '}
+              to use as a name:{' '}
+              <span className="font-mono text-xs text-blue-900">{info.noDescriptionSkus.join(', ')}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {flash && (
+        <p className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{flash}</p>
       )}
 
       {status === 'error' && info.pull?.error_message && (
@@ -148,6 +209,23 @@ export default function ItemPullPanel({ initial }: { initial: PullInfo }) {
         >
           {busy ? 'Requesting…' : status === 'idle' ? 'Pull item list' : 'Pull again'}
         </button>
+        {info.blankSkuCount > 0 && (
+          <button
+            type="button"
+            onClick={fillNames}
+            disabled={!canFill}
+            title={
+              live
+                ? 'Wait for the pull to finish first.'
+                : info.blankSkusInQuickBooks === 0
+                  ? 'No blank SKU has a usable QuickBooks description yet.'
+                  : undefined
+            }
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+          >
+            {filling ? 'Filling…' : `Fill ${info.blankSkusInQuickBooks} name${info.blankSkusInQuickBooks === 1 ? '' : 's'}`}
+          </button>
+        )}
         <p className="text-xs text-gray-500">
           {live
             ? `Pulled ${info.pull?.pulled_count ?? 0} so far. Web Connector runs on its own schedule — this can take a few minutes to start.`

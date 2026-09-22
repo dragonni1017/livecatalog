@@ -54,9 +54,33 @@ SKUs actually have a QuickBooks record — to make the difference obvious.
 Also note QBD carries ~5,617 items against a ~3,000-product catalog; whether
 that gap is history or genuinely missing products is unexamined.
 
-**NOT built yet:** nothing writes `shipment_lines.proposed_name` from the
-directory. The pull and the flagging exist; the auto-fill is the next step,
-deliberately left until a real pull confirms the field shapes against the
-live company file. See [[project-containers-20260917]] for the 68 SKUs this
+**FIRST REAL PULL, 2026-09-22: 6,770 items** — 6,634 Inventory, 130 Service,
+3 InventoryAssembly, 3 Discount; 6,587 carry a description, 1,055 are
+sub-items, 73 inactive. Of the 67 blank staged SKUs, **63 are nameable from
+QuickBooks** and only 4 are missing (F287760, S162786, CM072601, H424272) —
+far better than the 2-of-68 the stale September 4 export suggested. The
+descriptions are richer than the invoice's, carrying pack spec and carton
+dims: `Pig Weighted Paw Calm-Panion Plush - 24inch - 12/cs - 24x17x19 28lbs`.
+
+**The screen first reported 40, not 63 — this project's case-sensitivity
+trap, for the THIRD time.** QuickBooks writes `FD400004-25yard` and
+`P273813-45cm`; the panel upper-cased the staged SKU and compared it against
+the raw `sku` column with a case-sensitive `in`, missing 23 real matches and
+telling Dragon to enter 27 products when only 4 were missing. Fixed
+declaratively in migration **0051** (`sku_norm` generated column) rather than
+by remembering to upper-case at each call site — remembering has now failed
+three times. `fetchQbItemsBySku` falls back to an in-memory scan on error
+42703, so the code works either side of that migration.
+
+**Auto-fill shipped** as `PUT /admin/api/qbwc/item-pull`, with the matching
+in one place (`lib/qb-item-directory.ts`) so the count on screen and the
+write can't disagree. It writes only `proposed_name`: category and price are
+the other two things `missingForCreate()` wants, and neither is inferable
+here (a QuickBooks income account is not a catalog category, and pricing is
+a decided manual Erply step). Ambiguity is a refusal — 40 SKUs in the real
+pull have both a bare item and a `Backpack:`-prefixed sub-item, and naming
+from the wrong record is worse than leaving a blank. Updates target line
+ids, never an `ilike` on the SKU, because `_` and `%` are LIKE wildcards
+that would quietly rename other rows. See [[project-containers-20260917]] for the 68 SKUs this
 is meant to unblock and [[project-receiving-phase-1]] for where the names
 get used.

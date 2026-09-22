@@ -1,4 +1,5 @@
 import { getAdminClient } from '@/lib/supabase'
+import { resolveSkus } from '@/lib/qb-item-directory'
 import ItemPullPanel from './ItemPullPanel'
 
 export const dynamic = 'force-dynamic'
@@ -29,15 +30,21 @@ export default async function QbItemsPage() {
     .eq('match_status', 'unmatched_sku')
     .is('erply_created_product_id', null)
 
-  const blankSkus = [...new Set((blanks ?? []).filter((l) => !l.proposed_name).map((l) => String(l.sku).toUpperCase()))]
-  let blankSkusInQuickBooks = 0
-  for (let i = 0; i < blankSkus.length; i += 200) {
-    const { data: hits } = await db
-      .from('qb_item_directory')
-      .select('sku')
-      .in('sku', blankSkus.slice(i, i + 200))
-    blankSkusInQuickBooks += new Set((hits ?? []).map((h) => String(h.sku).toUpperCase())).size
-  }
+  // Deduped by upper-cased SKU but resolved through the shared helper, which
+  // matches on sku_norm. Comparing an upper-cased SKU against the raw `sku`
+  // column here is what made this screen report 40 of 67 when the real
+  // answer was 63 — QuickBooks writes "FD400004-25yard", the sheet says
+  // "FD400004-25YARD", and Postgres `in` is case-sensitive.
+  const blankSkus = [
+    ...new Map(
+      (blanks ?? []).filter((l) => !l.proposed_name).map((l) => [String(l.sku).toUpperCase(), String(l.sku)]),
+    ).values(),
+  ]
+  const resolutions = blankSkus.length > 0 ? await resolveSkus(db, blankSkus) : []
+  const blankSkusInQuickBooks = resolutions.filter((r) => r.match).length
+  const missingSkus = resolutions.filter((r) => r.problem === 'missing').map((r) => r.sku)
+  const ambiguousSkus = resolutions.filter((r) => r.problem === 'ambiguous').map((r) => r.sku)
+  const noDescriptionSkus = resolutions.filter((r) => r.problem === 'no_description').map((r) => r.sku)
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-10">
@@ -55,6 +62,9 @@ export default async function QbItemsPage() {
             directoryCount: directoryCount ?? 0,
             blankSkuCount: blankSkus.length,
             blankSkusInQuickBooks,
+            missingSkus,
+            ambiguousSkus,
+            noDescriptionSkus,
           }}
         />
       </div>
