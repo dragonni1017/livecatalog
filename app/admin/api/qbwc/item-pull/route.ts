@@ -38,7 +38,7 @@ export async function GET() {
   // a shipment that aren't in the catalog and have no name yet. This is the
   // number the pull exists to reduce, so it's worth showing next to it.
   const blank = await blankStagedLines(db)
-  const blankSkus = [...blank.values()].map((b) => b.sku)
+  const blankSkus = [...blank.values()].map((b) => ({ sku: b.sku, piecesPerCase: b.piecesPerCase }))
   const resolutions = blankSkus.length > 0 ? await resolveSkus(db, blankSkus) : []
 
   return NextResponse.json({
@@ -51,6 +51,7 @@ export async function GET() {
     missingSkus: resolutions.filter((r) => r.problem === 'missing').map((r) => r.sku),
     ambiguousSkus: resolutions.filter((r) => r.problem === 'ambiguous').map((r) => r.sku),
     noDescriptionSkus: resolutions.filter((r) => r.problem === 'no_description').map((r) => r.sku),
+    packMismatchSkus: resolutions.filter((r) => r.problem === 'pack_mismatch').map((r) => r.sku),
   })
 }
 
@@ -65,19 +66,26 @@ export async function GET() {
 // that stops being true without anyone noticing.
 async function blankStagedLines(
   db: ReturnType<typeof getAdminClient>,
-): Promise<Map<string, { sku: string; ids: string[] }>> {
+): Promise<Map<string, { sku: string; ids: string[]; piecesPerCase: number | null }>> {
   const { data } = await db
     .from('shipment_lines')
-    .select('id, sku, proposed_name, match_status, erply_created_product_id')
+    .select('id, sku, proposed_name, match_status, erply_created_product_id, pieces_per_case')
     .eq('match_status', 'unmatched_sku')
     .is('erply_created_product_id', null)
 
-  const grouped = new Map<string, { sku: string; ids: string[] }>()
+  const grouped = new Map<string, { sku: string; ids: string[]; piecesPerCase: number | null }>()
   for (const l of data ?? []) {
     if (l.proposed_name) continue
     const key = String(l.sku).toUpperCase()
-    const entry = grouped.get(key) ?? { sku: String(l.sku), ids: [] }
+    const entry = grouped.get(key) ?? { sku: String(l.sku), ids: [], piecesPerCase: null }
     entry.ids.push(String(l.id))
+    // Carried so the resolver can cross-check the case pack quoted in the
+    // QuickBooks description. Two containers shipping one SKU at different
+    // packs would make this unsafe to assume, so only a unanimous value is
+    // used — a disagreement leaves it null and the check simply doesn't run.
+    const ppc = l.pieces_per_case == null ? null : Number(l.pieces_per_case)
+    if (entry.ids.length === 1) entry.piecesPerCase = ppc
+    else if (entry.piecesPerCase !== ppc) entry.piecesPerCase = null
     grouped.set(key, entry)
   }
   return grouped
@@ -92,7 +100,7 @@ async function blankStagedLines(
 export async function PUT() {
   const db = getAdminClient()
   const blank = await blankStagedLines(db)
-  const blankSkus = [...blank.values()].map((b) => b.sku)
+  const blankSkus = [...blank.values()].map((b) => ({ sku: b.sku, piecesPerCase: b.piecesPerCase }))
   if (blankSkus.length === 0) return NextResponse.json({ ok: true, filled: 0, lines: 0, missing: [] })
 
   let resolutions
@@ -138,6 +146,7 @@ export async function PUT() {
     missing: resolutions.filter((r) => r.problem === 'missing').map((r) => r.sku),
     ambiguous: resolutions.filter((r) => r.problem === 'ambiguous').map((r) => r.sku),
     noDescription: resolutions.filter((r) => r.problem === 'no_description').map((r) => r.sku),
+    packMismatch: resolutions.filter((r) => r.problem === 'pack_mismatch').map((r) => r.sku),
   })
 }
 

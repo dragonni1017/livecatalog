@@ -26,7 +26,7 @@ export default async function QbItemsPage() {
 
   const { data: blanks } = await db
     .from('shipment_lines')
-    .select('sku, proposed_name, match_status')
+    .select('sku, proposed_name, match_status, pieces_per_case')
     .eq('match_status', 'unmatched_sku')
     .is('erply_created_product_id', null)
 
@@ -37,7 +37,16 @@ export default async function QbItemsPage() {
   // "FD400004-25YARD", and Postgres `in` is case-sensitive.
   const blankSkus = [
     ...new Map(
-      (blanks ?? []).filter((l) => !l.proposed_name).map((l) => [String(l.sku).toUpperCase(), String(l.sku)]),
+      (blanks ?? [])
+        .filter((l) => !l.proposed_name)
+        .map((l) => [
+          String(l.sku).toUpperCase(),
+          // pieces_per_case lets the resolver cross-check the case pack the
+          // QuickBooks description quotes — the difference between naming a
+          // box of flowers "Chenille Stems Gerbera Daisies" and "White Heart
+          // Triple Set Fuzzy".
+          { sku: String(l.sku), piecesPerCase: l.pieces_per_case == null ? null : Number(l.pieces_per_case) },
+        ]),
     ).values(),
   ]
   const resolutions = blankSkus.length > 0 ? await resolveSkus(db, blankSkus) : []
@@ -45,6 +54,7 @@ export default async function QbItemsPage() {
   const missingSkus = resolutions.filter((r) => r.problem === 'missing').map((r) => r.sku)
   const ambiguousSkus = resolutions.filter((r) => r.problem === 'ambiguous').map((r) => r.sku)
   const noDescriptionSkus = resolutions.filter((r) => r.problem === 'no_description').map((r) => r.sku)
+  const packMismatchSkus = resolutions.filter((r) => r.problem === 'pack_mismatch').map((r) => r.sku)
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-10">
@@ -65,6 +75,7 @@ export default async function QbItemsPage() {
             missingSkus,
             ambiguousSkus,
             noDescriptionSkus,
+            packMismatchSkus,
           }}
         />
       </div>

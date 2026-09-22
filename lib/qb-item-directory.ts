@@ -25,11 +25,28 @@ export interface SkuResolution {
   match?: QbDirectoryRow
   /**
    * Why this SKU can't be filled. `missing` is the actionable one — it means
-   * the product hasn't been set up in QuickBooks yet.
+   * the product hasn't been set up in QuickBooks yet. `pack_mismatch` is the
+   * dangerous one: a record exists but describes a different product.
    */
-  problem?: 'missing' | 'ambiguous' | 'no_description'
-  /** Every candidate, when ambiguous, so the UI can show what to choose between. */
+  problem?: 'missing' | 'ambiguous' | 'no_description' | 'pack_mismatch'
+  /** Every candidate, when ambiguous or conflicting, for the UI to show. */
   candidates?: QbDirectoryRow[]
+  /** How the match was made, for display — never hidden from the admin. */
+  basis?: 'exact' | 'exact+pack' | 'variant+pack'
+}
+
+/**
+ * Pulls the case pack out of a QuickBooks description: "… - 24/cs - …",
+ * "120 pcs/cs", "-24pcs/cs".
+ *
+ * This is the one field that can independently confirm a SKU match. The
+ * packing list gives pieces and cartons, so pieces-per-case is known for
+ * free, and a description quoting a different pack is describing a
+ * different product.
+ */
+export function parsePackSize(desc: string | null | undefined): number | null {
+  const m = String(desc ?? '').match(/(\d+)\s*(?:pcs?|pc)?\s*\/\s*cs/i)
+  return m ? Number(m[1]) : null
 }
 
 const COLUMNS = 'sku, full_name, sales_desc, item_type, sales_price, is_active'
@@ -111,22 +128,96 @@ async function fetchByScan(db: Db, wanted: Set<string>): Promise<Map<string, QbD
  * withhold the name. Where one candidate is active and the other isn't, the
  * active one wins — that is a real disambiguation rather than a guess.
  */
-export function resolveSku(sku: string, candidates: QbDirectoryRow[] | undefined): SkuResolution {
-  if (!candidates || candidates.length === 0) return { sku, problem: 'missing' }
+export function resolveSku(
+  sku: string,
+  candidates: QbDirectoryRow[] | undefined,
+  /** Pieces per case from the packing list, when the sheet gave cartons. */
+  expectedPackSize?: number | null,
+  /** QuickBooks items whose SKU starts with this one, e.g. "F287760- FLOWER". */
+  variants: QbDirectoryRow[] = [],
+): SkuResolution {
+  const described = (rows: QbDirectoryRow[]) => rows.filter((c) => c.sales_desc && String(c.sales_desc).trim())
+  const packMatches = (rows: QbDirectoryRow[]) =>
+    expectedPackSize == null ? [] : rows.filter((c) => parsePackSize(c.sales_desc) === expectedPackSize)
 
-  let usable = candidates.filter((c) => c.sales_desc && String(c.sales_desc).trim())
+  if (!candidates || candidates.length === 0) {
+    // No exact record. A suffixed variant agreeing on pack size is a match
+    // on two independent keys, which is stronger evidence than the
+    // exact-SKU-only matches already trusted — QuickBooks holds
+    // "F287760- FLOWER" (120/cs) where the container ships a bare F287760
+    // at 120/cs. Only when exactly one variant agrees; otherwise it's a
+    // human's call.
+    const byPack = packMatches(described(variants))
+    if (byPack.length === 1) return { sku, match: byPack[0], basis: 'variant+pack', candidates: variants }
+    if (variants.length > 0) return { sku, problem: 'ambiguous', candidates: variants }
+    return { sku, problem: 'missing' }
+  }
+
+  let usable = described(candidates)
   if (usable.length === 0) return { sku, problem: 'no_description', candidates }
 
   if (usable.length > 1) {
+    const byPack = packMatches(usable)
+    if (byPack.length === 1) return { sku, match: byPack[0], basis: 'exact+pack', candidates: usable }
     const active = usable.filter((c) => c.is_active !== false)
     if (active.length === 1) usable = active
     else return { sku, problem: 'ambiguous', candidates: usable }
   }
 
-  return { sku, match: usable[0] }
+  // One exact record — but if it quotes a different case pack than the
+  // container ships, it is describing a different product. QuickBooks'
+  // bare F287759 is "White Heart Triple Set Fuzzy-24pcs/cs" while the
+  // container ships 1,800 in 15 cartons (120/cs), and F287759-FLOWER is the
+  // 120/cs one. Refuse rather than write a confidently wrong name; hand
+  // back the better candidate so the screen can offer it.
+  const qbPack = parsePackSize(usable[0].sales_desc)
+  if (expectedPackSize != null && qbPack != null && qbPack !== expectedPackSize) {
+    const better = packMatches(described(variants))
+    return { sku, problem: 'pack_mismatch', candidates: [...usable, ...better] }
+  }
+
+  return { sku, match: usable[0], basis: qbPack != null && expectedPackSize != null ? 'exact+pack' : 'exact' }
 }
 
-export async function resolveSkus(db: Db, skus: string[]): Promise<SkuResolution[]> {
-  const bySku = await fetchQbItemsBySku(db, skus)
-  return [...new Set(skus.map((s) => String(s)))].map((s) => resolveSku(s, bySku.get(s.toUpperCase())))
+export interface SkuToResolve {
+  sku: string
+  piecesPerCase?: number | null
+}
+
+export async function resolveSkus(db: Db, inputs: Array<string | SkuToResolve>): Promise<SkuResolution[]> {
+  const normalised: SkuToResolve[] = inputs.map((i) => (typeof i === 'string' ? { sku: i } : i))
+  const bySku = await fetchQbItemsBySku(db, normalised.map((i) => i.sku))
+
+  const out: SkuResolution[] = []
+  for (const { sku, piecesPerCase } of normalised) {
+    const exact = bySku.get(sku.toUpperCase())
+    // Only reach for variants when the exact answer is absent or suspect —
+    // one extra query for a handful of SKUs rather than a prefix scan for
+    // every one.
+    const packConflicts =
+      exact?.length === 1 &&
+      piecesPerCase != null &&
+      parsePackSize(exact[0].sales_desc) != null &&
+      parsePackSize(exact[0].sales_desc) !== piecesPerCase
+    const variants = !exact || exact.length === 0 || packConflicts ? await fetchVariants(db, sku) : []
+    out.push(resolveSku(sku, exact, piecesPerCase, variants))
+  }
+  return out
+}
+
+/** LIKE metacharacters, so a SKU can't act as a wildcard in the prefix query. */
+const escapeLike = (s: string) => s.replace(/([\\%_])/g, '\\$1')
+
+/**
+ * QuickBooks items whose SKU starts with this one — the suffixed-variant
+ * case ("F287760" -> "F287760- Pk", "F287760- FLOWER"). Uses ilike on `sku`
+ * rather than sku_norm so it works without migration 0051.
+ */
+async function fetchVariants(db: Db, sku: string): Promise<QbDirectoryRow[]> {
+  const { data, error } = await db
+    .from('qb_item_directory')
+    .select(COLUMNS)
+    .ilike('sku', `${escapeLike(sku)}%`)
+  if (error) throw new Error(`QuickBooks variant lookup failed: ${error.message}`)
+  return ((data ?? []) as QbDirectoryRow[]).filter((r) => String(r.sku).toUpperCase() !== sku.toUpperCase())
 }

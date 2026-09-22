@@ -84,3 +84,46 @@ ids, never an `ilike` on the SKU, because `_` and `%` are LIKE wildcards
 that would quietly rename other rows. See [[project-containers-20260917]] for the 68 SKUs this
 is meant to unblock and [[project-receiving-phase-1]] for where the names
 get used.
+
+## The case pack is the cross-check that stops a confidently wrong name
+
+Caught 2026-09-22, before the first fill ever ran. Matching on SKU equality
+alone was about to name a box of artificial flowers **"White Heart Triple Set
+Fuzzy"**.
+
+Container EGSU1396926 ships F287759 as 1,800 pieces in 15 cartons = **120/cs**.
+QuickBooks holds two records whose SKU starts F287759:
+
+| record | pack | description |
+|---|---|---|
+| `F287759` | 24/cs | White Heart Triple Set Fuzzy |
+| `F287759-FLOWER` | **120/cs** | Chenille Stems Gerbera Daisies |
+
+The bare SKU is an exact match and the wrong product. Three independent
+sources agree the container's F287759 is the flower: the packing list's
+120/cs, the `-FLOWER` record's 120/cs, and the Commercial Invoice listing
+F287759 in its 7-row "Artificial Flowers Braided … Single Style" group at
+15ctn/1800pcs. F287760 is the same story and had been reported *missing*
+while QuickBooks held `F287760- Pk` and `F287760- FLOWER`.
+
+So `resolveSku` now takes the line's `pieces_per_case` and parses the
+`N/cs` out of the QuickBooks description:
+
+- exact match, packs **agree** → fill (`basis: 'exact+pack'`)
+- exact match, description quotes **no** pack → fill (`basis: 'exact'`) —
+  nothing to contradict it
+- exact match, packs **conflict** → `pack_mismatch`, fill nothing, and hand
+  back any better candidate for the screen to offer
+- **no** exact match but exactly one suffixed variant agrees on pack →
+  fill (`basis: 'variant+pack'`); two independent keys is stronger evidence
+  than the exact-SKU-only matches already trusted
+- pack also breaks an otherwise ambiguous duplicate
+
+Live result on the 67: 63 nameable (44 exact+pack, 18 exact-only, 1
+variant+pack), 1 `pack_mismatch` (F287759), 0 ambiguous, 3 genuinely missing
+(**S162786, CM072601, H424272** — F287760 is no longer among them).
+
+**Read this before trusting any SKU-equality match against QuickBooks on this
+account.** Suffixed variants carrying entirely different products under one
+base SKU are normal here — see [[project-suffix-barcode-collisions]] for the
+same shape of problem in barcodes.
