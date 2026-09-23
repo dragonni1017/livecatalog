@@ -525,6 +525,61 @@ export async function getErplyProductByCode(
 }
 
 /**
+ * Every stock-addition row Erply has recorded in the last `sinceDays`, as
+ * flat (productId, amount, documentId, date) tuples.
+ *
+ * This is the only source that sees stock added by ANY route -- a script, the
+ * receiving screen, another integration, or a person in the Erply back office.
+ * That matters because the 5,200-piece double-add on 2026-09-23 came from a
+ * script, which leaves no shipments row for the app to compare against.
+ *
+ * Windowed rather than unbounded: the account had 51 documents on
+ * 2026-09-23 and that only grows. 180 days comfortably covers the gap between
+ * a container being stocked by a script and someone re-receiving it, which was
+ * 20 days in the real case.
+ *
+ * Returns an empty array rather than throwing when Erply is unreachable --
+ * this feeds an advisory warning, and a lookup failure must not be able to
+ * block a legitimate receipt.
+ */
+export async function getRecentRegistrationRows(
+  sinceDays = 180,
+): Promise<{ productId: number; amount: number; documentId: number; date: string }[]> {
+  if (!isConfigured()) return []
+  try {
+    const sessionKey = await getSessionKey()
+    const since = Math.floor((Date.now() - sinceDays * 86_400_000) / 1000)
+    const data = await erplyPost<{
+      inventoryRegistrationID: number
+      date: string
+      rows?: { productID: number | string; amount: number | string }[]
+    }>({
+      request: 'getInventoryRegistrations',
+      sessionKey,
+      changedSince: String(since),
+      recordsOnPage: '100',
+      getRows: '1',
+    })
+
+    const out: { productId: number; amount: number; documentId: number; date: string }[] = []
+    for (const doc of data.records ?? []) {
+      for (const row of doc.rows ?? []) {
+        out.push({
+          productId: Number(row.productID),
+          amount: Number(row.amount),
+          documentId: doc.inventoryRegistrationID,
+          date: doc.date,
+        })
+      }
+    }
+    return out
+  } catch (err) {
+    console.error('[erply] prior-registration lookup failed (non-fatal):', err)
+    return []
+  }
+}
+
+/**
  * Which product currently holds a barcode. `code2` is an exact filter --
  * confirmed live 2026-09-23, it returned the single real holder where
  * `searchCode` returned 20 fuzzy matches that did not include it.

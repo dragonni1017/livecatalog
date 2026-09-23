@@ -10,7 +10,7 @@ import {
   PackingListError,
   type SheetRow,
 } from '@/lib/packing-list'
-import { blockersForDelete } from '@/lib/receiving'
+import { blockersForDelete, containerRefFromFileName } from '@/lib/receiving'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +48,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const fileName = typeof body.file_name === 'string' ? body.file_name.trim() : ''
     const rows: SheetRow[] = Array.isArray(body.rows) ? body.rows : []
-    const containerRef = typeof body.container_ref === 'string' ? body.container_ref.trim() || null : null
+    // Derive the container from the file name, and let a typed value override.
+    // container_ref has existed since migration 0048 but was null on all 9
+    // shipments, because the only thing that set it was an optional text box
+    // nobody fills in -- while every supplier file name carries "Cntr#XXXX".
+    // The duplicate-container guard on apply/route.ts has nothing to match on
+    // without it, and the audit log silently falls back to the raw file name.
+    const typedRef = typeof body.container_ref === 'string' ? body.container_ref.trim() || null : null
+    const containerRef = typedRef ?? containerRefFromFileName(fileName)
 
     if (!fileName) return NextResponse.json({ error: 'Missing file name.' }, { status: 400 })
     if (rows.length === 0) return NextResponse.json({ error: 'The sheet had no rows.' }, { status: 400 })

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
-import { isStockAppliable } from '@/lib/receiving'
+import { findDuplicateRegistrations, isStockAppliable } from '@/lib/receiving'
 import { getActorEmail } from '@/lib/auth-server'
 import { logAudit } from '@/lib/audit'
 import {
   getErplyStockIndex,
+  getRecentRegistrationRows,
   isConfigured as isErplyConfigured,
   saveInventoryRegistration,
   type StockRegistrationItem,
@@ -131,6 +132,67 @@ export async function POST(request: NextRequest) {
         { error: `None of the ${eligible.length} eligible SKUs exist in Erply (e.g. ${missingInErply.slice(0, 5).join(', ')}). Nothing was changed.` },
         { status: 400 },
       )
+    }
+
+    // ── Duplicate guards ────────────────────────────────────────────────────
+    // The three guards above (status, per-line applied_at, unique file_hash)
+    // all reason about THIS shipment row, so neither duplicate that happened
+    // on 2026-09-23 was visible to them. Both checks below are advisory: a
+    // container can legitimately be received in two parts, and two real
+    // shipments can carry an identical quantity, so each one warns and waits
+    // for a human rather than blocking.
+    // See docs/RECEIVING-DUPLICATE-GUARDS-SCOPE.md.
+
+    // Guard A -- the same container already has an applied shipment. Catches
+    // the supplier sending both an "Original List" and an "Arrival List":
+    // the files differ, so file_hash correctly does not match.
+    if (shipment.container_ref && body.confirm_container_already_applied !== true) {
+      const { data: twins } = await db
+        .from('shipments')
+        .select('file_name, applied_at')
+        .eq('container_ref', shipment.container_ref)
+        .eq('status', 'applied')
+        .neq('id', shipmentId)
+      if (twins && twins.length > 0) {
+        const t = twins[0]
+        return NextResponse.json(
+          {
+            error:
+              `Container ${shipment.container_ref} was already received on ${t.applied_at?.slice(0, 10) ?? 'an earlier date'} ` +
+              `from "${t.file_name}". Applying this would add its pieces to Erply a second time. ` +
+              `Confirm only if this container genuinely arrived in two parts.`,
+            duplicate_container: { container_ref: shipment.container_ref, file_name: t.file_name, applied_at: t.applied_at },
+          },
+          { status: 409 },
+        )
+      }
+    }
+
+    // Guard B -- Erply already registered these exact rows. Unlike Guard A
+    // this sees stock added by ANY route, including a script that left no
+    // shipments row, which is what actually cost 5,200 pieces.
+    if (body.confirm_already_registered !== true) {
+      const intended = eligible
+        .map((line) => {
+          const before = beforeBySku.get(line.sku)
+          return before ? { sku: line.sku, productId: before.productId, addQty: line.qty_received } : null
+        })
+        .filter((x): x is { sku: string; productId: number; addQty: number } => x !== null)
+
+      const duplicates = findDuplicateRegistrations(intended, await getRecentRegistrationRows())
+      if (duplicates.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              `${duplicates.length} of these ${intended.length} SKUs already have a stock registration in Erply for the same quantity ` +
+              `(${duplicates.slice(0, 3).map((d) => `${d.sku} ${d.addQty} on ${d.date}`).join(', ')}${duplicates.length > 3 ? ', …' : ''}). ` +
+              `That usually means this shipment was already keyed, possibly by a script. ` +
+              `Confirm only if these quantities genuinely arrived again.`,
+            already_registered: duplicates,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const actor = await getActorEmail()

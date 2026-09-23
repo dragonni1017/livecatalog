@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   blockersForDelete,
+  containerRefFromFileName,
+  findDuplicateRegistrations,
   isCreatable,
   isStockAppliable,
   missingForCreate,
@@ -148,5 +150,73 @@ describe('blockersForDelete', () => {
       line({ erply_created_product_id: 3081 }),
     ])
     expect(blockers).toHaveLength(3)
+  })
+})
+
+// ── Duplicate-apply guards ───────────────────────────────────────────────────
+
+describe('containerRefFromFileName', () => {
+  // Real file names from the 2026-09 containers, verbatim.
+  it('pulls the container out of a supplier file name', () => {
+    expect(containerRefFromFileName(
+      '2026-09 ETD 0904 697ctn Arrival List ETA 09-17-2026 Cntr#EGSU8096690 MBL#EGLV143655275917 HBL#RWRD102613031973.xlsx',
+    )).toBe('EGSU8096690')
+    expect(containerRefFromFileName(
+      '2026-08 ETD 0820 568ctn Arrival List ETA 09-02-2026 Cntr#EGSU9509206 MBL#EGLV143655274431 HBL#RWRD102613030985.xlsx',
+    )).toBe('EGSU9509206')
+  })
+
+  it('ignores a second cntr# that is a carton count, not a container', () => {
+    // This file really exists and carries both.
+    expect(containerRefFromFileName(
+      '2026-08 ETD 0814 762ctn Arrival List ETA 08-27-2026 Cntr#EGSU8749711 cntr#762 ETA 08-27-2026 MBL#EGLV143655274422 HBL#RWRD.xlsx',
+    )).toBe('EGSU8749711')
+  })
+
+  it('normalises case and stray spacing', () => {
+    expect(containerRefFromFileName('… cntr# egsu 8096690 MBL#…')).toBe('EGSU8096690')
+  })
+
+  it('returns null when there is no container in the name', () => {
+    expect(containerRefFromFileName('random packing list.xlsx')).toBeNull()
+    expect(containerRefFromFileName('')).toBeNull()
+  })
+})
+
+describe('findDuplicateRegistrations', () => {
+  const prior = [
+    { productId: 100, amount: 2160, documentId: 44, date: '2026-09-03' },  // D701027
+    { productId: 101, amount: 1056, documentId: 44, date: '2026-09-03' },  // P273810-60cm
+    { productId: 102, amount: 720, documentId: 44, date: '2026-09-03' },
+  ]
+
+  it('flags a product already registered at the same amount', () => {
+    const hits = findDuplicateRegistrations([{ sku: 'D701027', productId: 100, addQty: 2160 }], prior)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]).toMatchObject({ sku: 'D701027', documentId: 44, date: '2026-09-03' })
+  })
+
+  it('does NOT flag the same product at a different amount', () => {
+    // The real case: P273810-60cm arrived 1,056 then 372 -- two genuine
+    // shipments, not a duplicate. Flagging this would have cost real stock.
+    expect(findDuplicateRegistrations([{ sku: 'P273810-60cm', productId: 101, addQty: 372 }], prior)).toEqual([])
+  })
+
+  it('does not flag a product with no prior registration', () => {
+    expect(findDuplicateRegistrations([{ sku: 'F288139', productId: 999, addQty: 1800 }], prior)).toEqual([])
+  })
+
+  it('reports the most recent prior document when there are several', () => {
+    const many = [
+      { productId: 100, amount: 500, documentId: 10, date: '2026-07-01' },
+      { productId: 100, amount: 500, documentId: 30, date: '2026-08-15' },
+    ]
+    const hits = findDuplicateRegistrations([{ sku: 'X', productId: 100, addQty: 500 }], many)
+    expect(hits[0].documentId).toBe(30)
+  })
+
+  it('handles an empty history and an empty batch', () => {
+    expect(findDuplicateRegistrations([{ sku: 'X', productId: 1, addQty: 5 }], [])).toEqual([])
+    expect(findDuplicateRegistrations([], prior)).toEqual([])
   })
 })
