@@ -135,3 +135,50 @@ State at end of 2026-09-23: 6 shipments applied, 2 abandoned, 1 (EGSU1396926,
 66,036 pcs) genuinely still to receive. 85 SKUs created, all 85 in the
 catalog, all 85 hidden, all 85 verified against Erply stock, 60 with photos,
 0 priced.
+
+## A container can be stocked twice when a script got there first
+
+**5,200 pieces were double-added on 2026-09-23 and written off the same
+day.** Container EGSU9509206's August arrival list had already been stocked
+on 2026-09-03 by `scripts/add-stock-from-arrival-lists.mjs` (Erply
+registration docs 44+45), and was then received again through
+`/admin/receiving` (doc 51).
+
+**Why nothing caught it:** the `file_hash` guard only knows about shipments
+staged through the app. A script leaves no `shipments` row, so from the
+receiving screen that container had never been received. This is a wider
+hole than the Original/Arrival duplicate above — there is no app-side record
+to compare against at all. **Before applying any container whose ETA is in
+the past, check whether a script already stocked it.** The 09-03 run covered
+seven August containers.
+
+**Only 4 of doc 51's 14 rows were duplicates.** The other 10 (20,373 pieces)
+were SKUs that did not exist in Erply on 09-03, so the script could not have
+stocked them — they are legitimate first-time additions. Reversing the whole
+document would have destroyed real inventory. `scripts/writeoff-double-added-stock.mjs`
+derives the overlap from Erply's own registration documents and writes off
+only where the same product appears in both with the **same amount** — equal
+amounts mean one shipment counted twice, different amounts mean the SKU
+genuinely arrived on two containers (`P273810-60cm`: 1,056 then 372, left
+alone).
+
+Verified three ways before writing: all 25 arrival lists on disk contain
+these 4 SKUs on exactly one container; receiving staged `shipped == received`;
+and Erply's full movement ledger reconciled to the piece for each one. That
+last check also proved none had sold — stock equalled the sum of all
+documented movements, and a sale would have made it lower.
+
+**`saveInventoryWriteOff` requires a `reasonID`; `saveInventoryRegistration`
+does not.** Without one it fails `Erply error 1010: reasonID` and writes
+nothing. The account's four original codes (samples, depreciation, broken
+items, warehouse leftovers) all misdescribe a bookkeeping correction, so
+**reason id 5 "Data correction - duplicate entry" (code DATACORR, purpose
+WRITEOFF) was created in the Erply back office** for this and future
+corrections — reason codes cannot be created over the API, only read with
+`getReasonCodes`. Use id 5 for any future correction of this kind.
+
+Final state of the four: D701027 2,160 · F287862 1,720 · F287866 1,720 ·
+F288017 1,600 — Erply, the catalog and the movement ledger all agree. Note
+F287862/F287866 keep the fake 1,000 from 2026-08-17 (see
+[[project-fake-stock-1000-hold]]); that is the standing decision, not an
+error.
