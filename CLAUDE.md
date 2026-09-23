@@ -61,6 +61,15 @@ code, not the file itself).
   path makes every existing embed error with PGRST201 ("more than one
   relationship was found"), breaking every query using it, not just new
   code. Caused a brief live outage on `product_categories` (2026-08-21).
+- Inserting products: `products.id` has a `prod-NNNNN` default fed by
+  `products_id_seq`, and scripts that hand-assign ids (`max+1`) don't advance
+  it — the sequence eventually lands inside a hand-assigned block and every
+  insert dies with `duplicate key ... products_pkey`. supabase-js upserts in
+  chunks of 500 and one bad row fails the whole chunk, so this also silently
+  loses hundreds of unrelated *updates*; the only sign is `errors[]` in the
+  sync response. Re-run `0052_products_id_seq_reseed.sql` after any script
+  that assigns ids by hand. Bitten twice (0020 no-default 2026-08-05,
+  sequence collision 2026-09-23).
 - Bulk product/data work (import, sync, backfill): run the matching script in
   `scripts/*.mjs` via Bash instead of inlining/iterating the data yourself.
 - `docs/*.md` (ROADMAP, handoff notes, plans): grep for the relevant heading

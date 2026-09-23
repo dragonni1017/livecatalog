@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getErplyProducts, isConfigured, type ErplySyncProduct } from '@/lib/erply'
 import { previewSync, syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,11 @@ function toSyncProducts(erply: ErplySyncProduct[]): SyncProduct[] {
     stock_qty: p.stockQty,
     image_url: p.imageUrl,
     is_active: p.isActive,
-    category_name: p.categoryName,
+    // Same alias map the cron at /api/sync uses. Without it this button maps
+    // Erply's granular groups 1:1 onto categories -- a live preview on
+    // 2026-08-18 had that creating ~26 flat categories and reassigning ~2,879
+    // products off this catalog's consolidated ones.
+    category_name: resolveErplyCategoryAlias(p.categoryName),
   }))
 }
 
@@ -63,7 +68,10 @@ export async function POST() {
     const products = toSyncProducts(await getErplyProducts())
     // Same guard as /api/sync — Erply's images/stock aren't trustworthy yet.
     const result = await syncToSupabase(products, db, {
-      skipFields: ['image_url', 'stock_qty'],
+      // 'category' is skipped for the same reason the cron skips it: it is
+      // insert-only, so this button cannot flatten the manual category
+      // carve-outs back onto Erply's groups (lib/erply-category-aliases.ts).
+      skipFields: ['image_url', 'stock_qty', 'category'],
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
