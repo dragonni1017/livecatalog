@@ -695,12 +695,19 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
     const result = parseItemFullQueryRs(responseXml)
     const pull = await getItemPullState(db)
     const pulledSoFar = (pull?.pulled_count ?? 0) + result.items.length
+    let storeFailed: string | null = null
     if (!result.status.ok) {
       await updateItemPullState(db, { status: 'error', error_message: result.status.message || 'Item pull failed' })
     } else {
       if (result.items.length > 0) {
-        await db.from('qb_item_directory').upsert(
-          result.items.map((i) => ({
+        // De-duplicate by list id before upserting. Postgres rejects a whole
+        // ON CONFLICT batch with 21000 ("cannot affect row a second time") if
+        // the payload names the same key twice, and it takes every other row
+        // in that batch down with it -- one repeated item silently loses the
+        // entire page. Last occurrence wins; they are the same item.
+        const byListId = new Map<string, Record<string, unknown>>()
+        for (const i of result.items) {
+          byListId.set(i.listId, {
             qb_item_list_id: i.listId,
             full_name: i.fullName,
             sku: i.sku,
@@ -709,10 +716,30 @@ async function handleReceiveResponseXML(db: Db, params: any): Promise<string> {
             sales_price: i.salesPrice ?? null,
             is_active: i.isActive ?? null,
             pulled_at: new Date().toISOString(),
-          })),
-        )
+          })
+        }
+
+        const { error: upsertError } = await db
+          .from('qb_item_directory')
+          .upsert([...byListId.values()])
+
+        // Never let a failed write look like a successful pull. This error
+        // was unchecked, and pulled_count is built from result.items.length
+        // -- what QuickBooks SENT, not what was stored -- so a failed upsert
+        // left status 'done' against a directory missing those rows, with
+        // nothing anywhere to say so. No evidence it has ever fired; found by
+        // reading the code while investigating a different question.
+        if (upsertError) {
+          console.error('[qbwc] item directory upsert failed:', upsertError)
+          storeFailed = `Stored 0 of ${byListId.size} items: ${upsertError.message}`
+        }
       }
-      if (result.iteratorId && (result.remainingCount ?? 0) > 0) {
+      if (storeFailed) {
+        // Stop the pull rather than paging on. Continuing would keep marking
+        // progress against a snapshot that is not being written, and the
+        // 'done' branch below would overwrite this error with success.
+        await updateItemPullState(db, { status: 'error', iterator_id: null, error_message: storeFailed })
+      } else if (result.iteratorId && (result.remainingCount ?? 0) > 0) {
         // Leaving pending set is what keeps the session alive for the next
         // page — see the progress note at the end of this function.
         await updateItemPullState(db, { status: 'in_progress', iterator_id: result.iteratorId, pulled_count: pulledSoFar })
