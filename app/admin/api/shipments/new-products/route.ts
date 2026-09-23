@@ -12,12 +12,59 @@ import type { SheetRow } from '@/lib/packing-list'
 import { isCreatable } from '@/lib/receiving'
 import {
   createErplyProduct,
+  ErplyApiError,
+  getErplyProductByBarcode,
   getErplyProductByCode,
   getErplyProductGroups,
   isConfigured as isErplyConfigured,
 } from '@/lib/erply'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Turn a failed create into something the warehouse can act on.
+ *
+ * Erply's uniqueness rejection (1012) names only the field, so the two cases
+ * that actually happen here are indistinguishable from the raw message even
+ * though they need opposite responses:
+ *
+ *  - the SKU exists    -> nothing to do, this product is already in Erply
+ *  - the barcode exists -> the file disagrees with itself (or with Erply),
+ *                          and a human has to decide which barcode is right
+ *
+ * Both are worth a lookup, because naming the other product is what makes the
+ * message actionable. A failed lookup must never mask the original error, so
+ * every one of them is best-effort.
+ */
+async function explainCreateFailure(
+  err: unknown,
+  line: { sku: string; barcode_from_file: string | null },
+): Promise<string> {
+  const message = err instanceof Error ? err.message : String(err)
+  if (!(err instanceof ErplyApiError) || err.errorCode !== 1012) return message
+
+  if (err.errorField === 'code') {
+    try {
+      const existing = await getErplyProductByCode(line.sku)
+      if (existing) {
+        return `${line.sku} already exists in Erply (productID ${existing.productId}, "${existing.name}"), so nothing was created. This usually means the SKU arrived on an earlier container. [Erply 1012/code]`
+      }
+    } catch { /* fall through to the generic message */ }
+    return `${line.sku} already exists in Erply, so nothing was created. [Erply 1012/code]`
+  }
+
+  if (err.errorField === 'code2') {
+    const barcode = line.barcode_from_file ?? err.rejectedValue
+    let holder = ''
+    try {
+      const owner = barcode ? await getErplyProductByBarcode(barcode) : null
+      if (owner) holder = ` It is already on ${owner.sku} ("${owner.name}").`
+    } catch { /* best effort -- the advice below stands either way */ }
+    return `Barcode ${barcode ?? '(unknown)'} is already used by another product, and Erply requires barcodes to be unique.${holder} Either correct this line's barcode, or clear it and create the product without one. [Erply 1012/code2]`
+  }
+
+  return message
+}
 
 // Phase 2 of receiving: turn a shipment's unmatched SKUs into real Erply
 // products. Three verbs, deliberately separate:
@@ -291,7 +338,7 @@ export async function POST(request: NextRequest) {
           .eq('id', line.id)
         created.push({ sku: line.sku, productId })
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
+        const message = await explainCreateFailure(err, line)
         await db.from('shipment_lines').update({ create_error: message }).eq('id', line.id)
         failed.push({ sku: line.sku, error: message })
       }

@@ -110,6 +110,63 @@ function apiUrl(): string {
   return `https://${process.env.ERPLY_CLIENT_CODE}.erply.com/api/`
 }
 
+/**
+ * Erply reports a failure as a numeric code plus an `errorField` naming the
+ * parameter it objected to -- never a sentence. Raw, that surfaces to the
+ * warehouse as "Erply error 1012: code2", which reads like an error numbered
+ * 2 rather than "that barcode is taken".
+ *
+ * Wordings below are Erply's own (https://learn-api.erply.com/error-codes),
+ * rephrased for someone receiving a container rather than someone writing a
+ * request. Anything not listed falls back to the raw pair, which is still
+ * better than nothing and keeps a new code searchable.
+ */
+const ERPLY_ERROR_MESSAGES: Record<number, (what: string) => string> = {
+  1010: (what) => `Erply needs a ${what} and none was sent`,
+  1011: (what) => `Erply has no ${what} -- there is no such item`,
+  1012: (what) => `That ${what} is already used by another record, and Erply requires it to be unique`,
+  // 1013 is about two parameters disagreeing, so naming one of them misleads;
+  // the trailing [Erply 1013/<field>] tag still carries it.
+  1013: () => 'Erply rejected this combination of values as inconsistent',
+  1014: (what) => `Erply rejected the format of the ${what}`,
+}
+
+/**
+ * Erply's field names are generic (`code`, `code2`); nobody outside this file
+ * should have to know which is which.
+ */
+const ERPLY_FIELD_LABELS: Record<string, string> = {
+  code: 'SKU',
+  code2: 'barcode',
+  code3: 'extra code 3',
+  name: 'product name',
+  groupID: 'product group',
+  price: 'price',
+}
+
+export class ErplyApiError extends Error {
+  readonly errorCode: number
+  readonly errorField: string | null
+  /** The value that was rejected, when the request carried one. */
+  readonly rejectedValue: string | null
+
+  constructor(errorCode: number, errorField: string | null, rejectedValue: string | null) {
+    const label = errorField ? (ERPLY_FIELD_LABELS[errorField] ?? errorField) : 'value'
+    const what = rejectedValue ? `${label} "${rejectedValue}"` : label
+    const template = ERPLY_ERROR_MESSAGES[errorCode]
+    const sentence = template
+      ? template(what)
+      : `Erply rejected the ${what} (error ${errorCode})`
+    // The raw pair stays on the end -- it is what Erply's own docs and
+    // support are indexed by, and what a search of these logs will match.
+    super(`${sentence}. [Erply ${errorCode}${errorField ? `/${errorField}` : ''}]`)
+    this.name = 'ErplyApiError'
+    this.errorCode = errorCode
+    this.errorField = errorField
+    this.rejectedValue = rejectedValue
+  }
+}
+
 async function erplyPost<T>(params: Record<string, string>): Promise<ErplyResponse<T>> {
   const body = new URLSearchParams({
     clientCode: process.env.ERPLY_CLIENT_CODE!,
@@ -119,7 +176,12 @@ async function erplyPost<T>(params: Record<string, string>): Promise<ErplyRespon
   if (!res.ok) throw new Error(`Erply HTTP ${res.status}`)
   const json = await res.json()
   if (json.status?.responseStatus === 'error') {
-    throw new Error(`Erply error ${json.status.errorCode}: ${json.status.errorField ?? 'unknown'}`)
+    const field: string | null = json.status.errorField ?? null
+    throw new ErplyApiError(
+      Number(json.status.errorCode),
+      field,
+      field && params[field] !== undefined ? String(params[field]) : null,
+    )
   }
   return json
 }
@@ -460,6 +522,25 @@ export async function getErplyProductByCode(
     price: rec.price ?? 0,
     groupName: rec.groupName ?? '',
   }
+}
+
+/**
+ * Which product currently holds a barcode. `code2` is an exact filter --
+ * confirmed live 2026-09-23, it returned the single real holder where
+ * `searchCode` returned 20 fuzzy matches that did not include it.
+ *
+ * Exists so a uniqueness rejection can name the offender: "already on
+ * F288091" is actionable, "1012: code2" is not.
+ */
+export async function getErplyProductByBarcode(
+  barcode: string,
+): Promise<{ productId: number; sku: string; name: string } | null> {
+  if (!isConfigured() || !barcode) return null
+  const sessionKey = await getSessionKey()
+  const data = await erplyPost<ErplyProduct>({ request: 'getProducts', sessionKey, code2: barcode })
+  const rec = (data.records ?? []).find((r) => String(r.code2 ?? '').trim() === barcode.trim())
+  if (!rec) return null
+  return { productId: rec.productID, sku: rec.code, name: rec.name }
 }
 
 export interface CreateErplyProductInput {
