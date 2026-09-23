@@ -99,3 +99,95 @@ export function blockersForDelete(shipment: ReceivingShipment, lines: ReceivingL
 
   return blockers
 }
+
+// ── Duplicate-apply guards ───────────────────────────────────────────────────
+//
+// The three guards already in apply/route.ts (status, per-line applied_at,
+// unique file_hash) all reason about ONE shipment row, so neither of the
+// duplicates that actually happened on 2026-09-23 was visible to them:
+//
+//  - the supplier sends an "Original List" and an "Arrival List" for the same
+//    container, so the two files differ and file_hash correctly does not
+//    match -- 165,896 pieces of near-miss;
+//  - scripts/add-stock-from-arrival-lists.mjs had already stocked container
+//    EGSU9509206 on 2026-09-03 and left no shipments row at all, so from the
+//    app's point of view it had never been received -- 5,200 pieces really
+//    were added twice.
+//
+// Both predicates below are pure so the screen and the route decide
+// identically, the same reason isStockAppliable/isCreatable live here.
+// See docs/RECEIVING-DUPLICATE-GUARDS-SCOPE.md.
+
+/**
+ * The container id out of a supplier file name, e.g.
+ * "2026-09 ETD 0904 697ctn Arrival List ETA 09-17-2026 Cntr#EGSU8096690 MBL#..."
+ * -> "EGSU8096690".
+ *
+ * Derived rather than typed: `container_ref` has existed since migration 0048
+ * and was null on all 9 shipments, because the only thing that set it was an
+ * optional text box. Every file name in this workflow carries the container.
+ */
+export function containerRefFromFileName(fileName: string): string | null {
+  // Case-insensitive: at least one real file writes "cntr#" in lower case.
+  // Requiring letters-then-digits is what skips the carton count in
+  // "Cntr#EGSU8749711 cntr#762" -- and since exec takes the first match,
+  // the real container wins even when the decoy comes first.
+  const m = /Cntr#\s*([A-Za-z]{3,4}\s?\d{6,7})/i.exec(fileName)
+  if (!m) return null
+  return m[1].replace(/\s+/g, '').toUpperCase()
+}
+
+export interface PriorRegistrationRow {
+  productId: number
+  amount: number
+  documentId: number
+  date: string
+}
+
+export interface IntendedRegistration {
+  sku: string
+  productId: number
+  addQty: number
+}
+
+export interface DuplicateRegistration extends IntendedRegistration {
+  documentId: number
+  date: string
+}
+
+/**
+ * Rows this apply would write that Erply has already registered at the SAME
+ * quantity.
+ *
+ * Equal quantity is the whole signal, and it is not a guess: it is the rule
+ * scripts/writeoff-double-added-stock.mjs was run against real data with on
+ * 2026-09-23, where it caught all four genuine duplicates and correctly left
+ * P273810-60cm alone -- that SKU was registered 1,056 then 372, two real
+ * arrivals of the same product. Same product + same amount means one shipment
+ * keyed twice; a different amount means it genuinely came on two containers.
+ *
+ * Deliberately advisory. Two real shipments CAN carry an identical quantity
+ * (a full case pack is a round number), so the caller warns and asks rather
+ * than blocking -- see the confirm flags on apply/route.ts.
+ */
+export function findDuplicateRegistrations(
+  intended: IntendedRegistration[],
+  prior: PriorRegistrationRow[],
+): DuplicateRegistration[] {
+  const byProduct = new Map<number, PriorRegistrationRow[]>()
+  for (const row of prior) {
+    const list = byProduct.get(row.productId)
+    if (list) list.push(row)
+    else byProduct.set(row.productId, [row])
+  }
+
+  const hits: DuplicateRegistration[] = []
+  for (const item of intended) {
+    const matches = (byProduct.get(item.productId) ?? []).filter((p) => p.amount === item.addQty)
+    if (matches.length === 0) continue
+    // Most recent prior registration is the useful one to show.
+    const latest = matches.reduce((a, b) => (a.date >= b.date ? a : b))
+    hits.push({ ...item, documentId: latest.documentId, date: latest.date })
+  }
+  return hits
+}

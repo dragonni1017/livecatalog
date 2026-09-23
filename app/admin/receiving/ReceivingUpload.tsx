@@ -59,6 +59,15 @@ export interface Shipment {
   applied_at: string | null
 }
 
+// What the apply route sends back on a 409 from one of the duplicate guards.
+// `kind` decides which confirmation flag the retry carries.
+interface DuplicateWarning {
+  kind: 'container' | 'registered'
+  message: string
+  container?: { container_ref: string; file_name: string; applied_at: string | null }
+  rows?: { sku: string; addQty: number; documentId: number; date: string }[]
+}
+
 const MATCH_LABEL: Record<string, string> = {
   matched: 'Matched',
   unmatched_sku: 'Not in catalog',
@@ -84,6 +93,13 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [confirmNotReceived, setConfirmNotReceived] = useState(false)
+  // The two duplicate guards on the apply route answer different questions,
+  // so they get their own acknowledgements: clearing "this container was
+  // already received" must not also silently clear "Erply already holds these
+  // quantities". Acknowledging one and re-applying surfaces the other.
+  const [dupWarning, setDupWarning] = useState<DuplicateWarning | null>(null)
+  const [ackContainer, setAckContainer] = useState(false)
+  const [ackRegistered, setAckRegistered] = useState(false)
   const [containerRef, setContainerRef] = useState('')
   const [notes, setNotes] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -141,6 +157,12 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       setNotes(json.shipment?.notes ?? '')
       setContainerRef(json.shipment?.container_ref ?? '')
       setConfirmNotReceived(false)
+      // A warning and its acknowledgement belong to one shipment. Carrying
+      // either into the next one would pre-clear a guard for a container
+      // nobody has looked at yet.
+      setDupWarning(null)
+      setAckContainer(false)
+      setAckRegistered(false)
       if (json.alreadyStaged) {
         setFlash('This exact file was already staged — showing the existing shipment rather than staging it twice.')
       }
@@ -179,6 +201,12 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       setNotes(json.shipment?.notes ?? '')
       setContainerRef(json.shipment?.container_ref ?? '')
       setConfirmNotReceived(false)
+      // A warning and its acknowledgement belong to one shipment. Carrying
+      // either into the next one would pre-clear a guard for a container
+      // nobody has looked at yet.
+      setDupWarning(null)
+      setAckContainer(false)
+      setAckRegistered(false)
       setShipments((prev) => prev.map((p) => (p.id === json.shipment.id ? json.shipment : p)))
     } catch {
       setError(TRANSPORT_ERROR)
@@ -234,6 +262,12 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
         setContainerRef('')
         setNotes('')
         setConfirmNotReceived(false)
+      // A warning and its acknowledgement belong to one shipment. Carrying
+      // either into the next one would pre-clear a guard for a container
+      // nobody has looked at yet.
+      setDupWarning(null)
+      setAckContainer(false)
+      setAckRegistered(false)
       }
       setFlash(`Deleted "${s.container_ref || s.file_name}". Upload the file again to re-stage it.`)
     } catch {
@@ -307,13 +341,39 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       const res = await fetch('/admin/api/shipments/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shipment_id: shipment.id, confirm_not_yet_received: true }),
+        body: JSON.stringify({
+          shipment_id: shipment.id,
+          confirm_not_yet_received: true,
+          confirm_container_already_applied: ackContainer,
+          confirm_already_registered: ackRegistered,
+        }),
       })
+
+      // A duplicate guard answers 409 with a structured body rather than just
+      // a message, so the screen can show what it found and which
+      // acknowledgement clears it. Read it here instead of via readApiError:
+      // that helper consumes the body, and these responses are not plain
+      // errors -- they are a question.
+      if (res.status === 409) {
+        const json = await res.json().catch(() => null)
+        if (json?.duplicate_container) {
+          setDupWarning({ kind: 'container', message: json.error, container: json.duplicate_container })
+          return
+        }
+        if (json?.already_registered) {
+          setDupWarning({ kind: 'registered', message: json.error, rows: json.already_registered })
+          return
+        }
+        setError(json?.error ?? 'Could not apply the shipment.')
+        return
+      }
+
       const err = await readApiError(res, 'Could not apply the shipment.')
       if (err) {
         setError(err)
         return
       }
+      setDupWarning(null)
       const json = await res.json()
       setShipment(json.shipment)
       setLines(json.lines ?? [])
@@ -506,6 +566,68 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                   />
                 </label>
+
+                {dupWarning && (
+                  <div className="mt-4 rounded-lg border-2 border-red-400 bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-900">
+                      {dupWarning.kind === 'container'
+                        ? 'This container looks like it was already received'
+                        : 'Erply already holds these quantities'}
+                    </p>
+                    <p className="mt-1 text-sm text-red-800">{dupWarning.message}</p>
+
+                    {dupWarning.rows && dupWarning.rows.length > 0 && (
+                      <table className="mt-3 w-full text-xs text-red-900">
+                        <thead>
+                          <tr className="text-left">
+                            <th className="pb-1 pr-4 font-medium">SKU</th>
+                            <th className="pb-1 pr-4 font-medium">Quantity</th>
+                            <th className="pb-1 font-medium">Already registered</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dupWarning.rows.map((r) => (
+                            <tr key={r.sku}>
+                              <td className="pr-4 font-mono">{r.sku}</td>
+                              <td className="pr-4">{r.addQty.toLocaleString()}</td>
+                              <td>
+                                {r.date} (doc {r.documentId})
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    <label className="mt-3 flex items-start gap-2 text-sm text-red-900">
+                      <input
+                        type="checkbox"
+                        checked={dupWarning.kind === 'container' ? ackContainer : ackRegistered}
+                        onChange={(e) =>
+                          dupWarning.kind === 'container'
+                            ? setAckContainer(e.target.checked)
+                            : setAckRegistered(e.target.checked)
+                        }
+                        className="mt-0.5"
+                      />
+                      <span>
+                        {dupWarning.kind === 'container' ? (
+                          <>
+                            <span className="font-medium">This container really did arrive in two parts.</span> Only tick
+                            this if the pieces below are a second, separate delivery — not the same list under a
+                            different file name.
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium">These quantities genuinely arrived again.</span> The same SKU
+                            and the same quantity landing twice usually means the shipment was already keyed, sometimes
+                            by a script rather than this screen.
+                          </>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                )}
 
                 <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
                   <label className="flex items-start gap-2 text-sm text-amber-900">

@@ -1,7 +1,31 @@
-# Receiving — duplicate-apply guards (scope, 2026-09-23)
+# Receiving — duplicate-apply guards (2026-09-23)
 
-Not built. This is the scope for closing the gap that let 5,200 pieces be
-added to Erply twice on 2026-09-23.
+**Built 2026-09-23.** Scoped and implemented the same day, closing the gap
+that let 5,200 pieces be added to Erply twice.
+
+Proof it works, run against live data with today's six registration
+documents excluded — i.e. the history exactly as it stood when the mistake
+was made:
+
+```
+EMCU8323054     31 rows -> clean
+EGSU8096690     38 rows -> clean
+EGSU1396926      7 rows -> clean
+TIIU5073956      5 rows -> clean
+TXGU6094406      8 rows -> clean
+EMCU0137238     13 rows -> clean
+EGSU9509206     14 rows -> WARN on 4: D701027 2160, F287862 720,
+                                      F287866 720, F288017 1600
+```
+
+Exactly the four duplicated rows, on the one container that was duplicated,
+with no false positive on any of the five legitimate ones. Guard A
+separately flags both abandoned Original-List shipments.
+
+Note when reading a simulation like that: a shipment that has ALREADY been
+applied will self-match, because its own registration document is in the
+history. A real first apply cannot — its document does not exist yet. Judge
+a guard only against history that predates the apply being tested.
 
 ## What actually happened
 
