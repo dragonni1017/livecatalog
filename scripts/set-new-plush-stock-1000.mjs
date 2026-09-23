@@ -29,6 +29,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { assertStockWriteAllowed } from './stock-write-guard.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -86,6 +87,7 @@ async function getStock(sessionKey, productID) {
 }
 
 async function main() {
+  if (APPLY) assertStockWriteAllowed('set-new-plush-stock-1000.mjs', { what: 'This script writes Erply stock directly' })
   const auth = await erplyPost({ request: 'verifyUser', username: ERPLY_USERNAME, password: ERPLY_PASSWORD })
   const sessionKey = auth.records[0].sessionKey
 

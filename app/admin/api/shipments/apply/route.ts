@@ -233,25 +233,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Erply rejected the stock registration: ${registrationError}` }, { status: 502 })
     }
 
-    // Independent re-read rather than trusting the write: the registration
-    // response carries a document ID but no per-line results, so the only
-    // honest confirmation is asking Erply what the stock is now.
-    const afterIndex = await getErplyStockIndex(RECEIVING_WAREHOUSE_ID)
-
+    // Record the per-line confirmation FIRST, from data already in hand.
+    //
+    // applied_at is the second of the two things standing between a received
+    // container and a doubled one (the first is shipments.status), so it must
+    // not depend on anything that can fail afterwards. It used to be written
+    // in the same pass as an Erply re-read that pages the whole catalog, and
+    // as of 2026-09-23 not one of 231 lines across six applied shipments had
+    // it set, while the audit row that is written AFTER that loop did land on
+    // all six. The updates were reaching Postgres and doing nothing, and
+    // nothing said so, because the error was never read.
+    //
+    // The cause is still unknown -- the same update applied by hand to the
+    // same rows works, and every line resolves its `before` entry when the
+    // resolution is replayed. So this does not claim to fix it: it makes the
+    // write independent, checks it, and makes a failure loud enough to
+    // diagnose on the next real apply.
+    let confirmed = 0
+    const confirmFailures: string[] = []
     for (const line of eligible) {
       const before = beforeBySku.get(line.sku)
-      if (!before) continue
-      const after = afterIndex.get(String(line.sku).toUpperCase())
-      await db
+      if (!before) {
+        confirmFailures.push(`${line.sku}: no resolved Erply product to confirm against`)
+        continue
+      }
+      const { data: updated, error: confirmError } = await db
         .from('shipment_lines')
         .update({
           erply_product_id: before.productId,
           erply_stock_before: before.stockQty,
-          erply_stock_after: after?.stockQty ?? null,
           applied_at: nowIso,
           apply_error: null,
         })
         .eq('id', line.id)
+        .select('id')
+      if (confirmError) confirmFailures.push(`${line.sku}: ${confirmError.message}`)
+      else if (!updated || updated.length === 0) confirmFailures.push(`${line.sku}: update matched no row`)
+      else confirmed += updated.length
+    }
+
+    // Stock is in Erply either way at this point, so a confirmation failure
+    // must never read as "the apply failed" -- but it cannot stay silent
+    // either, because it leaves the shipment relying on status alone.
+    if (confirmFailures.length > 0) {
+      console.error('[admin/shipments/apply] per-line confirmation incomplete:', confirmFailures)
+      await db
+        .from('shipments')
+        .update({
+          notes: [
+            shipment.notes,
+            `WARNING ${nowIso}: stock WAS registered in Erply, but ${confirmFailures.length} of ${eligible.length} lines could not be marked applied. Do not re-apply this shipment. First failure: ${confirmFailures[0]}`,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        })
+        .eq('id', shipmentId)
+    }
+
+    // Independent re-read rather than trusting the write: the registration
+    // response carries a document ID but no per-line results, so the only
+    // honest confirmation is asking Erply what the stock is now. Enrichment
+    // only -- it runs after the fact above is already recorded, and its own
+    // failure can no longer cost the confirmation.
+    try {
+      const afterIndex = await getErplyStockIndex(RECEIVING_WAREHOUSE_ID)
+      for (const line of eligible) {
+        const after = afterIndex.get(String(line.sku).toUpperCase())
+        if (!after) continue
+        await db.from('shipment_lines').update({ erply_stock_after: after.stockQty }).eq('id', line.id)
+      }
+    } catch (err) {
+      console.error('[admin/shipments/apply] after-stock read failed (non-fatal):', err)
     }
 
     await logAudit({
@@ -281,6 +333,18 @@ export async function POST(request: NextRequest) {
       // delta), so the UI can say so rather than leaving the admin wondering
       // why the catalog still shows the old number.
       note: 'Stock was registered in Erply. The catalog\'s own stock figures update on the next Erply stock sync.',
+      confirmed,
+      // Present only when something went wrong, so the screen can shout about
+      // it. The stock landed regardless -- what is at risk is the record that
+      // says so, which is what stops a second apply.
+      ...(confirmFailures.length > 0
+        ? {
+            warning:
+              `Stock was registered, but ${confirmFailures.length} of ${eligible.length} lines could not be marked applied. ` +
+              `Do NOT apply this shipment again — its stock is already in Erply. A note has been added to the shipment.`,
+            confirmFailures: confirmFailures.slice(0, 10),
+          }
+        : {}),
     })
   } catch (err) {
     console.error('[admin/shipments/apply] error:', err)
