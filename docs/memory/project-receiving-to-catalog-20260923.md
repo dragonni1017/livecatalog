@@ -88,3 +88,50 @@ See [[project-receiving-phase-1]] for the receiving flow itself,
 [[project-erply-sync-id-default-outage]] for the first half of the id-default
 story, and [[project-fake-stock-1000-hold]] for why Erply stock is not
 blindly trusted elsewhere.
+
+---
+
+## Later the same day: three traps found while checking the import
+
+**1. Two files describe one container, and `file_hash` does not stop the
+second.** The supplier sends both an "Original List" and an "Arrival List"
+for the same container. EGSU8096690 and EMCU8323054 were received from the
+Arrival List, then staged again from the Original List -- 40/40 and 37/37
+rows identical on SKU and quantity. Applying either would have added 48,456
+and 117,440 pieces on top of stock already in Erply. The `file_hash`
+idempotency key cannot catch this: it dedupes an identical *file*, and these
+are genuinely different files describing the same shipment. Both were set to
+`abandoned` on 2026-09-23. **Before applying anything, check whether that
+container already has an applied shipment under a different file name.**
+
+**2. Erply's uniqueness check can be bypassed by a fast double-submit.**
+F288132 existed twice -- productID 3123 and 3124, same `code`, same `code2`,
+both `added` in the same second. This is the same constraint that produces
+the 1012 errors, so it is enforced, just not against a concurrent create.
+Only 1 such pair in 3,165 products. What made the cleanup non-obvious: the
+**stock was on 3123 and the images were on 3124**. Stock cannot be moved
+(Erply has no "set stock", only deltas, so moving it means a registration
+plus a write-off and two ledger entries), images re-push in one command --
+so keep whichever holds the stock. 3124 was deleted, the shipment line
+repointed to 3123, and the image re-pushed.
+
+Two things learned in that cleanup:
+- **Deleting a product does not delete its CDN images.** The listing still
+  returns the 3124 records, now orphaned against a product that is gone.
+  Harmless, but it means the CDN listing is not a reliable product census.
+- **`import-all-cloudinary-images-to-erply.mjs` resumes from
+  `data/images/cloudinary-erply-full-import-results.csv`** and will skip any
+  SKU logged there. After deleting a product that held the image, that row
+  has to come out of the log or the re-push silently does nothing.
+
+**3. A SKU-indexed Erply snapshot hides a duplicate.** The first pass at
+verifying stock read "F288132 expected 1500, got 0" -- the empty twin had
+overwritten the real one in a `Map` keyed by code. A per-SKU exact lookup
+earlier the same day had reported it correct. If a stock check disagrees
+with itself between runs, suspect a duplicate code before suspecting the
+stock.
+
+State at end of 2026-09-23: 6 shipments applied, 2 abandoned, 1 (EGSU1396926,
+66,036 pcs) genuinely still to receive. 85 SKUs created, all 85 in the
+catalog, all 85 hidden, all 85 verified against Erply stock, 60 with photos,
+0 priced.
