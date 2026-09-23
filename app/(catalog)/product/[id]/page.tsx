@@ -156,7 +156,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Image gallery */}
           <div className="p-4">
             <ImageGallery
-              primaryUrl={product.image_url ? (resolveCdnImage(product.image_url, 800) ?? product.image_url) : null}
+              primaryUrl={product.image_url ?? null}
               additionalUrls={product.image_urls ?? []}
               productName={displayName}
             />

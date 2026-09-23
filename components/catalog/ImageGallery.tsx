@@ -2,11 +2,22 @@
 
 import { useState } from 'react'
 
+import { resolveCdnImage } from '@/lib/image'
+
+// Both props take RAW stored URLs. This component sizes them itself, because
+// the two slots want very different widths: the main image is up to half the
+// page, the thumbnails are 56px. Passing a pre-transformed URL in still works
+// (cdnImage leaves an existing transform alone) but locks both slots to one
+// width -- which is how additionalUrls came to be served as full-size
+// originals behind 56px thumbnails, eagerly preloaded by Next.
 interface Props {
   primaryUrl: string | null
   additionalUrls: string[]
   productName: string
 }
+
+const MAIN_WIDTH = 800
+const THUMB_WIDTH = 150
 
 const PLACEHOLDER_CLASS = 'flex flex-col items-center justify-center gap-2 text-gray-400 h-full w-full'
 
@@ -24,7 +35,10 @@ function PlaceholderIcon() {
 }
 
 export default function ImageGallery({ primaryUrl, additionalUrls, productName }: Props) {
-  const allImages = [primaryUrl, ...additionalUrls].filter(Boolean) as string[]
+  // De-duplicated: image_urls[0] repeats image_url on most products (991 of
+  // the 1,184 visible ones with an image, checked 2026-09-23), which rendered
+  // the same photo as the first two thumbnails.
+  const allImages = [...new Set([primaryUrl, ...additionalUrls].filter(Boolean) as string[])]
   const [activeIndex, setActiveIndex] = useState(0)
   const [brokenIndices, setBrokenIndices] = useState<Set<number>>(new Set())
 
@@ -43,7 +57,7 @@ export default function ImageGallery({ primaryUrl, additionalUrls, productName }
         {activeUrl && !isBroken ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={activeUrl}
+            src={resolveCdnImage(activeUrl, MAIN_WIDTH) ?? activeUrl}
             alt={productName}
             className="h-full w-full object-contain p-4"
             onError={() => markBroken(activeIndex)}
@@ -75,9 +89,10 @@ export default function ImageGallery({ primaryUrl, additionalUrls, productName }
                 {!isThumbnailBroken ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={url}
+                    src={resolveCdnImage(url, THUMB_WIDTH) ?? url}
                     alt={`${productName} image ${i + 1}`}
                     className="h-full w-full object-contain"
+                    loading="lazy"
                     onError={() => markBroken(i)}
                   />
                 ) : (
