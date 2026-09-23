@@ -134,7 +134,11 @@ for (const f of files) {
     plan.set(exact.sku, entry)
     continue
   }
-  const m = /^(.*)-(\d+)$/.exec(stem)
+  // Extra views are written both ways in the wild: "B325123-1.jpg" and
+  // "S162815_2.jpg". Underscore is unambiguous -- no product SKU contains one
+  // (checked live 2026-09-23) -- and the exact-match branch above has already
+  // claimed the SKUs that genuinely end in -<digit> (B325084-1, F286877-2 ...).
+  const m = /^(.*)[-_](\d+)$/.exec(stem)
   const base = m ? bySku.get(m[1]) : null
   if (base) {
     const entry = plan.get(base.sku) ?? { product: base, primary: null, views: [], dupes: [] }
