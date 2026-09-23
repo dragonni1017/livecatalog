@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import BarcodeScanner from './BarcodeScanner'
+import { resolveCdnImage } from '@/lib/image'
 
 interface SuggestResult {
   id: string
@@ -250,7 +251,11 @@ export default function SearchInput() {
               <div className="flex-shrink-0 w-10 h-10 rounded overflow-hidden bg-gray-100">
                 {item.image_url ? (
                   <Image
-                    src={item.image_url}
+                    // Sized by Cloudinary rather than handed raw to Vercel's
+                    // optimizer: the browser result is tiny either way, but
+                    // this stops the optimizer pulling a multi-MB original
+                    // from origin (and burning a transformation) per suggestion.
+                    src={resolveCdnImage(item.image_url, 80) ?? item.image_url}
                     alt={item.name}
                     width={40}
                     height={40}
