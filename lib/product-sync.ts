@@ -195,7 +195,8 @@ export async function syncToSupabase(
     // When 'category' is skipped, only set category_id for products that
     // don't exist yet (a real insert) -- an existing product's category
     // is left alone rather than reassigned on every sync run.
-    const setCategory = !skip.has('category') || !existingSkus.has(p.sku)
+    const isNewProduct = !existingSkus.has(p.sku)
+    const setCategory = !skip.has('category') || isNewProduct
     const categoryId = setCategory ? categoryMap[p.category_name] ?? null : null
     records.push({
       sku: p.sku,
@@ -204,6 +205,19 @@ export async function syncToSupabase(
       price_cents: p.price_cents,
       description: p.description,
       is_active: p.is_active,
+      // A product arriving with no price is hidden on the way IN, never on an
+      // update. Erply cannot accept a price over the API on this account
+      // (proven 2026-09-16), so every product created from a received container
+      // lands at 0 and is priced by hand in Erply afterwards -- without this,
+      // the next sync publishes it as a $0.00 product, and
+      // lib/order-submission.ts checks only is_active/manually_hidden, so it
+      // would take that price onto a real order.
+      //
+      // Insert-only on purpose: flipping manually_hidden on an existing row
+      // would fight the admin's own visibility choices. Unhiding once a real
+      // price exists is a separate, deliberate step --
+      // scripts/zero-price-visibility.mjs.
+      ...(isNewProduct && p.price_cents <= 0 ? { manually_hidden: true } : {}),
       ...(skip.has('stock_qty') ? {} : { stock_qty: p.stock_qty }),
       ...(skip.has('image_url') ? {} : { image_url: p.image_url }),
       ...(categoryId ? { category_id: categoryId } : {}),

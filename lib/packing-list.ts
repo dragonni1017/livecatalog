@@ -58,17 +58,38 @@ const DIMENSION_AXES: Record<string, string> = {
   heightDim: 'height (高)',
 }
 
+/**
+ * How the piece-count column is located. `all` is the usual
+ * contains-every-substring match; `not` rejects a column that matched but
+ * whose header also says something disqualifying.
+ */
+interface QtyAlternative {
+  all: string[]
+  not?: string[]
+}
+
 // The piece-count column is the one header that genuinely changes between
 // suppliers and years, so it's matched against a list of ALTERNATIVES rather
-// than one pattern. Confirmed live:
+// than one pattern, MOST SPECIFIC FIRST. Confirmed live:
+//   '总PCS' — the 2026 supplier format, on both the Arrival List and the
+//             Original List (container EGSU9522424, 2026-08)
 //   'QTY'   — container EMCU8402359 (2023-11), English header
-//   '总PCS' — container EGSU9522424 (2026-08), on both the Arrival List and
-//             the Original List; this format has no English QTY column at all
+//
+// 总PCS is tried first, and 'qty' refuses any header containing '/cs',
+// because the 2026-08 arrival lists up to ETD 0803 carry BOTH 总PCS and an
+// English 'Qty/cs' — pieces per CASE, not the line total. A plain 'qty'
+// substring matched 'Qty/cs' and shadowed 总PCS, staging a 900-piece line as
+// 18. Seen on 7 files of that generation; the supplier dropped the column
+// from ETD 0807 on, which is the only reason receiving never hit it live.
+//
 // Deliberately NOT matched: 总量KG (total kilograms) and 总体积 (total volume)
 // are also line totals but in other units, and 箱数/CTN is cartons, not
 // pieces. Add a new alternative here only after reading the real header off
 // the file — a wrong guess here means registering the wrong stock quantity.
-const QTY_COLUMN_ALTERNATIVES: string[][] = [['qty'], ['总pcs']]
+const QTY_COLUMN_ALTERNATIVES: QtyAlternative[] = [
+  { all: ['总pcs'] },
+  { all: ['qty'], not: ['/cs'] },
+]
 
 // SKU and piece count are the only required columns — checked individually
 // below so each gets its own actionable message. Dimensions and weight are
@@ -136,11 +157,16 @@ function findCol(headerRow: SheetRow, substrings: string[]): number {
   return -1
 }
 
-// First alternative that matches wins.
-function findColAny(headerRow: SheetRow, alternatives: string[][]): number {
+// First alternative that matches wins. Every column an alternative matches is
+// considered, not just the leftmost, so a disqualified header ('Qty/cs') can't
+// hide a real one ('QTY') further right on the same sheet.
+function findColAny(headerRow: SheetRow, alternatives: QtyAlternative[]): number {
   for (const alt of alternatives) {
-    const idx = findCol(headerRow, alt)
-    if (idx >= 0) return idx
+    for (const idx of findAllCols(headerRow, alt.all)) {
+      const header = String(headerRow[idx]).toLowerCase()
+      if (alt.not?.some((n) => header.includes(n))) continue
+      return idx
+    }
   }
   return -1
 }
@@ -245,7 +271,7 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   const headerRowIndex = findHeaderRow(rows)
   if (headerRowIndex < 0) {
     throw new PackingListError(
-      "No 货号 (SKU) column found in the first 10 rows — this doesn't look like a supplier packing list. Only files named \"*Original List*.xls/.xlsx\" are known to work; the \"Arrival List\" PDFs have no SKU column at all.",
+      "No 货号 (SKU) column found in the first 10 rows — this doesn't look like a supplier packing list. The \"Original List\" and \"Arrival List\" .xls/.xlsx both carry a 货号 column and both parse; the Arrival List PDFs of the same name do not.",
     )
   }
 
@@ -267,7 +293,7 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   }
   if (colIndex.qty < 0) {
     throw new PackingListError(
-      `Could not find a piece-count column — tried ${QTY_COLUMN_ALTERNATIVES.map((a) => a.join('+')).join(', ')}. ` +
+      `Could not find a piece-count column — tried ${QTY_COLUMN_ALTERNATIVES.map((a) => a.all.join('+')).join(', ')}. ` +
         `Header row read as: ${JSON.stringify(headerRow)}. If this supplier names it something else, add it to ` +
         `QTY_COLUMN_ALTERNATIVES in lib/packing-list.ts after checking the real header — don't guess, a wrong column registers the wrong stock.`,
     )

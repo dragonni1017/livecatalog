@@ -279,6 +279,26 @@ async function main() {
     for (const sku of unmatchedSkus) console.log(`  ${sku}`)
   }
 
+  // Restrict the run to an explicit SKU list. The unfiltered run pushes
+  // whatever it finds, and "found" includes family/size mismatches where a
+  // SKU's only Cloudinary image actually belongs to a sibling (P273676-XL
+  // resolves to P273676-M.webp, P273800-60CM to P273800-46cm.png). Those want
+  // a human decision, not a batch push -- so when you mean a specific batch,
+  // name it.
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='))
+  if (onlyArg) {
+    const value = onlyArg.slice('--only='.length).replace(/^"|"$/g, '')
+    const raw = fs.existsSync(value) ? fs.readFileSync(value, 'utf8') : value
+    const wanted = new Set(raw.split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean))
+    const before = todo.length
+    todo = todo.filter((t) => wanted.has(t.sku.toUpperCase()))
+    const missing = [...wanted].filter((s) => !todo.some((t) => t.sku.toUpperCase() === s))
+    console.log(`--only passed: ${wanted.size} SKU(s) requested, ${todo.length} of ${before} eligible rows kept.`)
+    if (missing.length) {
+      console.log(`  Not pushed (already on the CDN, no active Erply product, or no Cloudinary image): ${missing.join(', ')}`)
+    }
+  }
+
   const limitArg = process.argv.find((a) => a.startsWith('--limit='))
   if (limitArg) {
     const limit = Number(limitArg.split('=')[1])
