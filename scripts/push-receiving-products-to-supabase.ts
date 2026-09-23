@@ -206,3 +206,13 @@ const { data: after } = await db
   .select('sku, price_cents, stock_qty, manually_hidden, category_id')
   .in('sku', rows.map((r) => r.sku as string))
 console.log(`Read back ${after?.length ?? 0} rows - hidden: ${(after ?? []).filter((p) => p.manually_hidden).length}, with stock: ${(after ?? []).filter((p) => (p.stock_qty ?? 0) > 0).length}, with category: ${(after ?? []).filter((p) => p.category_id).length}`)
+
+// This script hand-assigns ids, which is exactly what walks products_id_seq
+// into a block that already exists -- the failure that made this script
+// necessary in the first place. Say so every time rather than relying on
+// anyone remembering.
+console.log(
+  `\nNEXT: re-run supabase/migrations/0052_products_id_seq_reseed.sql in the Supabase SQL editor.\n` +
+  `${rows.length} id(s) were just assigned by hand (up to ${rows[rows.length - 1]?.id}); until the sequence is` +
+  ` moved past them, the next sync insert will collide and fail its whole 500-row chunk.`,
+)
