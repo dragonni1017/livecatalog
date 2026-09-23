@@ -36,6 +36,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 import { config } from 'dotenv'
+import { assertStockWriteAllowed } from './stock-write-guard.mjs'
 
 const require = createRequire(import.meta.url)
 const XLSX = require('xlsx')
@@ -139,6 +140,7 @@ async function saveInventoryRegistrationBatch(sessionKey, chunk) {
 }
 
 async function main() {
+  if (APPLY) assertStockWriteAllowed('add-stock-from-arrival-lists.mjs', { what: 'This script adds container stock to Erply from arrival-list workbooks' })
   console.log(`${APPLY ? '' : '[DRY RUN] '}Reading ${ARRIVAL_FILES.length} arrival list files...`)
   let allRows = []
   for (const f of ARRIVAL_FILES) allRows.push(...parseArrivalFile(f))

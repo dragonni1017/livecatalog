@@ -54,6 +54,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
+import { assertStockWriteAllowed } from './stock-write-guard.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -149,6 +150,7 @@ function toCsv(rows) {
 
 async function main() {
   const apply = process.argv.includes('--apply')
+  if (apply) assertStockWriteAllowed('revert-stock-1000-no-image.mjs', { what: 'This script writes Erply stock directly' })
 
   const testCsv = fs.readFileSync(path.join(ROOT, 'data', 'erply-stock-1000-test', 'planned-changes.csv'), 'utf8')
   const testSkus = testCsv.trim().split('\n').slice(1).map((l) => l.split(',')[1])

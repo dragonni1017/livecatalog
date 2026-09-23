@@ -53,6 +53,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { assertStockWriteAllowed } from './stock-write-guard.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -167,6 +168,7 @@ async function saveInventoryRegistrationBatch(sessionKey, chunk) {
 
 async function main() {
   const apply = process.argv.includes('--apply')
+  if (apply) assertStockWriteAllowed('set-erply-stock-1000-test.mjs', { what: 'This script writes Erply stock directly' })
 
   console.log('Fetching Supabase products with a real image_url...')
   const products = await fetchSupabaseProductsWithImages()

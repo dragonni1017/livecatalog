@@ -381,7 +381,15 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       const skipped = json.skippedMissingInErply?.length
         ? ` ${json.skippedMissingInErply.length} SKU(s) weren't in Erply and were skipped.`
         : ''
-      setFlash(`Registered ${json.piecesRegistered} pieces across ${json.applied} SKUs.${skipped} ${json.note}`)
+      if (json.warning) {
+        // The stock DID land, so this is not an error -- but it must not be a
+        // green flash either. applied_at is what stops a second apply, and
+        // this says it wasn't recorded.
+        setError(`${json.warning}${json.confirmFailures?.length ? ` First: ${json.confirmFailures[0]}` : ''}`)
+        setFlash(null)
+      } else {
+        setFlash(`Registered ${json.piecesRegistered} pieces across ${json.applied} SKUs.${skipped} ${json.note}`)
+      }
     } catch {
       setError(TRANSPORT_ERROR)
     } finally {
