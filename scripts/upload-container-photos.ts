@@ -1,13 +1,13 @@
-// upload-container-photos.mjs
-// Run with: node scripts/upload-container-photos.mjs                 (dry run)
-//           node scripts/upload-container-photos.mjs --apply
-//           node scripts/upload-container-photos.mjs --dir="C:/path/to/folder" --apply
-//           node scripts/upload-container-photos.mjs --replace --apply
+// upload-container-photos.ts
+// Run with: node scripts/upload-container-photos.ts                 (dry run)
+//           node scripts/upload-container-photos.ts --apply
+//           node scripts/upload-container-photos.ts --dir="C:/path/to/folder" --apply
+//           node scripts/upload-container-photos.ts --replace --apply
 //
 // Uploads the per-container photo folders that arrive alongside a shipment
 // (Downloads/<CONTAINER>Photos/, plus "New Photos") to Cloudinary and points
 // the matching catalog rows at them. Same conventions as
-// upload-images-to-cloudinary.mjs and upload-new-plush-photos.mjs:
+// upload-images-to-cloudinary.ts and upload-new-plush-photos.ts:
 // public_id = SKU, then image_url + image_urls + needs_photo = false.
 //
 // Filename -> SKU, in this order, because SKUs contain hyphens and digits of
@@ -37,7 +37,8 @@ import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
-import { readImageFiles, matchFilesToProducts } from './photo-matching.mjs'
+import { matchFilesToProducts } from '../lib/photo-matching.ts'
+import { readImageFiles } from './photo-files.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -56,27 +57,32 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 for (const [name, val] of Object.entries({ CLOUD_NAME, API_KEY, API_SECRET, SUPABASE_URL, SUPABASE_SERVICE_KEY })) {
   if (!val) { console.error(`Missing in .env.local: ${name}`); process.exit(1) }
 }
+// Checked immediately above; narrowed here so the rest of the file can use
+// them without repeating the assertion.
+const cloudName = CLOUD_NAME as string
+const apiKey = API_KEY as string
+const apiSecret = API_SECRET as string
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+const supabase = createClient(SUPABASE_URL as string, SUPABASE_SERVICE_KEY as string, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-function signParams(params) {
+function signParams(params: Record<string, string | number>): string {
   const toSign = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join('&')
-  return crypto.createHash('sha1').update(toSign + API_SECRET).digest('hex')
+  return crypto.createHash('sha1').update(toSign + apiSecret).digest('hex')
 }
 
-async function uploadToCloudinary(filePath, publicId) {
+async function uploadToCloudinary(filePath: string, publicId: string): Promise<string> {
   const timestamp = Math.floor(Date.now() / 1000)
   const signature = signParams({ public_id: publicId, timestamp })
   const buffer = fs.readFileSync(filePath)
   const form = new FormData()
   form.append('file', new Blob([buffer]), path.basename(filePath))
-  form.append('api_key', API_KEY)
+  form.append('api_key', apiKey)
   form.append('timestamp', String(timestamp))
   form.append('public_id', publicId)
   form.append('signature', signature)
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: form })
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: form })
   const json = await res.json()
   if (!res.ok || json.error) throw new Error(json.error?.message || `HTTP ${res.status}`)
   return json.secure_url
@@ -93,8 +99,8 @@ const folders = dirArgs.length
 console.log(`Scanning ${folders.length} folder(s):`)
 folders.forEach((f) => console.log(`  ${f}`))
 
-// Matching rules live in ./photo-matching.mjs so that
-// find-photos-for-missing-images.mjs reports exactly what this will upload.
+// Matching rules live in ./photo-matching.ts so that
+// find-photos-for-missing-images.ts reports exactly what this will upload.
 const files = readImageFiles(folders)
 console.log(`\n${files.length} image file(s) found`)
 
@@ -111,7 +117,7 @@ for (let from = 0; ; from += 1000) {
 }
 const bySku = new Map(products.map((p) => [p.sku.trim().toUpperCase(), p]))
 
-// 3. Match files to products -- shared with find-photos-for-missing-images.mjs.
+// 3. Match files to products -- shared with find-photos-for-missing-images.ts.
 const { plan, unmatched } = matchFilesToProducts(files, bySku)
 
 const entries = [...plan.values()].sort((a, b) => a.product.sku.localeCompare(b.product.sku))
@@ -126,13 +132,13 @@ console.log(`  ${unmatched.length} file(s) matched no SKU`)
 console.log(`  ${dupeCount} duplicate file(s) ignored (same SKU and view, downloaded twice)\n`)
 
 for (const e of todo) {
-  const views = e.views.sort((a, b) => a.n - b.n)
+  const views = e.views.sort((a: { n: number }, b: { n: number }) => a.n - b.n)
   const names = [e.primary?.name, ...views.map((v) => v.file.name)].filter(Boolean)
   console.log(`  ${e.product.sku.padEnd(20)} ${names.length} file(s): ${names.join(', ')}`)
 }
 if (unmatched.length) {
   console.log('\nNo product with this SKU (usually a container not staged yet):')
-  const byDir = {}
+  const byDir: Record<string, string[]> = {}
   unmatched.forEach((f) => { (byDir[path.basename(f.dir)] ??= []).push(f.stem) })
   for (const [dir, stems] of Object.entries(byDir)) {
     console.log(`  ${dir}: ${[...new Set(stems)].join(', ')}`)
@@ -146,7 +152,7 @@ if (!APPLY) {
 
 const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 const csvRows = [['sku', 'files', 'primary_url', 'all_urls'].join(',')]
-const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
 
 let done = 0, failed = 0
 for (const e of todo) {
@@ -154,7 +160,7 @@ for (const e of todo) {
   try {
     const urls = []
     if (e.primary) urls.push(await uploadToCloudinary(e.primary.filePath, sku))
-    for (const v of e.views.sort((a, b) => a.n - b.n)) {
+    for (const v of e.views.sort((a: { n: number }, b: { n: number }) => a.n - b.n)) {
       urls.push(await uploadToCloudinary(v.file.filePath, `${sku}-${v.n}`))
     }
     if (urls.length === 0) continue
@@ -167,7 +173,7 @@ for (const e of todo) {
     console.log(`  ${sku}: ${urls.length} image(s) -> ${urls[0]}`)
     done++
   } catch (err) {
-    console.error(`  FAILED ${sku}: ${err.message}`)
+    console.error(`  FAILED ${sku}: ${(err as Error).message}`)
     failed++
   }
 }

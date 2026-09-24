@@ -11,7 +11,7 @@ import {
   type SheetRow,
 } from '@/lib/packing-list'
 import { blockersForDelete, containerRefFromFileName } from '@/lib/receiving'
-import { loadShipmentProgress } from '@/lib/receiving-progress'
+import { loadShipmentProgress, otherShipmentsForContainer } from '@/lib/receiving-progress'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
         lines: lines ?? [],
         problems: [],
         alreadyStaged: true,
+        containerWarning: await otherShipmentsForContainer(db, existing.container_ref, existing.id),
       })
     }
 
@@ -200,6 +201,7 @@ export async function POST(request: NextRequest) {
       lines: (insertedLines ?? []).sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
       problems: parsed.problems,
       unitNote: parsed.unitNote,
+      containerWarning: await otherShipmentsForContainer(db, containerRef, shipment.id),
     })
   } catch (err) {
     console.error('[admin/shipments POST] error:', err)

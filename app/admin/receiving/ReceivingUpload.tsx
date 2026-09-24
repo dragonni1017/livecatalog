@@ -181,6 +181,11 @@ export default function ReceivingUpload({
   const [dupWarning, setDupWarning] = useState<DuplicateWarning | null>(null)
   const [ackContainer, setAckContainer] = useState(false)
   const [ackRegistered, setAckRegistered] = useState(false)
+  // Other live shipments for this container, reported at STAGE time. The
+  // apply route refuses on the same fact, but only after all the work.
+  const [containerWarning, setContainerWarning] = useState<
+    { id: string; file_name: string; status: string; applied_at: string | null }[]
+  >([])
   const [containerRef, setContainerRef] = useState('')
   const [notes, setNotes] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -244,6 +249,7 @@ export default function ReceivingUpload({
       setDupWarning(null)
       setAckContainer(false)
       setAckRegistered(false)
+      setContainerWarning(json.containerWarning ?? [])
       if (json.alreadyStaged) {
         setFlash('This exact file was already staged — showing the existing shipment rather than staging it twice.')
       }
@@ -288,6 +294,7 @@ export default function ReceivingUpload({
       setDupWarning(null)
       setAckContainer(false)
       setAckRegistered(false)
+      setContainerWarning(json.containerWarning ?? [])
       setShipments((prev) => prev.map((p) => (p.id === json.shipment.id ? json.shipment : p)))
     } catch {
       setError(TRANSPORT_ERROR)
@@ -349,6 +356,7 @@ export default function ReceivingUpload({
       setDupWarning(null)
       setAckContainer(false)
       setAckRegistered(false)
+      setContainerWarning([])
       }
       setFlash(`Deleted "${s.container_ref || s.file_name}". Upload the file again to re-stage it.`)
     } catch {
@@ -535,6 +543,34 @@ export default function ReceivingUpload({
                 {shipment.staged_by ? ` by ${shipment.staged_by}` : ''}
               </p>
               {unitNote && <p className="mt-0.5 text-xs text-gray-400">Carton figures read as {unitNote}.</p>}
+              {/* Said here, at staging, rather than only by the apply guard at
+                  the very end. Both Original/Arrival duplicates on 2026-09-23
+                  were caught by hand before anyone reached apply, by which
+                  point the counts had been corrected and products created. */}
+              {containerWarning.length > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <span className="font-medium">
+                    Container {shipment.container_ref} is already on{' '}
+                    {containerWarning.length === 1 ? 'another shipment' : `${containerWarning.length} other shipments`}.
+                  </span>
+                  <ul className="mt-1 space-y-0.5">
+                    {containerWarning.map((w) => (
+                      <li key={w.id}>
+                        {w.status === 'applied'
+                          ? `received ${w.applied_at?.slice(0, 10) ?? 'earlier'}`
+                          : 'staged, not yet applied'}
+                        {' — '}
+                        {w.file_name}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1">
+                    The supplier sends an Original List and an Arrival List for the same container. If this is the
+                    second copy of one you have already handled, abandon it rather than applying it — the pieces would
+                    be added to Erply twice.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="text-right">
               <span

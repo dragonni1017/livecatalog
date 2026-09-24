@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
+import { otherShipmentsForContainer } from '@/lib/receiving-progress'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       lines: lines ?? [],
       problems: [],
       unitNote: null,
+      // Same fact the staging response carries, so reopening a shipment does
+      // not quietly drop the warning that another shipment holds this
+      // container.
+      containerWarning: await otherShipmentsForContainer(db, shipment.container_ref, shipment.id),
     })
   } catch (err) {
     console.error('[admin/shipments/[id] GET] error:', err)

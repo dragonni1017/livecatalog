@@ -1,15 +1,15 @@
-// find-photos-for-missing-images.mjs
-// Run with: node scripts/find-photos-for-missing-images.mjs
-//           node scripts/find-photos-for-missing-images.mjs --root="C:/Users/Dragon/Downloads/New Photos"
-//           node scripts/find-photos-for-missing-images.mjs --all        (include products that already have an image)
-//           node scripts/find-photos-for-missing-images.mjs --csv        (also write data/photo-matches-<date>.csv)
+// find-photos-for-missing-images.ts
+// Run with: node scripts/find-photos-for-missing-images.ts
+//           node scripts/find-photos-for-missing-images.ts --root="C:/Users/Dragon/Downloads/New Photos"
+//           node scripts/find-photos-for-missing-images.ts --all        (include products that already have an image)
+//           node scripts/find-photos-for-missing-images.ts --csv        (also write data/photo-matches-<date>.csv)
 //
 // REPORT ONLY. Answers one question: of the photos sitting on this machine,
 // which ones belong to a product that has no image yet?
 //
 // Walks the whole Downloads tree by default, so a folder dropped anywhere in
 // it gets picked up without being named. Uses the same filename->SKU rules as
-// upload-container-photos.mjs (both import scripts/photo-matching.mjs), so
+// upload-container-photos.ts (both import scripts/photo-matching.ts), so
 // anything reported here is something the uploader will actually match.
 //
 // Output is grouped by folder and ends with the exact --dir= command to
@@ -22,7 +22,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
-import { readImageFiles, matchFilesToProducts } from './photo-matching.mjs'
+import { matchFilesToProducts } from '../lib/photo-matching.ts'
+import { readImageFiles } from './photo-files.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -47,7 +48,7 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error('Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env.local')
   process.exit(1)
 }
-const db = createClient(SUPABASE_URL, SERVICE_KEY)
+const db = createClient(SUPABASE_URL as string, SERVICE_KEY as string)
 
 console.log(`scanning ${SEARCH_ROOT} …`)
 const files = readImageFiles([SEARCH_ROOT], { recursive: true, skipDirs: SKIP_DIRS })
@@ -82,14 +83,14 @@ if (wanted.length === 0) {
     byFolder.set(dir, [...(byFolder.get(dir) ?? []), e])
   }
   console.log(`${wanted.length} product(s) ${INCLUDE_ALL ? 'matched' : 'with NO image that have a photo on disk'}:\n`)
-  for (const [dir, entries] of [...byFolder.entries()].sort((a, b) => b[1].length - a[1].length)) {
+  for (const [dir, entries] of [...byFolder.entries()].sort((a: [string, unknown[]], b: [string, unknown[]]) => b[1].length - a[1].length)) {
     console.log(`  ${dir}   (${entries.length})`)
-    for (const e of entries.sort((a, b) => a.product.sku.localeCompare(b.product.sku))) {
-      const files = [e.primary?.name, ...e.views.sort((a, b) => a.n - b.n).map((v) => v.file.name)].filter(Boolean)
+    for (const e of entries.sort((a: { product: { sku: string } }, b: { product: { sku: string } }) => a.product.sku.localeCompare(b.product.sku))) {
+      const files = [e.primary?.name, ...e.views.sort((a: { n: number }, b: { n: number }) => a.n - b.n).map((v: { file: { name: string } }) => v.file.name)].filter(Boolean)
       const visible = e.product.is_active && !e.product.manually_hidden ? 'VISIBLE' : 'hidden '
       console.log(`     ${visible}  ${e.product.sku.padEnd(16)} ${files.join(', ')}`)
     }
-    console.log(`     -> node scripts/upload-container-photos.mjs --dir="${dir.replace(/\\/g, '/')}" --apply\n`)
+    console.log(`     -> node scripts/upload-container-photos.ts --dir="${dir.replace(/\\/g, '/')}" --apply\n`)
   }
 }
 
@@ -100,10 +101,10 @@ console.log(`${unmatched.length} file(s) matched no SKU at all`)
 if (WRITE_CSV) {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const out = path.join(ROOT, 'data', `photo-matches-${stamp}.csv`)
-  const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
   const rows = ['sku,has_image,visible,folder,files']
   for (const e of [...plan.values()]) {
-    const files = [e.primary?.name, ...e.views.map((v) => v.file.name)].filter(Boolean)
+    const files = [e.primary?.name, ...e.views.map((v: { file: { name: string } }) => v.file.name)].filter(Boolean)
     rows.push([
       e.product.sku,
       e.product.image_url ? 'yes' : 'no',
