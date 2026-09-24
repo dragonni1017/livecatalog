@@ -299,3 +299,59 @@ describe('summariseShipment', () => {
     expect(p.inCatalog).toBe(1)
   })
 })
+
+describe('summariseShipment — price agreement', () => {
+  const l = (over: Partial<SummaryLine>): SummaryLine => ({
+    sku: 'X1', match_status: 'matched', qty_received: 10, applied_at: null,
+    erply_created_product_id: 7, ...over,
+  })
+
+  it('flags a catalog price that disagrees with the intended one', () => {
+    const p = summariseShipment(
+      [l({ sku: 'A', proposed_price_cents: 1200 })],
+      new Map([['A', { price_cents: 950, image_url: null }]]),
+    )
+    expect(p.priceMismatch).toBe(1)
+    expect(p.noPriceIntent).toBe(0)
+  })
+
+  it('does not flag a product that simply is not priced yet', () => {
+    // Unpriced is what `priced` already reports; calling it a mismatch too
+    // would report one gap twice.
+    const p = summariseShipment(
+      [l({ sku: 'A', proposed_price_cents: 1200 })],
+      new Map([['A', { price_cents: 0, image_url: null }]]),
+    )
+    expect(p.priceMismatch).toBe(0)
+    expect(p.priced).toBe(0)
+  })
+
+  it('counts a missing intent separately from a mismatch', () => {
+    // Every product created so far is in this state: created at 0, with
+    // nothing recording what it was meant to cost.
+    const p = summariseShipment(
+      [l({ sku: 'A' }), l({ sku: 'B', proposed_price_cents: 0 })],
+      new Map([['A', { price_cents: 500, image_url: null }]]),
+    )
+    expect(p.noPriceIntent).toBe(2)
+    expect(p.priceMismatch).toBe(0)
+  })
+
+  it('is quiet when intent and catalog agree', () => {
+    const p = summariseShipment(
+      [l({ sku: 'A', proposed_price_cents: 1200 })],
+      new Map([['A', { price_cents: 1200, image_url: null }]]),
+    )
+    expect(p.priceMismatch).toBe(0)
+    expect(p.noPriceIntent).toBe(0)
+  })
+
+  it('takes one intent for a SKU that shipped on two containers', () => {
+    const p = summariseShipment(
+      [l({ sku: 'K229582', proposed_price_cents: 300 }), l({ sku: 'K229582', proposed_price_cents: 300 })],
+      new Map([['K229582', { price_cents: 300, image_url: null }]]),
+    )
+    expect(p.priceMismatch).toBe(0)
+    expect(p.noPriceIntent).toBe(0)
+  })
+})
