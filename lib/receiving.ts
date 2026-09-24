@@ -223,6 +223,14 @@ export interface ShipmentProgress {
   inCatalog: number
   withPhoto: number
   priced: number
+  /**
+   * Created SKUs whose catalog price disagrees with the price someone typed
+   * during receiving. Pricing happens by hand in Erply, so nothing otherwise
+   * connects the intent to the result -- a typo or a skipped row is invisible.
+   */
+  priceMismatch: number
+  /** Created SKUs with no intended price recorded at all. */
+  noPriceIntent: number
 }
 
 /**
@@ -236,6 +244,41 @@ export interface ShipmentProgress {
  * `productsBySku` is keyed UPPER-CASE and only needs to contain the SKUs this
  * shipment created; a SKU absent from it simply counts as not in the catalog.
  */
+/**
+ * Intended price (typed during receiving, stored on the line) against the
+ * catalog price, which mirrors Erply after a sync.
+ *
+ * Only counts a disagreement once BOTH numbers exist: a product not yet
+ * priced in Erply is simply unpriced, which the priced count already says,
+ * and calling it a mismatch too would report one gap twice.
+ *
+ * A SKU can appear on two lines (K229582 really did ship on two containers),
+ * so the intent used is the first non-zero one. Two lines disagreeing about
+ * what a product should cost is not a case worth modelling -- it is one
+ * product.
+ */
+function priceAgreement(
+  createdLines: SummaryLine[],
+  productsBySku: Map<string, SummaryProduct>,
+): { priceMismatch: number; noPriceIntent: number } {
+  const intentBySku = new Map<string, number>()
+  for (const l of createdLines) {
+    const sku = l.sku.toUpperCase()
+    const cents = l.proposed_price_cents ?? 0
+    if (cents > 0 && !intentBySku.has(sku)) intentBySku.set(sku, cents)
+  }
+
+  let priceMismatch = 0
+  let noPriceIntent = 0
+  for (const sku of new Set(createdLines.map((l) => l.sku.toUpperCase()))) {
+    const intended = intentBySku.get(sku)
+    if (!intended) { noPriceIntent++; continue }
+    const actual = productsBySku.get(sku)?.price_cents ?? 0
+    if (actual > 0 && actual !== intended) priceMismatch++
+  }
+  return { priceMismatch, noPriceIntent }
+}
+
 export function summariseShipment(
   lines: SummaryLine[],
   productsBySku: Map<string, SummaryProduct>,
@@ -261,5 +304,6 @@ export function summariseShipment(
     inCatalog: products.length,
     withPhoto: products.filter((p) => p.image_url).length,
     priced: products.filter((p) => (p.price_cents ?? 0) > 0).length,
+    ...priceAgreement(createdLines, productsBySku),
   }
 }

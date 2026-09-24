@@ -4,8 +4,7 @@ Five changes that would make receiving a container easier, ranked by time
 returned. Written after running six containers end to end on 2026-09-23/24,
 so each one names the friction it actually removes rather than a guess.
 
-**Status:** #1–#4 built. #5 is a skeleton — enough to pick up, not yet
-designed in detail.
+**Status:** all five built (2026-09-24).
 
 ---
 
@@ -96,7 +95,7 @@ received on the 23rd from a different file — are you sure?"
 
 ---
 
-## 5. Make the price round-trip verifiable
+## 5. Make the price round-trip verifiable — BUILT
 
 **The friction.** Pricing must happen by hand in Erply — `saveProduct`
 cannot set a price on this account, and that is closed. But nothing connects
@@ -113,8 +112,20 @@ visible.
 - After a sync, reconcile: flag every product where Erply's price differs
   from what was intended, and every created product still at 0.
 
-**Why it is last.** It depends on the invoice step becoming habit, which
-#1 makes visible and the 2026-09-24 nudge already prompts for.
+**Built 2026-09-24.** The first two parts already existed and were simply
+unused: the Commercial Invoice attach carries unit prices, and the panel
+already writes proposed_price_cents. What was missing was the check.
+
+scripts/reconcile-prices.ts reports three numbers per product -- intended,
+Erply, catalog -- and names the disagreements: MISMATCH (Erply differs from
+what was decided), NOT PRICED (the manual pass has not reached it), STALE
+CATALOG (priced in Erply, sync has not run), NO INTENT (created with no
+price recorded). The receiving strip carries a price mismatch chip from the
+same rule.
+
+First run: all 88 are NO INTENT, which is the honest state -- nothing typed
+a price during receiving before today. The report says so rather than
+pretending to check.
 
 ---
 

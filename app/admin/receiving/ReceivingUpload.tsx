@@ -99,6 +99,11 @@ function ProgressStrip({ p, applied }: { p: ShipmentProgress; applied: boolean }
     chips.push({ label: `catalog ${p.inCatalog}/${p.created}`, done: p.inCatalog === p.created })
     chips.push({ label: `photos ${p.withPhoto}/${p.created}`, done: p.withPhoto === p.created })
     chips.push({ label: `priced ${p.priced}/${p.created}`, done: p.priced === p.created })
+    // Pricing is typed into Erply by hand, so nothing else connects what
+    // someone meant to charge to what the catalog ended up with.
+    if (p.priceMismatch > 0) {
+      chips.push({ label: `${p.priceMismatch} price mismatch`, done: false })
+    }
   }
   // Worth surfacing: stock is in Erply but the per-line record of it is not,
   // which leaves the shipment relying on its status alone to prevent a
