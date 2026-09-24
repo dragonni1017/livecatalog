@@ -229,6 +229,13 @@ export default function NewProductsPanel({
   }
 
   const creatable = unmatched.filter(isCreatable)
+  // Only nag when there is something the invoice would actually answer, and
+  // when no line on this shipment has been matched to an invoice line yet.
+  // invoice_line_no rather than the description: a row can legitimately join
+  // an invoice line that carries no description, and that still counts as
+  // having run the step.
+  const needsInvoice =
+    creatable.length > 0 && !unmatched.some((l) => l.invoice_line_no != null)
 
   return (
     <div className="mt-8">
@@ -256,6 +263,23 @@ export default function NewProductsPanel({
           />
         </label>
       </div>
+
+      {/* The invoice step is optional, easy to skip, and skipping it is
+          invisible until much later. As of 2026-09-24 it had never been run:
+          0 of 231 shipment lines carried an invoice_line_no, description or
+          unit price, across six received containers. The cost shows up at
+          pricing time -- invoice_unit_price_cents is the only landed cost
+          this system ever sees, so without it every one of those products
+          has to be priced from a guess at a sibling SKU. Hence a prompt
+          rather than just a button. */}
+      {needsInvoice && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="font-medium">No Commercial Invoice attached yet.</span> These {creatable.length} SKU
+          {creatable.length === 1 ? '' : 's'} have no English name, and nothing here records what they cost. Attaching
+          the invoice fills the names and descriptions, and stores each line&apos;s unit price — which is what a price
+          is decided from later. Without it, pricing falls back to guessing from similar SKUs.
+        </div>
+      )}
 
       {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm whitespace-pre-wrap text-red-700">{error}</div>}
       {flash && <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{flash}</div>}
