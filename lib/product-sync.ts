@@ -188,6 +188,8 @@ export async function syncToSupabase(
   // 3. Build DB records
   const now = new Date().toISOString()
   const incomingSkus: string[] = []
+  // SKUs inserted at price 0 -- hidden in a separate pass, see below.
+  const hideOnInsert: string[] = []
   const records: Record<string, unknown>[] = []
 
   for (const p of products) {
@@ -198,6 +200,20 @@ export async function syncToSupabase(
     const isNewProduct = !existingSkus.has(p.sku)
     const setCategory = !skip.has('category') || isNewProduct
     const categoryId = setCategory ? categoryMap[p.category_name] ?? null : null
+    // A product arriving with no price must not go live: Erply cannot accept
+    // a price over the API on this account (proven 2026-09-16), so everything
+    // created from a received container lands at 0 and is priced by hand
+    // afterwards -- and lib/order-submission.ts checks only
+    // is_active/manually_hidden, so a visible $0 row is orderable.
+    //
+    // Collected here and hidden AFTER the upsert rather than set on the row.
+    // Putting manually_hidden on only some rows of a batch breaks the whole
+    // batch: supabase-js sends one INSERT whose column list is the union of
+    // every row's keys, so rows lacking the key are sent an explicit NULL and
+    // the NOT NULL constraint rejects the lot. That is not hypothetical --
+    // it failed 500 rows on the 2026-09-24 sync, the first one where a new
+    // $0 product appeared after the guard shipped.
+    if (isNewProduct && p.price_cents <= 0) hideOnInsert.push(p.sku)
     records.push({
       sku: p.sku,
       barcode: p.barcode,
@@ -205,19 +221,6 @@ export async function syncToSupabase(
       price_cents: p.price_cents,
       description: p.description,
       is_active: p.is_active,
-      // A product arriving with no price is hidden on the way IN, never on an
-      // update. Erply cannot accept a price over the API on this account
-      // (proven 2026-09-16), so every product created from a received container
-      // lands at 0 and is priced by hand in Erply afterwards -- without this,
-      // the next sync publishes it as a $0.00 product, and
-      // lib/order-submission.ts checks only is_active/manually_hidden, so it
-      // would take that price onto a real order.
-      //
-      // Insert-only on purpose: flipping manually_hidden on an existing row
-      // would fight the admin's own visibility choices. Unhiding once a real
-      // price exists is a separate, deliberate step --
-      // scripts/zero-price-visibility.mjs.
-      ...(isNewProduct && p.price_cents <= 0 ? { manually_hidden: true } : {}),
       ...(skip.has('stock_qty') ? {} : { stock_qty: p.stock_qty }),
       ...(skip.has('image_url') ? {} : { image_url: p.image_url }),
       ...(categoryId ? { category_id: categoryId } : {}),
@@ -236,6 +239,24 @@ export async function syncToSupabase(
         failedSkus.add(sku)
         errors.push({ row: 0, sku, message: error.message })
       })
+    }
+  }
+
+  // 4b. Hide what was just inserted at price 0.
+  //
+  // A separate UPDATE rather than a column on the upsert, so every row in the
+  // batch carries the same keys -- see the note where hideOnInsert is filled.
+  // Restricted to SKUs that did not exist before this run, so an admin's own
+  // visibility choice on an existing product is never overridden; unhiding
+  // once a price exists is scripts/zero-price-visibility.mjs.
+  const toHide = hideOnInsert.filter((s) => !failedSkus.has(s))
+  for (let i = 0; i < toHide.length; i += CHUNK_SIZE) {
+    const chunk = toHide.slice(i, i + CHUNK_SIZE)
+    const { error } = await db.from('products').update({ manually_hidden: true }).in('sku', chunk)
+    if (error) {
+      // Loud, because the alternative is a $0 product on the storefront that
+      // lib/order-submission.ts will accept onto a real order.
+      chunk.forEach((sku) => errors.push({ row: 0, sku, message: `inserted but could NOT be hidden: ${error.message}` }))
     }
   }
 
