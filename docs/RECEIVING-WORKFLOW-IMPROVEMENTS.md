@@ -4,8 +4,8 @@ Five changes that would make receiving a container easier, ranked by time
 returned. Written after running six containers end to end on 2026-09-23/24,
 so each one names the friction it actually removes rather than a guess.
 
-**Status:** #1, #2 and #4 built. #3 and #5 are skeletons — enough to pick
-up, not yet designed in detail.
+**Status:** #1–#4 built. #5 is a skeleton — enough to pick up, not yet
+designed in detail.
 
 ---
 
@@ -64,7 +64,7 @@ SKUs or the whole folder.
 
 ---
 
-## 3. Bulk-set category
+## 3. Bulk-set category — BUILT
 
 **The friction.** Twenty `FD400*-25YARD` ribbon SKUs on one container, each
 needing the same category chosen individually. Category is one of the three

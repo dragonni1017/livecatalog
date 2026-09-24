@@ -50,6 +50,8 @@ export default function NewProductsPanel({
   const [groups, setGroups] = useState<ProductGroup[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkCategory, setBulkCategory] = useState('')
+  const [bulkPrice, setBulkPrice] = useState('')
   const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | 'catalog' | 'photos' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
@@ -86,6 +88,28 @@ export default function NewProductsPanel({
             ? String(parsed.spec.piecesPerPack)
             : '',
     }
+  }
+
+  /**
+   * Fill one field across every creatable row that is still missing it.
+   *
+   * Scoped to rows WITHOUT a value rather than all rows, and deliberately not
+   * driven by the row checkboxes: those are disabled until a row is complete,
+   * which is precisely the state this is meant to fix. Not overwriting means
+   * a deliberate per-row choice survives a careless click on a 20-row
+   * colourway run.
+   */
+  function fillMissing(field: 'category' | 'priceDollars', value: string) {
+    if (!value) return
+    setDrafts((prev) => {
+      const next = { ...prev }
+      for (const line of creatable) {
+        const current = next[line.id] ?? draftFor(line)
+        if (current[field]) continue
+        next[line.id] = { ...current, [field]: value }
+      }
+      return next
+    })
   }
 
   function setDraft(line: ShipmentLine, patch: Partial<Draft>) {
@@ -302,6 +326,10 @@ export default function NewProductsPanel({
   // Lines that produced an Erply product, which is what the catalog hop
   // acts on -- a SKU can appear on two lines, so the route de-duplicates.
   const created = lines.filter((l) => l.erply_created_product_id)
+  // Counted from the drafts, not the saved rows, so the buttons disappear as
+  // soon as the gap is filled rather than after a save.
+  const missingCategory = creatable.filter((l) => !draftFor(l).category)
+  const missingPrice = creatable.filter((l) => !draftFor(l).priceDollars)
   // Only nag when there is something the invoice would actually answer, and
   // when no line on this shipment has been matched to an invoice line yet.
   // invoice_line_no rather than the description: a row can legitimately join
@@ -385,6 +413,64 @@ export default function NewProductsPanel({
           {creatable.length === 1 ? '' : 's'} have no English name, and nothing here records what they cost. Attaching
           the invoice fills the names and descriptions, and stores each line&apos;s unit price — which is what a price
           is decided from later. Without it, pricing falls back to guessing from similar SKUs.
+        </div>
+      )}
+
+      {/* A colourway run is the normal case: 20 FD400*-25YARD ribbons on one
+          container, all the same category and usually the same price. Doing
+          that per row was 3 fields x 85 products on the 2026-09-23 batch. */}
+      {(missingCategory.length > 1 || missingPrice.length > 1) && (
+        <div className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <p className="w-full text-xs font-medium text-gray-600">
+            Fill the rows that are still blank — anything already set is left alone.
+          </p>
+          {missingCategory.length > 1 && (
+            <div className="flex items-end gap-2">
+              <label className="text-sm">
+                <span className="text-xs text-gray-600">Category</span>
+                <select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}
+                  className="mt-1 block rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                >
+                  <option value="">— choose —</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.name}>{g.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={!bulkCategory || busy !== null}
+                onClick={() => { fillMissing('category', bulkCategory); setBulkCategory('') }}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Set on {missingCategory.length} rows
+              </button>
+            </div>
+          )}
+          {missingPrice.length > 1 && (
+            <div className="flex items-end gap-2">
+              <label className="text-sm">
+                <span className="text-xs text-gray-600">Price (USD)</span>
+                <input
+                  value={bulkPrice}
+                  onChange={(e) => setBulkPrice(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="mt-1 block w-24 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={!bulkPrice || busy !== null}
+                onClick={() => { fillMissing('priceDollars', bulkPrice); setBulkPrice('') }}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Set on {missingPrice.length} rows
+              </button>
+            </div>
+          )}
         </div>
       )}
 
