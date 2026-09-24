@@ -50,7 +50,7 @@ export default function NewProductsPanel({
   const [groups, setGroups] = useState<ProductGroup[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | null>(null)
+  const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | 'catalog' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   // SKU + intended price for every product just created, since Erply won't
@@ -189,6 +189,42 @@ export default function NewProductsPanel({
     }
   }
 
+  // Creating a product puts it in Erply, not the catalog. Until this
+  // existed that last hop was a script, so a finished container could sit
+  // invisible with nothing to say why.
+  async function addToCatalog() {
+    setError(null)
+    setFlash(null)
+    setBusy('catalog')
+    try {
+      const res = await fetch('/admin/api/shipments/to-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipment_id: shipmentId }),
+      })
+      const err = await readApiError(res, 'Could not add the products to the catalog.')
+      if (err) {
+        setError(err)
+        return
+      }
+      const json = await res.json()
+      const notes: string[] = []
+      if (json.skippedPriced?.length) notes.push(`${json.skippedPriced.length} already priced in Erply — the sync owns those.`)
+      if (json.notInErply?.length) notes.push(`${json.notInErply.length} could not be read back from Erply.`)
+      if (json.noCategory?.length) notes.push(`${json.noCategory.length} had no matching category.`)
+      if (json.failures?.length) {
+        setError(`Some rows failed: ${json.failures.join('; ')}`)
+        return
+      }
+      setFlash([json.note, ...notes].join(' '))
+      onLines(lines)
+    } catch {
+      setError(TRANSPORT_ERROR)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function createSelected() {
     setError(null)
     setFlash(null)
@@ -229,6 +265,9 @@ export default function NewProductsPanel({
   }
 
   const creatable = unmatched.filter(isCreatable)
+  // Lines that produced an Erply product, which is what the catalog hop
+  // acts on -- a SKU can appear on two lines, so the route de-duplicates.
+  const created = lines.filter((l) => l.erply_created_product_id)
   // Only nag when there is something the invoice would actually answer, and
   // when no line on this shipment has been matched to an invoice line yet.
   // invoice_line_no rather than the description: a row can legitimately join
@@ -263,6 +302,26 @@ export default function NewProductsPanel({
           />
         </label>
       </div>
+
+      {/* Offered once something has actually been created. The count is of
+          lines, not products, so it says "from this shipment" rather than a
+          number that would disagree with the catalog. */}
+      {created.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={addToCatalog}
+            disabled={busy !== null}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {busy === 'catalog' ? 'Adding…' : 'Add created products to the catalog'}
+          </button>
+          <span className="text-xs text-gray-500">
+            They go in hidden — a product with no price is orderable at $0, so pricing in Erply is what makes them
+            visible.
+          </span>
+        </div>
+      )}
 
       {/* The invoice step is optional, easy to skip, and skipping it is
           invisible until much later. As of 2026-09-24 it had never been run:

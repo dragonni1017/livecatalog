@@ -510,7 +510,15 @@ export async function getErplyProductGroups(): Promise<ErplyProductGroup[]> {
  */
 export async function getErplyProductByCode(
   code: string,
-): Promise<{ productId: number; name: string; price: number; groupName: string } | null> {
+): Promise<{
+  productId: number
+  name: string
+  price: number
+  groupName: string
+  /** Erply's code2. Needed when mirroring a product into the catalog. */
+  barcode: string | null
+  isActive: boolean
+} | null> {
   if (!isConfigured()) return null
   const sessionKey = await getSessionKey()
   const data = await erplyPost<ErplyProduct>({ request: 'getProducts', sessionKey, code })
@@ -521,6 +529,8 @@ export async function getErplyProductByCode(
     name: rec.name,
     price: rec.price ?? 0,
     groupName: rec.groupName ?? '',
+    barcode: rec.code2?.trim() || null,
+    isActive: rec.active === 1,
   }
 }
 
