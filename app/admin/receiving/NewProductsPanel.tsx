@@ -50,7 +50,7 @@ export default function NewProductsPanel({
   const [groups, setGroups] = useState<ProductGroup[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | 'catalog' | null>(null)
+  const [busy, setBusy] = useState<'invoice' | 'save' | 'create' | 'catalog' | 'photos' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   // SKU + intended price for every product just created, since Erply won't
@@ -225,6 +225,40 @@ export default function NewProductsPanel({
     }
   }
 
+  // The photos for a container arrive as a folder named by SKU. Matching is
+  // lib/photo-matching.ts, the same module the scripts use, so this cannot
+  // decide a file belongs to a product they would disagree about.
+  async function uploadPhotos(files: FileList) {
+    setError(null)
+    setFlash(null)
+    setBusy('photos')
+    try {
+      const body = new FormData()
+      body.append('shipment_id', shipmentId)
+      for (const f of Array.from(files)) body.append('files', f)
+      const res = await fetch('/admin/api/shipments/photos', { method: 'POST', body })
+      const err = await readApiError(res, 'Could not upload the photos.')
+      if (err) {
+        setError(err)
+        return
+      }
+      const json = await res.json()
+      if (json.failures?.length) {
+        setError(`Some photos failed: ${json.failures.join('; ')}`)
+        return
+      }
+      const notes: string[] = []
+      if (json.skippedHaveImage?.length) notes.push(`${json.skippedHaveImage.length} already had a photo.`)
+      if (json.unmatchedCount) notes.push(`${json.unmatchedCount} matched no SKU on this shipment.`)
+      setFlash([`Uploaded photos for ${json.uploaded} product(s).`, ...notes].join(' '))
+      onLines(lines)
+    } catch {
+      setError(TRANSPORT_ERROR)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function createSelected() {
     setError(null)
     setFlash(null)
@@ -316,6 +350,20 @@ export default function NewProductsPanel({
           >
             {busy === 'catalog' ? 'Adding…' : 'Add created products to the catalog'}
           </button>
+          <label className="cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            {busy === 'photos' ? 'Uploading…' : 'Upload photos for this container'}
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              multiple
+              className="hidden"
+              disabled={busy !== null}
+              onChange={(e) => {
+                if (e.target.files?.length) uploadPhotos(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </label>
           <span className="text-xs text-gray-500">
             They go in hidden — a product with no price is orderable at $0, so pricing in Erply is what makes them
             visible.
