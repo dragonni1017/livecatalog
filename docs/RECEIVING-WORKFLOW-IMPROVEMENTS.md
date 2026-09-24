@@ -4,8 +4,8 @@ Five changes that would make receiving a container easier, ranked by time
 returned. Written after running six containers end to end on 2026-09-23/24,
 so each one names the friction it actually removes rather than a guess.
 
-**Status:** #1 built. #2–#5 are skeletons — enough to pick up, not yet
-designed in detail.
+**Status:** #1, #2 and #4 built. #3 and #5 are skeletons — enough to pick
+up, not yet designed in detail.
 
 ---
 
@@ -38,7 +38,7 @@ exactly how #5's missing cost basis becomes visible.
 
 ---
 
-## 2. Finish the job on one screen
+## 2. Finish the job on one screen — BUILT
 
 **The friction.** A container currently needs three screens and three
 scripts, in an order that lives in someone's head:
@@ -80,7 +80,7 @@ above.
 
 ---
 
-## 4. Warn about a duplicate container at stage time
+## 4. Warn about a duplicate container at stage time — BUILT
 
 **The friction.** Guard A fires at apply — after the workbook is staged,
 counts corrected and products created. Both Original/Arrival duplicates on
