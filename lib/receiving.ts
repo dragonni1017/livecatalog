@@ -191,3 +191,75 @@ export function findDuplicateRegistrations(
   }
   return hits
 }
+
+// ── Per-container progress ───────────────────────────────────────────────────
+
+export interface SummaryLine extends ReceivingLine {
+  sku: string
+  invoice_line_no?: number | null
+}
+
+/** What the catalog knows about a SKU this shipment created. */
+export interface SummaryProduct {
+  price_cents: number | null
+  image_url: string | null
+}
+
+export interface ShipmentProgress {
+  /** Lines that need a product created before their stock can be registered. */
+  toCreate: number
+  created: number
+  /** Of the lines still to create, how many have each field Erply needs. */
+  named: number
+  categorised: number
+  /** Any line joined to a Commercial Invoice line. */
+  hasInvoice: boolean
+  /** Lines whose stock may still be registered, and what that is worth. */
+  appliable: number
+  appliablePieces: number
+  /** Per-line confirmations actually recorded (see the apply route). */
+  linesConfirmed: number
+  /** Created SKUs, measured against the catalog rather than this shipment. */
+  inCatalog: number
+  withPhoto: number
+  priced: number
+}
+
+/**
+ * One container's state, as a projection of rows that already exist.
+ *
+ * Exists because there was no single place that said where a container was:
+ * answering it meant querying by hand, and on 2026-09-23 that produced a
+ * confidently wrong answer twice. Pure, and living beside the predicates it
+ * reports on, so the screen cannot drift from the rules the routes enforce.
+ *
+ * `productsBySku` is keyed UPPER-CASE and only needs to contain the SKUs this
+ * shipment created; a SKU absent from it simply counts as not in the catalog.
+ */
+export function summariseShipment(
+  lines: SummaryLine[],
+  productsBySku: Map<string, SummaryProduct>,
+): ShipmentProgress {
+  const creatable = lines.filter(isCreatable)
+  const createdLines = lines.filter((l) => l.erply_created_product_id)
+  const appliableLines = lines.filter(isStockAppliable)
+
+  // Measured on the catalog, not on the shipment: creating a product in Erply
+  // does not put it in the catalog, and that gap is the thing worth seeing.
+  const createdSkus = [...new Set(createdLines.map((l) => l.sku.toUpperCase()))]
+  const products = createdSkus.map((s) => productsBySku.get(s)).filter((p): p is SummaryProduct => !!p)
+
+  return {
+    toCreate: creatable.length,
+    created: createdLines.length,
+    named: creatable.filter((l) => l.proposed_name).length,
+    categorised: creatable.filter((l) => l.proposed_category).length,
+    hasInvoice: lines.some((l) => l.invoice_line_no != null),
+    appliable: appliableLines.length,
+    appliablePieces: appliableLines.reduce((n, l) => n + (l.qty_received ?? 0), 0),
+    linesConfirmed: lines.filter((l) => l.applied_at).length,
+    inCatalog: products.length,
+    withPhoto: products.filter((p) => p.image_url).length,
+    priced: products.filter((p) => (p.price_cents ?? 0) > 0).length,
+  }
+}

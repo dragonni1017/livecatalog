@@ -11,6 +11,7 @@ import {
   type SheetRow,
 } from '@/lib/packing-list'
 import { blockersForDelete, containerRefFromFileName } from '@/lib/receiving'
+import { loadShipmentProgress } from '@/lib/receiving-progress'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,12 @@ export async function GET() {
       .order('staged_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    return NextResponse.json({ shipments: shipments ?? [] })
+    // Per-container progress, so the screen can say where each one is
+    // instead of leaving it to be reconstructed by hand. Shared with the
+    // page's first paint via lib/receiving-progress.ts.
+    const progress = await loadShipmentProgress(db, (shipments ?? []).map((s) => s.id))
+
+    return NextResponse.json({ shipments: shipments ?? [], progress })
   } catch (err) {
     console.error('[admin/shipments GET] error:', err)
     return NextResponse.json({ error: 'Failed to load shipments.' }, { status: 500 })

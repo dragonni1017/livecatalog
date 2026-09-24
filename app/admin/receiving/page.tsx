@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import { isConfigured as isErplyConfigured } from '@/lib/erply'
+import { loadShipmentProgress } from '@/lib/receiving-progress'
 import ReceivingUpload, { type Shipment } from './ReceivingUpload'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,11 @@ export default async function ReceivingPage() {
     .select('*')
     .order('staged_at', { ascending: false })
     .limit(25)
+
+  // Rendered with the page rather than fetched on mount: the strip is the
+  // first thing worth reading, and a client effect that sets state is what
+  // this project's lint rules (rightly) refuse.
+  const progress = await loadShipmentProgress(db, (shipments ?? []).map((s) => s.id))
 
   const erplyReady = isErplyConfigured()
 
@@ -33,7 +39,7 @@ export default async function ReceivingPage() {
         </div>
       )}
 
-      <ReceivingUpload initialShipments={(shipments ?? []) as Shipment[]} />
+      <ReceivingUpload initialShipments={(shipments ?? []) as Shipment[]} initialProgress={progress} />
     </div>
   )
 }
