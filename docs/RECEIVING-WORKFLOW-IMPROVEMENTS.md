@@ -32,8 +32,9 @@ The list endpoint returns one summary per shipment; the screen renders it in
 the history row and in full for the open shipment.
 
 **Why it is first.** It makes the other four self-evident: a column that is
-always blank is a step nobody is doing. `invoice ✗` on every container is
-exactly how #5's missing cost basis becomes visible.
+always blank is a step nobody is doing. (`invoice ✗` is normal at receiving
+time: a PO's Commercial Invoice arrives afterward and is used only to add or
+adjust items. It is not a pricing input; see #5.)
 
 ---
 
@@ -103,18 +104,22 @@ the price someone *intended* to the price Erply ends up holding, so a typo
 or a skipped row is invisible. Today's 95-product backlog is that gap made
 visible.
 
-**The shape.** Three parts, usable independently:
+**The shape.** Two parts:
 
-- Attach the Commercial Invoice during receiving (already implemented, never
-  run) so `invoice_unit_price_cents` carries a real landed cost.
 - Type the intended retail once, into `proposed_price_cents`, which already
   exists and is currently only ever 0.
 - After a sync, reconcile: flag every product where Erply's price differs
   from what was intended, and every created product still at 0.
 
-**Built 2026-09-24.** The first two parts already existed and were simply
-unused: the Commercial Invoice attach carries unit prices, and the panel
-already writes proposed_price_cents. What was missing was the check.
+**Not the Commercial Invoice.** An earlier draft counted the invoice attach
+(`invoice_unit_price_cents`) as a price source. It is not one: a PO's invoice
+reaches us after receiving and is used only to add or adjust items (Dragon,
+2026-09-24). Do not backfill intended prices from it. The only intended price
+is the one typed into the new-products panel.
+
+**Built 2026-09-24.** The first part already existed and was simply unused:
+the panel already writes proposed_price_cents. What was missing was the
+check.
 
 scripts/reconcile-prices.ts reports three numbers per product -- intended,
 Erply, catalog -- and names the disagreements: MISMATCH (Erply differs from
