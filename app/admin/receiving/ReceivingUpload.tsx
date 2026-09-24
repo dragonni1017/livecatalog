@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
-import { blockersForDelete } from '@/lib/receiving'
+import { blockersForDelete, type ShipmentProgress } from '@/lib/receiving'
 import NewProductsPanel from './NewProductsPanel'
 
 // Client-side workbook read, same approach as components/admin/ExcelDropzone.tsx:
@@ -68,6 +68,62 @@ interface DuplicateWarning {
   rows?: { sku: string; addQty: number; documentId: number; date: string }[]
 }
 
+/**
+ * One container's outstanding work, as chips.
+ *
+ * Deliberately shows a step only when it is relevant: a container with no new
+ * SKUs has nothing to name or categorise, and saying "names 0/0" on every row
+ * trains people to stop reading. Green means done, amber means outstanding.
+ */
+function ProgressStrip({ p, applied }: { p: ShipmentProgress; applied: boolean }) {
+  const chips: { label: string; done: boolean }[] = []
+
+  if (p.toCreate > 0) {
+    chips.push({ label: p.hasInvoice ? 'invoice ✓' : 'no invoice', done: p.hasInvoice })
+    chips.push({ label: `names ${p.named}/${p.toCreate}`, done: p.named === p.toCreate })
+    chips.push({ label: `categories ${p.categorised}/${p.toCreate}`, done: p.categorised === p.toCreate })
+    chips.push({ label: `${p.toCreate} to create`, done: false })
+  }
+  // The shipment's own status is the authority on whether stock was
+  // registered, NOT the per-line applied_at: those are null on every line
+  // received so far, so an applied container's lines still satisfy
+  // isStockAppliable. Reading that as outstanding work is precisely the
+  // mistake this strip exists to prevent -- it is how EGSU1396926 was
+  // reported as "still to receive" an hour after it was applied.
+  if (applied) {
+    chips.push({ label: 'stock applied ✓', done: true })
+  } else if (p.appliable > 0) {
+    chips.push({ label: `${p.appliablePieces.toLocaleString()} pcs to apply`, done: false })
+  }
+  if (p.created > 0) {
+    chips.push({ label: `catalog ${p.inCatalog}/${p.created}`, done: p.inCatalog === p.created })
+    chips.push({ label: `photos ${p.withPhoto}/${p.created}`, done: p.withPhoto === p.created })
+    chips.push({ label: `priced ${p.priced}/${p.created}`, done: p.priced === p.created })
+  }
+  // Worth surfacing: stock is in Erply but the per-line record of it is not,
+  // which leaves the shipment relying on its status alone to prevent a
+  // second apply. See the write-back note in the apply route.
+  if (applied && p.linesConfirmed === 0) {
+    chips.push({ label: 'lines unconfirmed', done: false })
+  }
+  if (chips.length === 0) return null
+
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          className={`rounded px-1.5 py-0.5 text-[11px] ${
+            c.done ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'
+          }`}
+        >
+          {c.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 const MATCH_LABEL: Record<string, string> = {
   matched: 'Matched',
   unmatched_sku: 'Not in catalog',
@@ -80,8 +136,33 @@ const MATCH_STYLE: Record<string, string> = {
   barcode_mismatch: 'bg-red-100 text-red-700',
 }
 
-export default function ReceivingUpload({ initialShipments }: { initialShipments: Shipment[] }) {
+export default function ReceivingUpload({
+  initialShipments,
+  initialProgress,
+}: {
+  initialShipments: Shipment[]
+  initialProgress: Record<string, ShipmentProgress>
+}) {
   const [shipments, setShipments] = useState(initialShipments)
+  const [progress, setProgress] = useState<Record<string, ShipmentProgress>>(initialProgress)
+
+  // Progress comes from the list endpoint rather than the server-rendered
+  // page, so one implementation (summariseShipment, via GET) answers it for
+  // every caller -- and so it can be refreshed after an action without a
+  // full reload. A failure here must never break the screen: the strip is
+  // information, not a control.
+  const refreshProgress = useCallback(async () => {
+    try {
+      const res = await fetch('/admin/api/shipments')
+      if (!res.ok) return
+      const json = await res.json()
+      if (json.progress) setProgress(json.progress)
+      if (Array.isArray(json.shipments)) setShipments(json.shipments)
+    } catch {
+      /* leave the strip as it was */
+    }
+  }, [])
+
   const [shipment, setShipment] = useState<Shipment | null>(null)
   const [lines, setLines] = useState<ShipmentLine[]>([])
   const [problems, setProblems] = useState<Array<{ where: string; problem: string }>>([])
@@ -378,6 +459,9 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
       setShipment(json.shipment)
       setLines(json.lines ?? [])
       setShipments((prev) => prev.map((s) => (s.id === json.shipment.id ? json.shipment : s)))
+      // The strip is the only place that says what this container still
+      // needs, so it has to move when the answer does.
+      void refreshProgress()
       const skipped = json.skippedMissingInErply?.length
         ? ` ${json.skippedMissingInErply.length} SKU(s) weren't in Erply and were skipped.`
         : ''
@@ -691,7 +775,14 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
 
       {/* ── New products (Phase 2) ─────────────────────────────────────── */}
       {shipment && (
-        <NewProductsPanel shipmentId={shipment.id} lines={lines} onLines={setLines} />
+        <NewProductsPanel
+          shipmentId={shipment.id}
+          lines={lines}
+          onLines={(next) => {
+            setLines(next)
+            void refreshProgress()
+          }}
+        />
       )}
 
       {/* ── History ────────────────────────────────────────────────────── */}
@@ -724,6 +815,14 @@ export default function ReceivingUpload({ initialShipments }: { initialShipments
                         </p>
                         <p className="text-xs text-gray-400">{s.file_name}</p>
                       </button>
+                      {/* Where this container actually is. Every fact is a
+                          projection of rows that already exist; the point is
+                          that nobody should have to reconstruct it. An
+                          abandoned shipment is excluded -- none of these steps
+                          apply to it. */}
+                      {s.status !== 'abandoned' && progress[s.id] && (
+                        <ProgressStrip p={progress[s.id]} applied={s.status === 'applied'} />
+                      )}
                     </td>
                     <td className="px-4 py-2 text-gray-500">{s.line_count} SKUs</td>
                     <td className="px-4 py-2">

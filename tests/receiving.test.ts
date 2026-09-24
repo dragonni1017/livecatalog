@@ -6,6 +6,8 @@ import {
   isCreatable,
   isStockAppliable,
   missingForCreate,
+  summariseShipment,
+  type SummaryLine,
   type ReceivingLine,
 } from '@/lib/receiving'
 
@@ -218,5 +220,82 @@ describe('findDuplicateRegistrations', () => {
   it('handles an empty history and an empty batch', () => {
     expect(findDuplicateRegistrations([{ sku: 'X', productId: 1, addQty: 5 }], [])).toEqual([])
     expect(findDuplicateRegistrations([], prior)).toEqual([])
+  })
+})
+
+describe('summariseShipment', () => {
+  const l = (over: Partial<SummaryLine>): SummaryLine => ({
+    sku: 'X1', match_status: 'matched', qty_received: 10, applied_at: null,
+    erply_created_product_id: null, ...over,
+  })
+
+  it('counts what a container still needs', () => {
+    const p = summariseShipment(
+      [
+        l({ sku: 'A', match_status: 'unmatched_sku', proposed_name: 'Thing' }),
+        l({ sku: 'B', match_status: 'unmatched_sku' }),
+        l({ sku: 'C', qty_received: 100 }),
+      ],
+      new Map(),
+    )
+    expect(p.toCreate).toBe(2)
+    expect(p.named).toBe(1)
+    expect(p.categorised).toBe(0)
+    expect(p.appliable).toBe(1)
+    expect(p.appliablePieces).toBe(100)
+  })
+
+  it('measures catalog state on the catalog, not the shipment', () => {
+    // Creating a product in Erply does not put it in the catalog. That gap
+    // is the whole reason this column exists.
+    const lines = [
+      l({ sku: 'A', erply_created_product_id: 1 }),
+      l({ sku: 'B', erply_created_product_id: 2 }),
+    ]
+    const p = summariseShipment(lines, new Map([['A', { price_cents: 0, image_url: null }]]))
+    expect(p.created).toBe(2)
+    expect(p.inCatalog).toBe(1)
+    expect(p.withPhoto).toBe(0)
+    expect(p.priced).toBe(0)
+  })
+
+  it('counts photos and prices only for products that exist', () => {
+    const p = summariseShipment(
+      [l({ sku: 'A', erply_created_product_id: 1 }), l({ sku: 'B', erply_created_product_id: 2 })],
+      new Map([
+        ['A', { price_cents: 1200, image_url: 'https://cdn/A.jpg' }],
+        ['B', { price_cents: 0, image_url: null }],
+      ]),
+    )
+    expect(p.inCatalog).toBe(2)
+    expect(p.priced).toBe(1)
+    expect(p.withPhoto).toBe(1)
+  })
+
+  it('reports the invoice step as done when any line joined one', () => {
+    expect(summariseShipment([l({ invoice_line_no: 7 }), l({})], new Map()).hasInvoice).toBe(true)
+    expect(summariseShipment([l({}), l({})], new Map()).hasInvoice).toBe(false)
+  })
+
+  it('separates lines confirmed from the shipment being applied', () => {
+    // The 2026-09-23 shape: stock registered, per-line confirmation missing.
+    const p = summariseShipment([l({ applied_at: null }), l({ applied_at: null })], new Map())
+    expect(p.linesConfirmed).toBe(0)
+    expect(p.appliable).toBe(2)
+  })
+
+  it('handles a shipment with no lines', () => {
+    const p = summariseShipment([], new Map())
+    expect(p).toMatchObject({ toCreate: 0, created: 0, appliable: 0, appliablePieces: 0, inCatalog: 0 })
+  })
+
+  it('counts one SKU once even when it appears on two lines', () => {
+    // K229582 really did ship on two containers.
+    const p = summariseShipment(
+      [l({ sku: 'K229582', erply_created_product_id: 5 }), l({ sku: 'K229582', erply_created_product_id: 5 })],
+      new Map([['K229582', { price_cents: 100, image_url: 'x' }]]),
+    )
+    expect(p.created).toBe(2)
+    expect(p.inCatalog).toBe(1)
   })
 })
