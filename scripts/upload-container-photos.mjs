@@ -37,6 +37,7 @@ import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
+import { readImageFiles, matchFilesToProducts } from './photo-matching.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -92,17 +93,9 @@ const folders = dirArgs.length
 console.log(`Scanning ${folders.length} folder(s):`)
 folders.forEach((f) => console.log(`  ${f}`))
 
-const files = []
-for (const dir of folders) {
-  for (const name of fs.readdirSync(dir)) {
-    if (!/\.(jpe?g|png|webp)$/i.test(name)) continue
-    const stem = name.replace(/\.[^.]+$/, '').replace(/\s*\(\d+\)\s*$/, '').trim()
-    // A " (2)" file is Chrome's second download of the same image. Tracked
-    // only as a tiebreak: the unmarked copy wins the primary slot.
-    const redownload = /\s*\(\d+\)\s*$/.test(name.replace(/\.[^.]+$/, ''))
-    files.push({ dir, name, stem, redownload, filePath: path.join(dir, name) })
-  }
-}
+// Matching rules live in ./photo-matching.mjs so that
+// find-photos-for-missing-images.mjs reports exactly what this will upload.
+const files = readImageFiles(folders)
 console.log(`\n${files.length} image file(s) found`)
 
 // 2. Catalog rows.
@@ -118,40 +111,8 @@ for (let from = 0; ; from += 1000) {
 }
 const bySku = new Map(products.map((p) => [p.sku.trim().toUpperCase(), p]))
 
-// 3. Match files to products: exact SKU first, then -N as an extra view.
-const plan = new Map()   // sku -> { product, primary, views: [{n, file}] }
-const unmatched = []
-for (const f of files) {
-  const stem = f.stem.toUpperCase()
-  const exact = bySku.get(stem)
-  if (exact) {
-    const entry = plan.get(exact.sku) ?? { product: exact, primary: null, views: [], dupes: [] }
-    // Two files with the same SKU and no view number are the same photo
-    // downloaded twice, not two angles -- keep one, list the other.
-    if (!entry.primary) entry.primary = f
-    else if (entry.primary.redownload && !f.redownload) { entry.dupes.push(entry.primary); entry.primary = f }
-    else entry.dupes.push(f)
-    plan.set(exact.sku, entry)
-    continue
-  }
-  // Extra views are written both ways in the wild: "B325123-1.jpg" and
-  // "S162815_2.jpg". Underscore is unambiguous -- no product SKU contains one
-  // (checked live 2026-09-23) -- and the exact-match branch above has already
-  // claimed the SKUs that genuinely end in -<digit> (B325084-1, F286877-2 ...).
-  const m = /^(.*)[-_](\d+)$/.exec(stem)
-  const base = m ? bySku.get(m[1]) : null
-  if (base) {
-    const entry = plan.get(base.sku) ?? { product: base, primary: null, views: [], dupes: [] }
-    const n = Number(m[2])
-    const seen = entry.views.find((v) => v.n === n)
-    if (!seen) entry.views.push({ n, file: f })
-    else if (seen.file.redownload && !f.redownload) { entry.dupes.push(seen.file); seen.file = f }
-    else entry.dupes.push(f)
-    plan.set(base.sku, entry)
-    continue
-  }
-  unmatched.push(f)
-}
+// 3. Match files to products -- shared with find-photos-for-missing-images.mjs.
+const { plan, unmatched } = matchFilesToProducts(files, bySku)
 
 const entries = [...plan.values()].sort((a, b) => a.product.sku.localeCompare(b.product.sku))
 const withImage = entries.filter((e) => e.product.image_url)
