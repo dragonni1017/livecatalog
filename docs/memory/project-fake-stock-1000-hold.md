@@ -44,7 +44,12 @@ So a sync will not fix it, and receiving will build on top of it.
 
 Also surfaced by that comparison, and separate from the 1000 story: `D701005`
 through `D701008` read **3,120 in the catalog and 0 in Erply** (all hidden),
-the largest divergences in the catalog.
+the largest divergences in the catalog. **Resolved 2026-09-25:** 3,120 is
+26 × 120, the pieces in one case taken from the name, not a count. Erply had
+0 in every export, the catalog had the 999 import placeholder in June, and
+`stock_adjustments` had no row, so an unidentified script wrote it directly.
+All four were set to 0 in the catalog only, via `adjust_stock()` (4 audit
+rows). Erply was not touched.
 
 A trap in writing that comparison, worth not repeating: **Erply returns stock
 as a string** (`"1000.000000"`). The first run compared it with `=== 1000`,
