@@ -1,6 +1,6 @@
 ---
 name: project-receiving-to-catalog-20260923
-description: 2026-09-23 - five containers received (75 new Erply SKUs, stock verified landed); the sync could not insert them because products_id_seq collides with hand-assigned ids (migration 0052, NOT YET APPLIED); all 75 are in the catalog hidden at $0 awaiting manual Erply pricing
+description: 2026-09-23 - five containers received (75 new Erply SKUs, stock verified landed); the sync could not insert them because products_id_seq collides with hand-assigned ids (migration 0052; sequence verified ahead of max id 2026-09-25); all 75 are in the catalog hidden at $0 awaiting manual Erply pricing
 type: project
 ---
 
@@ -24,7 +24,8 @@ Four things worth keeping:
    whole chunk. It is loud in the response's `errors[]` and invisible
    everywhere else -- it just looks like the products never arrived.
    `supabase/migrations/0052_products_id_seq_reseed.sql` reseeds it and is
-   **not yet applied** (manual, Supabase SQL editor). Re-run it after any
+   **verified healthy 2026-09-25**: sequence at 52438 vs max id 46110 (the
+   gap is syncs burning ~3,200 values each, harmless). Re-run it after any
    script that hand-assigns a block of ids.
 
 2. **A received product is a $0.00 product, and $0.00 is orderable.**
