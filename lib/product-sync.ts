@@ -38,7 +38,8 @@ export interface SyncProduct {
   name: string
   price_cents: number
   description: string | null
-  stock_qty: number
+  /** null = the source didn't state a quantity (a blank Excel cell). */
+  stock_qty: number | null
   image_url: string | null
   is_active: boolean
   category_name: string
@@ -142,13 +143,25 @@ export async function previewSync(products: SyncProduct[], db: DB): Promise<Sync
   }
 }
 
+/**
+ * An Excel "Stock Qty" cell -> quantity, or null when blank (not stated).
+ * Shared by the import and its diff preview so they agree on what a blank
+ * cell means.
+ */
+export function parseStockCell(cell: unknown): number | null {
+  const s = cell?.toString().trim() ?? ''
+  if (s === '') return null
+  return parseInt(s) || 0
+}
+
 export interface SyncOptions {
   /**
    * Fields to leave out of the upsert payload entirely (existing DB value is
    * preserved) rather than overwritten with the incoming value. Use this for
    * sources whose data for that field isn't trustworthy yet — e.g. Erply's
    * image_url/stock_qty (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) —
-   * without affecting other sources (Excel import legitimately sets both).
+   * without affecting other sources (Excel import sets both, though a blank
+   * cell keeps the stored value -- see keepExistingWhenBlank).
    *
    * 'category' is different from the other two: it's not that the incoming
    * value is untrustworthy, it's that several Supabase categories are
@@ -165,6 +178,21 @@ export interface SyncOptions {
    * 'image_url' and 'stock_qty', by contrast, are dropped on insert too.
    */
   skipFields?: Array<'image_url' | 'stock_qty' | 'category' | 'description'>
+  /**
+   * Deactivate every active product absent from `products` (default true).
+   * Right for Erply, which sends the whole catalog. Wrong for an Excel sheet,
+   * which may hold only some rows: imported with this on, a 10-row sheet
+   * would deactivate the other ~3,300 products.
+   */
+  deactivateMissing?: boolean
+  /**
+   * On EXISTING products, a null incoming value for these fields means "not
+   * stated", so the stored value is kept rather than overwritten with
+   * null/0. For Excel, where a blank cell is an omission, not a decision to
+   * erase a photo or zero the stock. New products still take the value (or
+   * 0 for stock).
+   */
+  keepExistingWhenBlank?: Array<'image_url' | 'stock_qty'>
 }
 
 /**
@@ -178,6 +206,7 @@ export async function syncToSupabase(
 ): Promise<ImportResult> {
   const errors: ImportResult['errors'] = []
   const skip = new Set(options.skipFields ?? [])
+  const keepWhenBlank = new Set(options.keepExistingWhenBlank ?? [])
 
   // 1. Resolve categories
   const categoryNames = products.map((p) => p.category_name)
@@ -234,6 +263,8 @@ export async function syncToSupabase(
     // existing product's description is never touched, but a new one still
     // gets Erply's.
     const setDescription = !skip.has('description') || isNewProduct
+    const setStock = !skip.has('stock_qty') && (isNewProduct || p.stock_qty !== null || !keepWhenBlank.has('stock_qty'))
+    const setImage = !skip.has('image_url') && (isNewProduct || p.image_url !== null || !keepWhenBlank.has('image_url'))
     ;(isNewProduct ? insertRecords : updateRecords).push({
       sku: p.sku,
       barcode: p.barcode,
@@ -241,17 +272,29 @@ export async function syncToSupabase(
       price_cents: p.price_cents,
       ...(setDescription ? { description: p.description } : {}),
       is_active: p.is_active,
-      ...(skip.has('stock_qty') ? {} : { stock_qty: p.stock_qty }),
-      ...(skip.has('image_url') ? {} : { image_url: p.image_url }),
+      ...(setStock ? { stock_qty: p.stock_qty ?? 0 } : {}),
+      ...(setImage ? { image_url: p.image_url } : {}),
       ...(categoryId ? { category_id: categoryId } : {}),
       updated_at: now,
     })
   }
 
   // 4. Bulk upsert in chunks -- new rows and existing rows never share a
-  //    chunk (see where insertRecords/updateRecords are declared).
+  //    chunk (see where insertRecords/updateRecords are declared), and
+  //    within each, rows are further grouped by their exact key set. Any
+  //    per-row optional key (category_id when a name doesn't resolve, a
+  //    blank-kept image_url or stock_qty) would otherwise be NULLed on the
+  //    rows that lack it, by the same union-of-keys mechanism.
+  const byKeySet = (rows: Record<string, unknown>[]) => {
+    const groups = new Map<string, Record<string, unknown>[]>()
+    for (const r of rows) {
+      const sig = Object.keys(r).sort().join(',')
+      groups.set(sig, [...(groups.get(sig) ?? []), r])
+    }
+    return [...groups.values()]
+  }
   const failedSkus = new Set<string>()
-  for (const records of [updateRecords, insertRecords]) {
+  for (const records of [...byKeySet(updateRecords), ...byKeySet(insertRecords)]) {
     for (let i = 0; i < records.length; i += CHUNK_SIZE) {
       const chunk = records.slice(i, i + CHUNK_SIZE)
       const { error } = await db.from('products').upsert(chunk, { onConflict: 'sku' })
@@ -290,7 +333,7 @@ export async function syncToSupabase(
 
   // 6. Deactivate products not in this batch
   let deactivated = 0
-  if (incomingSkus.length > 0) {
+  if (incomingSkus.length > 0 && options.deactivateMissing !== false) {
     const skuList = incomingSkus.map((s) => `'${s.replace(/'/g, "''")}'`).join(',')
     const { data: deactivatedRows, error } = await db
       .from('products')
