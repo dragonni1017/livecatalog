@@ -70,6 +70,11 @@ export async function middleware(request: NextRequest) {
 
   // The gate page and its API must stay reachable; APIs are called by the
   // browser after entry and aren't gated here.
+  //
+  // So /api/* is PUBLIC: nothing above checks a session for it. A route
+  // that's admin-only belongs under /admin/api/*, which the admin gate
+  // covers. /api/import sat here unauthenticated, writing products with the
+  // service-role client, until 2026-10-01.
   if (pathname === '/enter' || pathname.startsWith('/api')) return response
 
   // A customer clicking an emailed password-reset link has already proven

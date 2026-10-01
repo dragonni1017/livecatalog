@@ -114,7 +114,7 @@ export default function ExcelDropzone() {
 
       setStage('diffing')
 
-      const res = await fetch('/api/import/diff', {
+      const res = await fetch('/admin/api/import/diff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
@@ -157,7 +157,7 @@ export default function ExcelDropzone() {
       const validSkus = new Set(validRows.map((r) => (r.SKU ?? '').toString().trim()))
       const corrections = barcodeCorrections.filter((c) => validSkus.has(c.sku))
 
-      const res = await fetch('/api/import', {
+      const res = await fetch('/admin/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: validRows, barcodeCorrections: corrections }),
