@@ -21,9 +21,13 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
   vendor, so failing closed broke nothing.
 
 **Still OPEN (not fixed)**, most severe first:
-1. `cart-session` POST: no auth. Client-supplied names and prices are emailed by
+1. **FIXED 2026-10-01 (PR after #80).** `cart-session` POST: no auth. Client-supplied names and prices are emailed by
    `lib/abandoned-cart.ts` from company SMTP to any address, which makes it a
-   spam/phishing relay. It can also overwrite a real customer's saved cart.
+   spam/phishing relay. It can also overwrite a real customer's saved cart. Now only `{sku, qty}` is taken from the caller.
+   Names and prices come from `products` (active and visible only) on save, and are rebuilt again
+   at send time. The greeting name is reduced to name characters (`lib/cart-session-items.ts`).
+   Overwriting someone's saved cart, and a reminder to any typed address (with
+   real product text only), are accepted residuals of guest checkout.
 2. `orders` POST: the tier/discount comes from the *typed* email, not the
    session. Anyone who knows a tiered customer's email gets their pricing on
    a quote. `placedByRep` is client-trusted for non-reps.
