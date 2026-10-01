@@ -177,7 +177,7 @@ export default function CustomerTable({ initialCustomers, tiers }: { initialCust
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Customer Profiles</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Manage buyer pricing. A customer&apos;s assigned price tier is applied automatically at checkout and while browsing.
+              Manage buyer pricing. A customer&apos;s assigned price tier is applied automatically at checkout and while browsing, when they&apos;re signed in with that email.
             </p>
           </div>
           <div className="flex items-center gap-3 mt-1 flex-shrink-0 ml-6">
