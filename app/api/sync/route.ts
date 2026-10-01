@@ -11,6 +11,7 @@
  * cron infrastructure can be tested before Erply is configured.
  */
 
+import { hasBearerSecret } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getErplyProducts, getErplyStock, isConfigured } from '@/lib/erply'
 import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/product-sync'
@@ -26,12 +27,8 @@ import type { ImportResult } from '@/lib/types'
 export const maxDuration = 60
 
 function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    console.warn('[sync] CRON_SECRET not set — endpoint is unprotected')
-    return true  // allow through in dev; set CRON_SECRET in production
-  }
-  return request.headers.get('authorization') === `Bearer ${secret}`
+  // Fails closed when CRON_SECRET is unset -- see lib/request-auth.ts.
+  return hasBearerSecret(request, 'CRON_SECRET')
 }
 
 export async function GET(request: NextRequest) {

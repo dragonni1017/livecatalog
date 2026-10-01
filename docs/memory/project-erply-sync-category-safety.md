@@ -7,6 +7,10 @@ type: project
 Re-assessed whether it's safe to point `app/api/sync/route.ts` at real Erply
 credentials (still not configured in Vercel production as of this writing —
 see the erply-woo-integration subagent description). The original blockers
+
+**Correction 2026-10-01:** `ERPLY_CLIENT_CODE`, `ERPLY_USERNAME` and `ERPLY_PASSWORD`
+ARE set for Vercel production, last edited ~2026-09-23, per a names-only env listing.
+So Erply-dependent routes run in prod, and the daily `/api/sync` cron hits real Erply.
 from [[project-erply-pagination-fix]] turned out to be already resolved:
 
 - `image_url`/`stock_qty` exclusion — already implemented via

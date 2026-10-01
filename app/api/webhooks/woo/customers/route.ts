@@ -28,8 +28,8 @@
  *      last_synced_at, last_sync_source='woo').
  */
 
+import { hasWooSignature } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { DEFAULT_TIER, wooRoleForTier } from '@/lib/tier-mapping'
 
 interface WooCustomer {
@@ -39,15 +39,7 @@ interface WooCustomer {
 }
 
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  const secret = process.env.WOO_WEBHOOK_SECRET
-  if (!secret) {
-    console.warn('[woo-webhook:customers] WOO_WEBHOOK_SECRET not set — skipping signature check')
-    return true
-  }
-  if (!signatureHeader) return false
-
-  const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
+  return hasWooSignature(rawBody, signatureHeader)
 }
 
 export async function POST(request: NextRequest) {
