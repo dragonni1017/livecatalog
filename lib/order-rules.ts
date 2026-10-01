@@ -116,3 +116,15 @@ export function formatTierAdjustment(discountPercent: number): string {
   if (discountPercent < 0) return `${Math.abs(discountPercent)}% markup`
   return '—'
 }
+
+/**
+ * Should a customer's own tier/discount apply to this order? Only when the
+ * signed-in session's email matches the order email (case and whitespace
+ * insensitive). A guest, or someone typing another customer's email, gets
+ * standard pricing. See app/api/orders/route.ts step 2c.
+ */
+export function isSignedInAsOrderEmail(sessionEmail: string | null | undefined, orderEmail: string): boolean {
+  if (!sessionEmail) return false
+  const norm = (e: string) => e.trim().toLowerCase()
+  return norm(orderEmail) !== '' && norm(sessionEmail) === norm(orderEmail)
+}

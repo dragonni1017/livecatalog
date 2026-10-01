@@ -3,7 +3,7 @@ import { getAdminClient } from '@/lib/supabase'
 import { getSessionUser } from '@/lib/auth-server'
 import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation'
 import { notifyReps, notifyCustomer } from '@/lib/order-emails'
-import { applyTierDiscount } from '@/lib/order-rules'
+import { applyTierDiscount, isSignedInAsOrderEmail } from '@/lib/order-rules'
 import { buildLineItems, insertOrder } from '@/lib/order-submission'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 
@@ -74,15 +74,23 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 2c. A customer directly assigned a price tier (app/admin/customers)
-    // gets that tier's pricing automatically, no rep or login required —
-    // resolved by the order's own email, same as the flat discount_percent
-    // fallback below. The tier wins over the flat discount when both are
-    // set (never stacked), same override rule as the rep-tier case above.
-    if (!appliedTierCode) {
+    // gets that tier's pricing, and failing that their flat discount_percent.
+    // The tier wins when both are set (never stacked), the same override rule
+    // as the rep-tier case above.
+    //
+    // ONLY when signed in as that customer: the session's email must match
+    // the order email. This used to resolve by the typed email alone, with
+    // no login, so anyone who knew a tiered customer's email got their
+    // pricing on a quote (2026-10-01 /api audit). Guests and mismatched
+    // emails get standard pricing, the same as /api/cart/reprice already
+    // shows them in the cart. A rep pricing for a customer uses the tier
+    // switcher (2b), not the customer's email.
+    const orderEmail = contact.email.trim().toLowerCase()
+    if (!appliedTierCode && isSignedInAsOrderEmail(sessionUser?.email, orderEmail)) {
       const { data: customer } = await db
         .from('customers')
         .select('discount_percent, price_tier_code')
-        .eq('email', contact.email.trim().toLowerCase())
+        .eq('email', orderEmail)
         .maybeSingle()
 
       if (customer?.price_tier_code) {

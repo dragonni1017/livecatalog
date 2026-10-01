@@ -7,6 +7,7 @@ import {
   roundCentsToQuarter,
   applyTierDiscount,
   formatTierAdjustment,
+  isSignedInAsOrderEmail,
 } from '@/lib/order-rules'
 
 describe('meetsOrderMinimum', () => {
@@ -126,5 +127,18 @@ describe('formatTierAdjustment', () => {
 
   it('describes zero as no adjustment', () => {
     expect(formatTierAdjustment(0)).toBe('—')
+  })
+})
+
+describe('isSignedInAsOrderEmail', () => {
+  it('requires a signed-in session whose email matches the order email', () => {
+    expect(isSignedInAsOrderEmail('buyer@shop.com', 'buyer@shop.com')).toBe(true)
+    expect(isSignedInAsOrderEmail(' Buyer@Shop.com ', 'buyer@SHOP.com')).toBe(true)
+  })
+  it('gives a guest or a different account standard pricing', () => {
+    expect(isSignedInAsOrderEmail(null, 'buyer@shop.com')).toBe(false)
+    expect(isSignedInAsOrderEmail(undefined, 'buyer@shop.com')).toBe(false)
+    expect(isSignedInAsOrderEmail('someone@else.com', 'buyer@shop.com')).toBe(false)
+    expect(isSignedInAsOrderEmail('', '')).toBe(false)
   })
 })

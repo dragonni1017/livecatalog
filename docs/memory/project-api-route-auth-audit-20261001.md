@@ -28,9 +28,12 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
    at send time. The greeting name is reduced to name characters (`lib/cart-session-items.ts`).
    Overwriting someone's saved cart, and a reminder to any typed address (with
    real product text only), are accepted residuals of guest checkout.
-2. `orders` POST: the tier/discount comes from the *typed* email, not the
+2. **FIXED 2026-10-01 (Dragon chose signed-in only).** `orders` POST: the tier/discount comes from the *typed* email, not the
    session. Anyone who knows a tiered customer's email gets their pricing on
-   a quote. `placedByRep` is client-trusted for non-reps.
+   a quote. `placedByRep` is client-trusted for non-reps. Customer pricing now applies only
+   when `getSessionUser().email` matches the order email (`isSignedInAsOrderEmail`).
+   At the time only 2 customers had a tier, and both had accounts. `placedByRep` is left
+   alone: the cart's "Placed by (rep)" dropdown is a deliberate guest-facing field.
 3. Order references are sequential (`ORD-<yr>[-TIER]-NNNN`).
    `app/(catalog)/order/[reference]` shows a customer's name, lines and prices
    for any reference. `order-reply` lets anyone message sales as that customer.
