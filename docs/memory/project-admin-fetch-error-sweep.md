@@ -23,10 +23,12 @@ its route only ever returns `.error`. Checked every other `/admin/api/*` route
 `users`, `display-settings`, `qbwc/*`) — all consistently use `.error`, so this is a
 one-off, not a pattern to keep re-checking for.
 
-Also: `components/admin/ExcelDropzone.tsx` posts to `/api/import` and `/api/import/diff`,
-which are **not** under `/admin/api/` and are exempted from the admin-session middleware
-gate entirely (`pathname.startsWith('/api')` bypass in `middleware.ts`) — so the
-401-session-expiry scenario this sweep was mainly about can't happen there. Converted it
+Also: `components/admin/ExcelDropzone.tsx` USED to post to `/api/import` and
+`/api/import/diff`. Those were **not** under `/admin/api/` and were exempted from the
+admin-session middleware gate entirely (`pathname.startsWith('/api')` bypass in
+`middleware.ts`). That meant they were callable by anyone, unauthenticated, writing
+products with the service-role client. This note recorded the bypass without flagging
+it as a hole. They moved to `/admin/api/import[/diff]` on 2026-10-01. Converted it
 anyway for the general non-JSON-body robustness `readApiError` also provides (a 502 from
 a proxy, etc.), not because it was session-gated.
 

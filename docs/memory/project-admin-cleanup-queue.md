@@ -20,8 +20,8 @@ Not yet exercised in a browser or against a real upload.
   original for that SKU on this cloud.
 - Descriptions are catalog-owned. `'description'` is in skipFields in both
   sync routes and is insert-only, like category: a new product still gets
-  Erply's text, an existing one is never overwritten. An Excel import
-  (`/api/import`) still overwrites description and category.
+  Erply's text, an existing one is never overwritten. The Excel import
+  (now `/admin/api/import`) is insert-only for both too, since #78.
 
 **The gotcha (second time this mechanism has bitten):** supabase-js sends a
 bulk upsert's `columns` as the UNION of every row's keys. A row missing a
