@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/low-stock-alert', () => ({ checkLowStockAndNotify: async () => {} }))
 vi.mock('../lib/back-in-stock-notify', () => ({ checkBackInStockAndNotify: async () => {} }))
 
-import { syncToSupabase, type SyncProduct } from '../lib/product-sync'
+import { syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
 
 /**
  * Minimal chainable stand-in for the supabase-js client: every builder method
@@ -13,6 +13,7 @@ import { syncToSupabase, type SyncProduct } from '../lib/product-sync'
  */
 function fakeDb(existingSkus: string[]) {
   const upserts: Record<string, unknown>[][] = []
+  const updates: Record<string, unknown>[] = []
   const from = (table: string) => {
     const calls: [string, unknown[]][] = []
     const resolve = () => {
@@ -25,6 +26,10 @@ function fakeDb(existingSkus: string[]) {
       if (table === 'products' && has('upsert')) {
         upserts.push(args('upsert')[0] as Record<string, unknown>[])
         return { error: null }
+      }
+      if (table === 'products' && has('update')) {
+        updates.push(args('update')[0] as Record<string, unknown>)
+        return { data: [], error: null }
       }
       if (table === 'products' && has('range')) {
         const [lo, hi] = args('range') as [number, number]
@@ -49,7 +54,7 @@ function fakeDb(existingSkus: string[]) {
     )
     return builder
   }
-  return { db: { from } as never, upserts }
+  return { db: { from } as never, upserts, updates }
 }
 
 const product = (sku: string): SyncProduct => ({
@@ -87,9 +92,64 @@ describe('syncToSupabase insert-only skipFields', () => {
     expect(inserts[0].category_id).toBe('cat-1')
   })
 
-  it('still writes description on update when it is not skipped (Excel import)', async () => {
+  it('still writes description on update when it is not skipped', async () => {
     const { db, upserts } = fakeDb(['OLD1'])
     await syncToSupabase([product('OLD1')], db)
     expect(upserts[0][0].description).toBe('Erply text for OLD1')
+  })
+})
+
+// The options app/api/import/route.ts passes for an Excel sheet.
+const EXCEL: SyncOptions = {
+  deactivateMissing: false,
+  skipFields: ['category', 'description'],
+  keepExistingWhenBlank: ['image_url', 'stock_qty'],
+}
+
+describe('syncToSupabase with the Excel import options', () => {
+  it('deactivates nothing missing from the sheet', async () => {
+    const { db, updates } = fakeDb(['OLD1', 'OLD2'])
+    await syncToSupabase([product('OLD1')], db, EXCEL)
+    expect(updates.some((u) => u.is_active === false)).toBe(false)
+  })
+
+  it('still deactivates missing products by default (Erply sync)', async () => {
+    const { db, updates } = fakeDb(['OLD1', 'OLD2'])
+    await syncToSupabase([product('OLD1')], db)
+    expect(updates.some((u) => u.is_active === false)).toBe(true)
+  })
+
+  it('keeps a stored image and stock when the cell is blank, and splits batches by key set', async () => {
+    const { db, upserts } = fakeDb(['BLANK', 'FILLED'])
+    const blank = { ...product('BLANK'), image_url: null, stock_qty: null }
+    const filled = { ...product('FILLED'), image_url: 'https://res.cloudinary.com/x/image/upload/FILLED.jpg', stock_qty: 7 }
+    await syncToSupabase([blank, filled], db, EXCEL)
+
+    const rows = upserts.flat()
+    const b = rows.find((r) => r.sku === 'BLANK')!
+    const f = rows.find((r) => r.sku === 'FILLED')!
+    expect(b).not.toHaveProperty('image_url')
+    expect(b).not.toHaveProperty('stock_qty')
+    expect(f.image_url).toBe('https://res.cloudinary.com/x/image/upload/FILLED.jpg')
+    expect(f.stock_qty).toBe(7)
+    // Different key sets must never share a chunk, or BLANK would be sent
+    // image_url/stock_qty = NULL by the union-of-keys mechanism.
+    for (const chunk of upserts) {
+      const sigs = new Set(chunk.map((r) => Object.keys(r).sort().join(',')))
+      expect(sigs.size).toBe(1)
+    }
+    // Description and category are never written to existing rows.
+    for (const r of rows) {
+      expect(r).not.toHaveProperty('description')
+      expect(r).not.toHaveProperty('category_id')
+    }
+  })
+
+  it('gives a new product stock 0 when the cell is blank', async () => {
+    const { db, upserts } = fakeDb([])
+    await syncToSupabase([{ ...product('NEW1'), stock_qty: null }], db, EXCEL)
+    const r = upserts.flat()[0]
+    expect(r.stock_qty).toBe(0)
+    expect(r.description).toBe('Erply text for NEW1')
   })
 })

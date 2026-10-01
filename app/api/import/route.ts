@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BarcodeCorrection, ExcelRow, ImportResult } from '@/lib/types'
-import { syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+import { parseStockCell, syncToSupabase, type SyncProduct } from '@/lib/product-sync'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
           name,
           price_cents: Math.round(price * 100),
           description: row.Description?.toString().trim() || null,
-          stock_qty: parseInt(row['Stock Qty']?.toString() || '0') || 0,
+          stock_qty: parseStockCell(row['Stock Qty']),
           image_url: row['Image URL']?.toString().trim() || null,
           is_active: row.Active?.toString().toLowerCase() !== 'false',
           category_name: row.Category?.toString().trim() ?? '',
@@ -107,7 +107,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = await syncToSupabase(validProducts, db)
+    // A sheet is a partial edit, not the whole catalog, and Erply is the
+    // master. So: nothing missing from the sheet is deactivated; description
+    // and category are insert-only, since the catalog owns them once a
+    // product exists (/admin/cleanup, /admin/products); and a blank Image URL
+    // or Stock Qty cell leaves the stored value alone instead of erasing it.
+    const result = await syncToSupabase(validProducts, db, {
+      deactivateMissing: false,
+      skipFields: ['category', 'description'],
+      keepExistingWhenBlank: ['image_url', 'stock_qty'],
+    })
 
     await logBarcodeCorrections(db, barcodeCorrections)
 

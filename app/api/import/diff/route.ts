@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ExcelRow, DiffResult, ClassifiedRow } from '@/lib/types'
-import { selectAll } from '@/lib/product-sync'
+import { parseStockCell, selectAll } from '@/lib/product-sync'
 
 interface DbProduct {
   sku: string
@@ -46,20 +46,22 @@ function validateRow(row: ExcelRow): { status: ClassifiedRow['validStatus']; iss
   return { status, issues }
 }
 
+// Mirrors what app/api/import/route.ts will actually write to an EXISTING
+// product: description and category are never touched, and a blank Image URL
+// or Stock Qty cell keeps the stored value. So those can't make a row
+// "changed".
 function rowMatchesDb(row: ExcelRow, db: DbProduct): boolean {
   const priceCents = Math.round(parseFloat(row.Price?.toString() ?? '0') * 100)
-  const stockQty = parseInt(row['Stock Qty']?.toString() || '0') || 0
+  const stockQty = parseStockCell(row['Stock Qty'])
   const name = row.Name.toString().trim()
-  const description = row.Description?.toString().trim() || null
   const imageUrl = row['Image URL']?.toString().trim() || null
   const isActive = row.Active?.toString().toLowerCase() !== 'false'
 
   return (
     db.name === name &&
     db.price_cents === priceCents &&
-    db.stock_qty === stockQty &&
-    db.description === description &&
-    db.image_url === imageUrl &&
+    (stockQty === null || db.stock_qty === stockQty) &&
+    (imageUrl === null || db.image_url === imageUrl) &&
     db.is_active === isActive
   )
 }
@@ -109,14 +111,12 @@ export async function POST(request: NextRequest) {
       dbBySku.set(p.sku, p)
     }
 
-    const incomingSkus = new Set<string>()
     const classifiedRows: ClassifiedRow[] = []
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       const { status: validStatus, issues } = validateRow(row)
       const sku = row.SKU?.toString().trim() ?? ''
-      if (sku) incomingSkus.add(sku)
 
       let status: ClassifiedRow['status'] = 'new'
       if (sku && dbBySku.has(sku)) {
@@ -126,18 +126,13 @@ export async function POST(request: NextRequest) {
       classifiedRows.push({ rowIndex: i + 2, row, status, validStatus, issues })
     }
 
-    // Collect active DB products not present in this upload — they will be deactivated
-    const toDeactivate: { sku: string; name: string }[] = []
-    for (const [sku, product] of dbBySku) {
-      if (product.is_active && !incomingSkus.has(sku)) {
-        toDeactivate.push({ sku, name: product.name })
-      }
-    }
-
+    // The import no longer deactivates products missing from the sheet
+    // (deactivateMissing: false in app/api/import/route.ts), so there's
+    // nothing to warn about. Deactivate a product with Active = false instead.
     const result: DiffResult = {
       rows: classifiedRows,
-      deactivateCount: toDeactivate.length,
-      deactivateSample: toDeactivate.slice(0, 10),
+      deactivateCount: 0,
+      deactivateSample: [],
     }
 
     return NextResponse.json(result)
