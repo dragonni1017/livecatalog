@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { safeInternalPath } from '@/lib/safe-redirect'
 
 const VERIFIABLE_OTP_TYPES = ['email', 'magiclink', 'signup', 'invite', 'email_change'] as const
 
@@ -10,7 +11,9 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type')
-  const next = searchParams.get('next') ?? '/account'
+  // Same-site only: `${origin}${next}` with next=@evil.com used to send a
+  // freshly signed-in user to evil.com. See lib/safe-redirect.ts.
+  const next = safeInternalPath(searchParams.get('next'), '/account')
 
   // Recovery links minted before the reset flow moved to /reset-password still
   // point here. Forward them rather than dead-ending — the client page knows
