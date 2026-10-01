@@ -30,11 +30,19 @@
 // (scripts/audit-product-names.ts, docs/PRODUCT-NAMING-STANDARD.md), so every
 // entry here is a human decision with its reasoning attached.
 
+//
+// The per-system logic (the guard, the write, the independent re-read) lives
+// in lib/product-name-fix.ts, shared with /admin/cleanup's name fix, so the
+// screen and this script can't drift apart. This file owns only the list of
+// decided changes, the printing and the CSV log.
+
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { applyNameChange, WOO_NOT_CONFIGURED } from '../lib/product-name-fix.ts'
+import { isWooConfigured } from '../lib/woo.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -210,52 +218,18 @@ if (changes.length === 0) {
   process.exit(1)
 }
 
-const CC = process.env.ERPLY_CLIENT_CODE
-const ERPLY_URL = `https://${CC}.erply.com/api/`
-// WOO_STORE_URL is stored without a scheme on this account, so add one —
-// same normalisation as lib/woo.ts's storeUrl().
-const WOO_URL = process.env.WOO_STORE_URL
-  ? (/^https?:\/\//i.test(process.env.WOO_STORE_URL) ? process.env.WOO_STORE_URL : `https://${process.env.WOO_STORE_URL}`).replace(/\/+$/, '')
-  : undefined
-const wooConfigured = Boolean(WOO_URL && process.env.WOO_CONSUMER_KEY && process.env.WOO_CONSUMER_SECRET)
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function erply(params: Record<string, string>): Promise<any> {
-  const res = await fetch(ERPLY_URL, { method: 'POST', body: new URLSearchParams({ clientCode: CC!, ...params }) })
-  const json = await res.json()
-  if (json.status?.responseStatus === 'error') {
-    throw new Error(`Erply error ${json.status.errorCode} ${json.status.errorField ?? ''}`)
-  }
-  return json
-}
-
-function wooAuth() {
-  return `Basic ${Buffer.from(`${process.env.WOO_CONSUMER_KEY}:${process.env.WOO_CONSUMER_SECRET}`).toString('base64')}`
-}
-
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
 const results: Array<{ sku: string; system: string; id: string; oldName: string; newName: string; status: string }> = []
-const record = (sku: string, system: string, id: string, oldName: string, newName: string, status: string) => {
-  results.push({ sku, system, id, oldName, newName, status })
-  console.log(`    ${system.padEnd(11)} ${status.padEnd(28)} ${id ? `#${id}` : ''}`)
-}
 
 console.log(`${APPLY ? 'APPLYING' : '[DRY RUN]'} ${changes.length} name change(s)\n`)
 if (!process.env.ERPLY_CLIENT_CODE) {
   console.error('ERPLY_CLIENT_CODE is not set; nothing can be written.')
   process.exit(1)
 }
-if (!wooConfigured) console.log('WooCommerce is not configured here — that system will be skipped.\n')
-
-const auth = await erply({
-  request: 'verifyUser',
-  username: process.env.ERPLY_USERNAME!,
-  password: process.env.ERPLY_PASSWORD!,
-})
-const sessionKey = auth.records[0].sessionKey
+if (!isWooConfigured()) console.log('WooCommerce is not configured here — that system will be skipped.\n')
 
 for (const change of changes) {
   console.log(`  ${change.sku}`)
@@ -263,73 +237,13 @@ for (const change of changes) {
   console.log(`    to:   ${change.to}`)
   console.log(`    why:  ${change.why}`)
 
-  // ── Erply ──
-  const found = await erply({ request: 'getProducts', sessionKey, code: change.sku })
-  const product = found.records?.[0]
-  if (!product) {
-    record(change.sku, 'erply', '', '', change.to, 'SKIPPED — SKU not in Erply')
-  } else if (product.name !== change.expect) {
-    record(change.sku, 'erply', String(product.productID), product.name, change.to,
-      product.name === change.to ? 'already correct' : 'SKIPPED — name differs from expected')
-    if (product.name !== change.to) console.log(`                found: ${product.name}`)
-  } else if (!APPLY) {
-    record(change.sku, 'erply', String(product.productID), product.name, change.to, 'would update')
-  } else {
-    await erply({ request: 'saveProduct', sessionKey, productID: String(product.productID), name: change.to })
-    // Independent re-read rather than trusting the write's own response.
-    const after = (await erply({ request: 'getProducts', sessionKey, code: change.sku })).records?.[0]
-    record(change.sku, 'erply', String(product.productID), product.name, change.to,
-      after?.name === change.to ? 'updated + verified' : `FAILED — reads "${after?.name}"`)
-  }
-
-  // ── WooCommerce ──
-  if (wooConfigured) {
-    const res = await fetch(`${WOO_URL}/wp-json/wc/v3/products?sku=${encodeURIComponent(change.sku)}&status=any`, {
-      headers: { Authorization: wooAuth() },
-    })
-    if (!res.ok) {
-      record(change.sku, 'woocommerce', '', '', change.to, `SKIPPED — HTTP ${res.status}`)
-    } else {
-      const wooProduct = (await res.json())[0]
-      if (!wooProduct) {
-        record(change.sku, 'woocommerce', '', '', change.to, 'SKIPPED — SKU not in WooCommerce')
-      } else if (wooProduct.name !== change.expect) {
-        record(change.sku, 'woocommerce', String(wooProduct.id), wooProduct.name, change.to,
-          wooProduct.name === change.to ? 'already correct' : 'SKIPPED — name differs from expected')
-      } else if (!APPLY) {
-        record(change.sku, 'woocommerce', String(wooProduct.id), wooProduct.name, change.to, 'would update')
-      } else {
-        const put = await fetch(`${WOO_URL}/wp-json/wc/v3/products/${wooProduct.id}`, {
-          method: 'PUT',
-          headers: { Authorization: wooAuth(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: change.to }),
-        })
-        const body = await put.text()
-        if (!put.ok) {
-          record(change.sku, 'woocommerce', String(wooProduct.id), wooProduct.name, change.to, `FAILED — HTTP ${put.status}`)
-          console.log(`                ${body.slice(0, 200)}`)
-        } else {
-          record(change.sku, 'woocommerce', String(wooProduct.id), wooProduct.name, change.to,
-            JSON.parse(body).name === change.to ? 'updated + verified' : 'FAILED — name did not stick')
-        }
-      }
-    }
-  }
-
-  // ── Supabase (so the catalog doesn't wait for the next sync) ──
-  const { data: row } = await db.from('products').select('id, name').eq('sku', change.sku).maybeSingle()
-  if (!row) {
-    record(change.sku, 'supabase', '', '', change.to, 'SKIPPED — SKU not in catalog')
-  } else if (row.name !== change.expect) {
-    record(change.sku, 'supabase', row.id, row.name, change.to,
-      row.name === change.to ? 'already correct' : 'SKIPPED — name differs from expected')
-  } else if (!APPLY) {
-    record(change.sku, 'supabase', row.id, row.name, change.to, 'would update')
-  } else {
-    const { error } = await db.from('products').update({ name: change.to }).eq('sku', change.sku)
-    const { data: after } = await db.from('products').select('name').eq('sku', change.sku).single()
-    record(change.sku, 'supabase', row.id, row.name, change.to,
-      !error && after?.name === change.to ? 'updated + verified' : `FAILED — ${error?.message ?? after?.name}`)
+  const rows = await applyNameChange({ sku: change.sku, expect: change.expect, to: change.to, apply: APPLY, db })
+  for (const row of rows) {
+    // The banner above already said so; this script never listed a row for it.
+    if (row.status === WOO_NOT_CONFIGURED) continue
+    results.push({ sku: change.sku, system: row.system, id: row.id, oldName: row.oldName, newName: row.newName, status: row.status })
+    console.log(`    ${row.system.padEnd(11)} ${row.status.padEnd(28)} ${row.id ? `#${row.id}` : ''}`)
+    if (row.detail) console.log(`                ${row.detail}`)
   }
 
   console.log('')
