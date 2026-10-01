@@ -8,7 +8,11 @@
  * in your Vercel environment variables and remove the stub guard in getSessionKey().
  */
 
-import { DEFAULT_TIER, type ErplyTier } from './tier-mapping'
+// Literal ".ts": this module is also loaded by scripts/fix-product-names.ts
+// (via lib/product-name-fix.ts) under Node's native type stripping, which
+// resolves imports at runtime and needs the real extension. See tsconfig's
+// allowImportingTsExtensions.
+import { DEFAULT_TIER, type ErplyTier } from './tier-mapping.ts'
 
 // ── Erply API response shapes ─────────────────────────────────────────────────
 
@@ -532,6 +536,23 @@ export async function getErplyProductByCode(
     barcode: rec.code2?.trim() || null,
     isActive: rec.active === 1,
   }
+}
+
+/**
+ * Renames one product. `saveProduct` with a productID updates that product in
+ * place; `name` is honoured on this account (unlike `price` -- see
+ * createErplyProduct). Sends exactly the two identifying params plus `name`,
+ * nothing else, so no other field can be disturbed by a default.
+ *
+ * Does NOT verify. The caller must re-read with getErplyProductByCode rather
+ * than trust this response -- lib/product-name-fix.ts does.
+ */
+export async function saveErplyProductName(productId: number, name: string): Promise<void> {
+  if (!isConfigured()) {
+    throw new Error('Erply is not configured in this environment. No name was written.')
+  }
+  const sessionKey = await getSessionKey()
+  await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), name })
 }
 
 /**

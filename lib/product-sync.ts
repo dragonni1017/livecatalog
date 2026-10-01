@@ -157,8 +157,14 @@ export interface SyncOptions {
    * on every sync run would silently flatten that curation back on a
    * schedule. Skipping it means category_id is only ever set when a
    * product is first inserted, never overwritten on update.
+   *
+   * 'description' works the same way as 'category' (insert-only): the
+   * catalog owns descriptions from the moment a product exists -- they are
+   * written in /admin/cleanup and /admin/products -- but a brand-new product
+   * still arrives with whatever description Erply has, rather than blank.
+   * 'image_url' and 'stock_qty', by contrast, are dropped on insert too.
    */
-  skipFields?: Array<'image_url' | 'stock_qty' | 'category'>
+  skipFields?: Array<'image_url' | 'stock_qty' | 'category' | 'description'>
 }
 
 /**
@@ -190,7 +196,17 @@ export async function syncToSupabase(
   const incomingSkus: string[] = []
   // SKUs inserted at price 0 -- hidden in a separate pass, see below.
   const hideOnInsert: string[] = []
-  const records: Record<string, unknown>[] = []
+  // New rows and existing rows are upserted as SEPARATE batches, because the
+  // insert-only fields (category_id, description) are present on one and
+  // absent from the other. supabase-js sends a bulk upsert's column list as
+  // the union of every row's keys, and a row that lacks a listed key is sent
+  // NULL for it -- which ON CONFLICT DO UPDATE then writes over the existing
+  // value. Mixed into one chunk, a single new product would therefore blank
+  // the description (and category_id) of every existing product beside it.
+  // Same mechanism as the manually_hidden failure described below, except
+  // here nothing errors: the columns are nullable, so the data just vanishes.
+  const insertRecords: Record<string, unknown>[] = []
+  const updateRecords: Record<string, unknown>[] = []
 
   for (const p of products) {
     incomingSkus.push(p.sku)
@@ -214,12 +230,16 @@ export async function syncToSupabase(
     // it failed 500 rows on the 2026-09-24 sync, the first one where a new
     // $0 product appeared after the guard shipped.
     if (isNewProduct && p.price_cents <= 0) hideOnInsert.push(p.sku)
-    records.push({
+    // Same insert-only rule as category: when 'description' is skipped, an
+    // existing product's description is never touched, but a new one still
+    // gets Erply's.
+    const setDescription = !skip.has('description') || isNewProduct
+    ;(isNewProduct ? insertRecords : updateRecords).push({
       sku: p.sku,
       barcode: p.barcode,
       name: p.name,
       price_cents: p.price_cents,
-      description: p.description,
+      ...(setDescription ? { description: p.description } : {}),
       is_active: p.is_active,
       ...(skip.has('stock_qty') ? {} : { stock_qty: p.stock_qty }),
       ...(skip.has('image_url') ? {} : { image_url: p.image_url }),
@@ -228,17 +248,20 @@ export async function syncToSupabase(
     })
   }
 
-  // 4. Bulk upsert in chunks
+  // 4. Bulk upsert in chunks -- new rows and existing rows never share a
+  //    chunk (see where insertRecords/updateRecords are declared).
   const failedSkus = new Set<string>()
-  for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-    const chunk = records.slice(i, i + CHUNK_SIZE)
-    const { error } = await db.from('products').upsert(chunk, { onConflict: 'sku' })
-    if (error) {
-      chunk.forEach((r) => {
-        const sku = r.sku as string
-        failedSkus.add(sku)
-        errors.push({ row: 0, sku, message: error.message })
-      })
+  for (const records of [updateRecords, insertRecords]) {
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE)
+      const { error } = await db.from('products').upsert(chunk, { onConflict: 'sku' })
+      if (error) {
+        chunk.forEach((r) => {
+          const sku = r.sku as string
+          failedSkus.add(sku)
+          errors.push({ row: 0, sku, message: error.message })
+        })
+      }
     }
   }
 
