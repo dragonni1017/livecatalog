@@ -2,13 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
+import { ilikeExact } from '@/lib/order-access'
 import { formatPrice } from '@/lib/cart-context'
 import type { OrderStatus } from '@/lib/types'
 import { getSessionUser } from '@/lib/auth-server'
 
-interface PageProps {
-  searchParams: Promise<{ email?: string }>
-}
 
 function statusBadge(status: OrderStatus) {
   switch (status) {
@@ -47,11 +45,14 @@ function formatDate(iso: string): string {
   })
 }
 
-export default async function MyOrdersPage({ searchParams }: PageProps) {
-  const { email } = await searchParams
+// Lists only the SIGNED-IN account's orders. This used to accept ?email= from
+// anyone, with no login, which listed any customer's orders (references,
+// names, totals) to whoever typed their address (2026-10-01 /api audit).
+// Guests are asked to sign in instead. Same rule as lib/order-access.ts.
+export default async function MyOrdersPage() {
   const sessionUser = await getSessionUser()
   const sessionEmail = sessionUser?.email ?? ''
-  const trimmedEmail = email?.trim() || sessionEmail
+  const trimmedEmail = sessionEmail
   const isLoggedIn = !!sessionEmail
 
   let orders: Array<{
@@ -68,7 +69,7 @@ export default async function MyOrdersPage({ searchParams }: PageProps) {
     const { data } = await db
       .from('order_requests')
       .select('id, reference_code, status, customer_name, subtotal_cents, created_at')
-      .ilike('customer_email', trimmedEmail)
+      .ilike('customer_email', ilikeExact(trimmedEmail))
       .order('created_at', { ascending: false })
       .limit(50)
     orders = data ?? []
@@ -102,7 +103,7 @@ export default async function MyOrdersPage({ searchParams }: PageProps) {
       <h1 className="mb-1 text-2xl font-bold text-gray-900">Your Orders</h1>
       {!isLoggedIn && (
         <p className="mb-6 text-sm text-gray-500">
-          Enter your email address to view your order history.
+          Sign in to view your order history.
         </p>
       )}
 
@@ -115,22 +116,12 @@ export default async function MyOrdersPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <form method="get" className="mb-8 flex gap-2">
-          <input
-            type="email"
-            name="email"
-            defaultValue={trimmedEmail}
-            placeholder="you@example.com"
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-            required
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Look up
-          </button>
-        </form>
+        <a
+          href="/login?from=/my-orders"
+          className="mb-8 inline-block rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+        >
+          Sign in
+        </a>
       )}
 
       {/* Results */}

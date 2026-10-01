@@ -4,10 +4,12 @@ import { useState } from 'react'
 
 interface Props {
   reference: string
+  /** The order link's ?t= token. Null when the viewer got in by signing in. */
+  token: string | null
   customerName: string
 }
 
-export default function OrderReplyForm({ reference, customerName }: Props) {
+export default function OrderReplyForm({ reference, token, customerName }: Props) {
   const [message, setMessage] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -20,7 +22,7 @@ export default function OrderReplyForm({ reference, customerName }: Props) {
       await fetch('/api/order-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference, message }),
+        body: JSON.stringify({ reference, token, message }),
       })
     } catch {
       // best-effort — show success regardless
