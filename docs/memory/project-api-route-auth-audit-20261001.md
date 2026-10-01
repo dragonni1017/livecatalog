@@ -34,9 +34,13 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
    when `getSessionUser().email` matches the order email (`isSignedInAsOrderEmail`).
    At the time only 2 customers had a tier, and both had accounts. `placedByRep` is left
    alone: the cart's "Placed by (rep)" dropdown is a deliberate guest-facing field.
-3. Order references are sequential (`ORD-<yr>[-TIER]-NNNN`).
+3. **FIXED 2026-10-01 (migration 0053 + lib/order-access.ts; old links need sign-in, Dragon's call).** Order references are sequential (`ORD-<yr>[-TIER]-NNNN`).
    `app/(catalog)/order/[reference]` shows a customer's name, lines and prices
-   for any reference. `order-reply` lets anyone message sales as that customer.
+   for any reference. `order-reply` lets anyone message sales as that customer. Both now need the link's `?t=` token,
+   a matching session, an admin, or the placing rep. The same pass found two more leaks:
+   `/my-orders?email=` listed anyone's orders with no login (now session only), and
+   `.ilike('customer_email', email)` treated `_`/`%` as wildcards, so `a_b@x.com` also saw
+   `aXb@x.com`'s orders. That happened in account, my-orders and the qbwc customer link (now `ilikeExact`).
 4. `auth/callback`: open redirect via `next=@evil.com`.
 5. `qbwc` `getLastError` answers without a ticket, tickets never expire, and the
    password compare isn't constant-time.

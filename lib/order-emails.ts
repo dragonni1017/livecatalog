@@ -1,6 +1,7 @@
 import { isSmtpConfigured, sendMail } from '@/lib/email'
 import { formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
+import { orderUrl } from '@/lib/order-access'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -90,14 +91,15 @@ export async function notifyOrderStatusChange(args: {
   const { orderId, status, db } = args
   const { data: order } = await db
     .from('order_requests')
-    .select('customer_name, customer_email, reference_code')
+    .select('customer_name, customer_email, reference_code, access_token')
     .eq('id', orderId)
     .single()
 
   if (!order) return
 
-  const prodUrl = 'https://livecatalog.vercel.app'
-  const trackUrl = `${prodUrl}/order/${order.reference_code}`
+  // Carries the order's secret token: the reference alone no longer opens
+  // the page (lib/order-access.ts).
+  const trackUrl = orderUrl(order.reference_code, order.access_token)
   const replyTo = process.env.SALES_ALERT_TO
   const from = process.env.SALES_ALERT_FROM || process.env.TITAN_SMTP_USER
 
@@ -124,6 +126,8 @@ export async function notifyOrderStatusChange(args: {
 
 export async function notifyCustomer(args: {
   referenceCode: string
+  /** order_requests.access_token, so the tracking link opens the page. */
+  accessToken: string | null
   contact: CheckoutContact
   lineItems: LineItem[]
   subtotalCents: number
@@ -133,7 +137,7 @@ export async function notifyCustomer(args: {
     return
   }
 
-  const { referenceCode, contact, lineItems, subtotalCents } = args
+  const { referenceCode, accessToken, contact, lineItems, subtotalCents } = args
   const to = contact.email.trim()
   const subject = `We received your order request — ${referenceCode}`
 
@@ -147,7 +151,7 @@ export async function notifyCustomer(args: {
     `Your reference: ${referenceCode}\n\n` +
     `Items requested\n${itemLines}\n\n` +
     `Subtotal: ${formatPriceCents(subtotalCents)}\n\n` +
-    `Track your order status: https://livecatalog.vercel.app/order/${referenceCode}\n\n` +
+    `Track your order status: ${orderUrl(referenceCode, accessToken)}\n\n` +
     `This is a request, not a finalized order — pricing and availability are confirmed by our team before anything is charged.\n\n` +
     `If you have any questions, just reply to this email.\n\n` +
     `— L & Y USA\n`

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
 import { isSmtpConfigured, sendMail } from '@/lib/email'
+import { getSessionUser } from '@/lib/auth-server'
+import { canAccessOrder } from '@/lib/order-access'
 
 export const dynamic = 'force-dynamic'
 
+// Sends a message to sales "from" an order's customer, with Reply-To set to
+// their address. So it takes the same proof as viewing the order (the link
+// token or a matching session, see lib/order-access.ts), never the
+// guessable reference alone.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
     const reference = typeof body.reference === 'string' ? body.reference.trim().toUpperCase() : ''
+    const token = typeof body.token === 'string' ? body.token : null
     const message = typeof body.message === 'string' ? body.message.trim() : ''
 
     if (!reference || !message) {
@@ -20,11 +27,14 @@ export async function POST(request: NextRequest) {
     const db = getAdminClient()
     const { data: order } = await db
       .from('order_requests')
-      .select('reference_code, customer_name, customer_email')
+      .select('reference_code, customer_name, customer_email, access_token, rep_user_id')
       .eq('reference_code', reference)
       .single()
 
-    if (!order) {
+    // Missing and forbidden answer the same, so this can't test which
+    // references exist.
+    const user = await getSessionUser()
+    if (!order || !canAccessOrder(order, { token, user })) {
       return NextResponse.json({ error: 'Order not found.' }, { status: 404 })
     }
 

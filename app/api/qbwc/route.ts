@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { XMLParser } from 'fast-xml-parser'
 import { getAdminClient } from '@/lib/supabase'
+import { ilikeExact } from '@/lib/order-access'
 import { logAudit } from '@/lib/audit'
 import {
   buildCustomerAddRq,
@@ -460,7 +461,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   const { data: existingLink } = await db
     .from('qb_customer_links')
     .select('qb_customer_list_id')
-    .ilike('email', order.customer_email)
+    .ilike('email', ilikeExact(order.customer_email))
     .maybeSingle()
 
   let qbCustomerListId = existingLink?.qb_customer_list_id ?? null

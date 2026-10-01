@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth-server'
 import { getAdminClient } from '@/lib/supabase'
+import { ilikeExact } from '@/lib/order-access'
 function formatPrice(cents: number) {
   return '$' + (cents / 100).toFixed(2)
 }
@@ -57,7 +58,7 @@ export default async function AccountPage() {
   const { data: orders } = await db
     .from('order_requests')
     .select('id, reference_code, status, customer_name, subtotal_cents, created_at')
-    .ilike('customer_email', user.email!)
+    .ilike('customer_email', ilikeExact(user.email!))
     .order('created_at', { ascending: false })
     .limit(20)
 

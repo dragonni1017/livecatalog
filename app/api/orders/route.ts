@@ -158,6 +158,16 @@ export async function POST(request: NextRequest) {
     }
     const { orderId, referenceCode } = inserted
 
+    // The column default (migration 0053) minted the order's link token. Read
+    // it back for the confirmation email. If this fails, the email still goes
+    // out with a plain link, which asks the customer to sign in.
+    const { data: tokenRow } = await db
+      .from('order_requests')
+      .select('access_token')
+      .eq('id', orderId)
+      .maybeSingle()
+    const accessToken: string | null = tokenRow?.access_token ?? null
+
     // ── 5. Side effects after commit (Django on_commit() pattern) ────────────
     // These run after the transaction has committed — never block the response
     // and never roll back the order on failure.
@@ -169,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     await Promise.allSettled([
       notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct }),
-      notifyCustomer({ referenceCode, contact, lineItems, subtotalCents }),
+      notifyCustomer({ referenceCode, accessToken, contact, lineItems, subtotalCents }),
     ]).then((results) => {
       const labels = ['rep notification', 'customer confirmation']
       results.forEach((r, i) => {

@@ -11,9 +11,33 @@ function formatPrice(cents: number): string {
 }
 import OrderReplyForm from '@/components/catalog/OrderReplyForm'
 import type { OrderStatus } from '@/lib/types'
+import { getSessionUser } from '@/lib/auth-server'
+import { canAccessOrder } from '@/lib/order-access'
 
 interface PageProps {
   params: Promise<{ reference: string }>
+  searchParams: Promise<{ t?: string }>
+}
+
+// Shown both for a missing order and for one this visitor may not see, so the
+// page can't be used to test which reference codes exist.
+function SignInToView({ reference }: { reference: string }) {
+  const from = `/order/${encodeURIComponent(reference)}`
+  return (
+    <div className="mx-auto max-w-md rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+      <h1 className="mb-2 text-lg font-semibold text-gray-900">Sign in to view this order</h1>
+      <p className="mb-5 text-sm text-gray-600">
+        Sign in with the email the order was placed with, or open the link in your most recent
+        email about this order.
+      </p>
+      <Link
+        href={`/login?from=${encodeURIComponent(from)}`}
+        className="inline-block rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+      >
+        Sign in
+      </Link>
+    </div>
+  )
 }
 
 function statusBadge(status: OrderStatus) {
@@ -66,19 +90,26 @@ function formatDate(iso: string): string {
   })
 }
 
-export default async function OrderPage({ params }: PageProps) {
+export default async function OrderPage({ params, searchParams }: PageProps) {
   const { reference } = await params
+  const { t: token } = await searchParams
   const db = getAdminClient()
 
   const { data: order } = await db
     .from('order_requests')
     .select(
-      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb',
+      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id',
     )
     .eq('reference_code', reference.toUpperCase())
     .single()
 
-  if (!order) notFound()
+  // A reference is guessable, so it's never enough on its own. See
+  // lib/order-access.ts. Missing and forbidden look the same.
+  const user = await getSessionUser()
+  if (!order || !canAccessOrder(order, { token, user })) {
+    if (!reference || reference.length > 64) notFound()
+    return <SignInToView reference={reference.toUpperCase()} />
+  }
 
   const { data: items } = await db
     .from('order_items')
@@ -217,7 +248,7 @@ export default async function OrderPage({ params }: PageProps) {
       </div>
 
       {/* Customer reply */}
-      <OrderReplyForm reference={order.reference_code} customerName={order.customer_name} />
+      <OrderReplyForm reference={order.reference_code} token={token ?? null} customerName={order.customer_name} />
 
       <p className="mt-4 text-center text-xs text-gray-400">
         <Link href="/my-orders" className="hover:text-gray-600 underline">
