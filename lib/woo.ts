@@ -105,6 +105,47 @@ export async function createWooCustomer(input: {
   return res.json()
 }
 
+// ── Products (name corrections only -- see lib/product-name-fix.ts) ──────────
+
+export type WooProductLookup =
+  | { ok: true; product: { id: number; name: string } | null }
+  | { ok: false; status: number }
+
+/**
+ * One product by SKU. status=any is required: wc/v3/products defaults to
+ * published only, so a draft or private product would otherwise read as "not
+ * in WooCommerce" -- and this store has drafts on purpose
+ * (docs/memory/project-woo-direct-outofstock-write.md).
+ *
+ * Returns the HTTP status instead of throwing so a caller can report it per
+ * product rather than abandon a batch.
+ */
+export async function getWooProductBySku(sku: string): Promise<WooProductLookup> {
+  const res = await wooFetch(`/wp-json/wc/v3/products?sku=${encodeURIComponent(sku)}&status=any`)
+  if (!res.ok) return { ok: false, status: res.status }
+  const list: Array<{ id: number; name: string }> = await res.json()
+  const first = list[0]
+  return { ok: true, product: first ? { id: first.id, name: first.name } : null }
+}
+
+/**
+ * Renames one product. Returns the name WooCommerce echoes back so the caller
+ * can confirm it stuck (Woo has silently reverted other writes on this store --
+ * see project-woo-direct-outofstock-write), or the status + body on failure.
+ */
+export async function updateWooProductName(
+  wooProductId: number,
+  name: string,
+): Promise<{ ok: true; name: string } | { ok: false; status: number; body: string }> {
+  const res = await wooFetch(`/wp-json/wc/v3/products/${wooProductId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  })
+  const body = await res.text()
+  if (!res.ok) return { ok: false, status: res.status, body }
+  return { ok: true, name: String(JSON.parse(body).name ?? '') }
+}
+
 export async function updateWooCustomerRole(wooCustomerId: number, roleSlug: string): Promise<WooCustomer> {
   const res = await wooFetch(`/wp-json/wc/v3/customers/${wooCustomerId}`, {
     method: 'PUT',

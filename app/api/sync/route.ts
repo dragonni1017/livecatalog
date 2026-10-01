@@ -108,8 +108,11 @@ export async function GET(request: NextRequest) {
     // lib/erply-category-aliases.ts) — only set on first insert, never
     // reassigned on update, so this cron can't flatten curated categories
     // back on a schedule.
+    // 'description' is insert-only for the same reason: descriptions are
+    // catalog-owned (edited in /admin/cleanup and /admin/products), so a
+    // new product starts with Erply's text and is never overwritten after.
     const result: ImportResult = await syncToSupabase(products, db, {
-      skipFields: ['image_url', 'stock_qty', 'category'],
+      skipFields: ['image_url', 'stock_qty', 'category', 'description'],
     })
 
     // 3b. Stock sync — separate from the upsert above, since blindly

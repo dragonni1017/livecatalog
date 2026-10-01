@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
 // image_url (inline edit). Only the provided fields are written.
 // NOTE: these write directly to products, so a later Excel/Erply re-import (which
 // upserts by SKU) will overwrite them — this is a between-imports override.
+// Exceptions: the Erply sync never overwrites description or category on an
+// existing product (insert-only skipFields in app/api/sync and
+// app/admin/api/sync), so those two edits survive the sync. An Excel import
+// (app/api/import) still overwrites both.
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()

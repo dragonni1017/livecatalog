@@ -71,7 +71,9 @@ export async function POST() {
       // 'category' is skipped for the same reason the cron skips it: it is
       // insert-only, so this button cannot flatten the manual category
       // carve-outs back onto Erply's groups (lib/erply-category-aliases.ts).
-      skipFields: ['image_url', 'stock_qty', 'category'],
+      // 'description' is insert-only too: descriptions are catalog-owned
+      // (edited in /admin/cleanup), so this button can't overwrite them.
+      skipFields: ['image_url', 'stock_qty', 'category', 'description'],
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {

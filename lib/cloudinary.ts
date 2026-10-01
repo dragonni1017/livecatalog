@@ -20,7 +20,15 @@ export function isCloudinaryConfigured(): boolean {
   )
 }
 
-function signParams(params: Record<string, string | number>, apiSecret: string): string {
+/**
+ * Cloudinary's upload signature: the params sorted and joined as k=v&k=v,
+ * with the API secret appended, SHA-1'd. Exported for
+ * /admin/api/cleanup/photo-signature, which signs browser-direct uploads so
+ * file bytes never pass through a Vercel function (4.5 MB body limit). The
+ * browser must send exactly the signed params -- any extra upload param has
+ * to be signed too or Cloudinary rejects the request.
+ */
+export function signParams(params: Record<string, string | number>, apiSecret: string): string {
   const toSign = Object.keys(params)
     .sort()
     .map((k) => `${k}=${params[k]}`)
