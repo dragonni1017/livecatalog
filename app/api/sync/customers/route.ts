@@ -45,6 +45,7 @@
  *                                          SYNC_CUSTOMERS_ENABLED=true)
  */
 
+import { hasBearerSecret } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getErplyCustomers, createErplyCustomer, isConfigured as isErplyConfigured } from '@/lib/erply'
 import { getAllWooCustomers, createWooCustomer, updateWooCustomerRole, isWooConfigured, NON_CUSTOMER_WOO_ROLES } from '@/lib/woo'
@@ -112,12 +113,7 @@ const KNOWN_NON_SYNC_WOO_EMAILS = new Set(
 )
 
 function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    console.warn('[sync/customers] CRON_SECRET not set — endpoint is unprotected')
-    return true
-  }
-  return request.headers.get('authorization') === `Bearer ${secret}`
+  return hasBearerSecret(request, 'CRON_SECRET')
 }
 
 interface LinkRow {

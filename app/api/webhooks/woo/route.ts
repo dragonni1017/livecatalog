@@ -19,8 +19,8 @@
  * sync corrects any drift within 30 minutes.
  */
 
+import { hasWooSignature } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 
 // ── WooCommerce payload shape (partial) ──────────────────────────────────────
 
@@ -41,19 +41,8 @@ interface WooOrder {
 // ── Signature verification ────────────────────────────────────────────────────
 
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  const secret = process.env.WOO_WEBHOOK_SECRET
-  if (!secret) {
-    console.warn('[woo-webhook] WOO_WEBHOOK_SECRET not set — skipping signature check')
-    return true  // allow through in dev; always set this in production
-  }
-  if (!signatureHeader) return false
-
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(rawBody, 'utf8')
-    .digest('base64')
-
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
+  // Fails closed when WOO_WEBHOOK_SECRET is unset -- see lib/request-auth.ts.
+  return hasWooSignature(rawBody, signatureHeader)
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────

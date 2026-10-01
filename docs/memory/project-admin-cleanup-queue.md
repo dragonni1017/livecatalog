@@ -43,6 +43,11 @@ ambiguous when a product has several.
 `scripts/fix-product-names.ts`; the script's dry-run output was diffed
 identical before and after the refactor. The route returns 503 where Erply
 isn't configured (Vercel prod), so in practice this is local-only. It also
+
+**Correction 2026-10-01:** `ERPLY_CLIENT_CODE`, `ERPLY_USERNAME` and `ERPLY_PASSWORD`
+ARE set for Vercel production, last edited ~2026-09-23, per a names-only env listing.
+So Erply-dependent routes run in prod, and the daily `/api/sync` cron hits real Erply.
+The name route therefore works on lyusa.app too, not just locally.
 refuses any change that adds, removes or alters the pack spec, including the
 unit. That is stricter than "prefill only from the suggestion": only 1 of the
 212 flagged names has a mechanical suggestion, and most of the rest are

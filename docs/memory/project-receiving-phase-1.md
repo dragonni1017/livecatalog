@@ -25,6 +25,10 @@ Three live facts not derivable from the code:
    locally but not in Vercel production. The apply route returns a 503 saying
    so rather than calling the stub path in `lib/erply.ts`, which would make a
    no-op look like a success. Either add `ERPLY_*` to Vercel or receive from a
+
+**Correction 2026-10-01:** `ERPLY_CLIENT_CODE`, `ERPLY_USERNAME` and `ERPLY_PASSWORD`
+ARE set for Vercel production, last edited ~2026-09-23, per a names-only env listing.
+So Erply-dependent routes run in prod, and the daily `/api/sync` cron hits real Erply.
    local run.
 3. **The parser port is verified against the real container.** `lib/packing-list.ts`
    is now the canonical copy of the parsing rules, tested in

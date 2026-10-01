@@ -34,6 +34,7 @@
  *      last_sync_source='erply').
  */
 
+import { hasBearerOrQueryToken } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { DEFAULT_TIER, wooRoleForTier } from '@/lib/tier-mapping'
 
@@ -45,14 +46,7 @@ interface ErplyCustomerEvent {
 }
 
 function isAuthorized(request: NextRequest): boolean {
-  const token = process.env.ERPLY_WEBHOOK_TOKEN
-  if (!token) {
-    console.warn('[erply-webhook:customers] ERPLY_WEBHOOK_TOKEN not set — endpoint is unprotected')
-    return true
-  }
-  const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
-  const queryToken = new URL(request.url).searchParams.get('token')
-  return headerToken === token || queryToken === token
+  return hasBearerOrQueryToken(request, 'ERPLY_WEBHOOK_TOKEN')
 }
 
 export async function POST(request: NextRequest) {

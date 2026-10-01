@@ -16,6 +16,7 @@
  * not acceptable.
  */
 
+import { hasBearerOrQueryToken } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ── Erply webhook payload shape (partial) ─────────────────────────────────────
@@ -37,16 +38,8 @@ interface ErplyStockChange {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function isAuthorized(request: NextRequest): boolean {
-  const token = process.env.ERPLY_WEBHOOK_TOKEN
-  if (!token) {
-    console.warn('[erply-webhook] ERPLY_WEBHOOK_TOKEN not set — endpoint is unprotected')
-    return true
-  }
-  // Erply can send the token as a query param or Authorization header —
-  // configure whichever you choose in the Erply webhook settings.
-  const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
-  const queryToken  = new URL(request.url).searchParams.get('token')
-  return headerToken === token || queryToken === token
+  // Fails closed when ERPLY_WEBHOOK_TOKEN is unset -- see lib/request-auth.ts.
+  return hasBearerOrQueryToken(request, 'ERPLY_WEBHOOK_TOKEN')
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
