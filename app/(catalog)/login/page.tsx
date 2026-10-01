@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getAuthClient, getRecoveryClient } from '@/lib/auth-client'
 import { friendlyAuthError } from '@/lib/auth-errors'
+import { safeInternalPath } from '@/lib/safe-redirect'
 
 const CALLBACK_ERRORS: Record<string, string> = {
   auth_error:
@@ -18,7 +19,9 @@ const CALLBACK_ERRORS: Record<string, string> = {
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const from = searchParams.get('from') ?? '/account'
+  // Same-site only: router.push('//evil.com') would leave the site straight
+  // after sign-in. See lib/safe-redirect.ts.
+  const from = safeInternalPath(searchParams.get('from'), '/account')
 
   // /api/auth/callback and /reset-password bounce failures back here. Without
   // rendering them the customer just lands on a blank sign-in form and assumes

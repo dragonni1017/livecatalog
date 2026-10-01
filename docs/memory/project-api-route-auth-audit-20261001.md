@@ -41,7 +41,9 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
    `/my-orders?email=` listed anyone's orders with no login (now session only), and
    `.ilike('customer_email', email)` treated `_`/`%` as wildcards, so `a_b@x.com` also saw
    `aXb@x.com`'s orders. That happened in account, my-orders and the qbwc customer link (now `ilikeExact`).
-4. `auth/callback`: open redirect via `next=@evil.com`.
+4. **FIXED 2026-10-01.** `auth/callback`: open redirect via `next=@evil.com`. Also `/login?from=//evil.com`
+   (router.push), and `catalog-access`, whose `!startsWith('//')` check let `/evil.com` through. All three now
+   use `safeInternalPath` (lib/safe-redirect.ts), which parses the target as a URL rather than string-matching it.
 5. `qbwc` `getLastError` answers without a ticket, tickets never expire, and the
    password compare isn't constant-time.
 6. `track`: unlimited inserts. `/api/*` also skips the `CATALOG_ACCESS_CODE`

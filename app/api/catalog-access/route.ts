@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeInternalPath } from '@/lib/safe-redirect'
+import { safeEqual } from '@/lib/request-auth'
 
 const COOKIE = 'catalog_access'
 const COOKIE_OPTIONS = {
@@ -13,19 +15,20 @@ const COOKIE_OPTIONS = {
 export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const code = formData.get('code')?.toString() ?? ''
-  const from = formData.get('from')?.toString() || '/'
+  const from = safeInternalPath(formData.get('from')?.toString(), '/')
   const expected = process.env.CATALOG_ACCESS_CODE
 
-  if (!expected || code !== expected) {
+  if (!expected || !safeEqual(code, expected)) {
     const url = new URL('/enter', request.url)
     url.searchParams.set('error', '1')
     url.searchParams.set('from', from)
     return NextResponse.redirect(url, { status: 303 })
   }
 
-  // Only honor internal redirect targets (no open redirect).
-  const dest = from.startsWith('/') && !from.startsWith('//') ? from : '/'
-  const response = NextResponse.redirect(new URL(dest, request.url), { status: 303 })
+  // `from` is already same-site (safeInternalPath above). The old
+  // startsWith('/') && !startsWith('//') check let "/\evil.com" through,
+  // which browsers read as //evil.com.
+  const response = NextResponse.redirect(new URL(from, request.url), { status: 303 })
   response.cookies.set(COOKIE, 'granted', COOKIE_OPTIONS)
   return response
 }
