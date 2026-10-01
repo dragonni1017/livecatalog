@@ -3,9 +3,10 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
-**No open items in the backlog.** 3 design items awaiting design input, 3
-blocked-on-external-input items, 6 items on your side, and 21 unscoped
-brainstorm ideas below. (Volume pricing, cross-sell, credit
+**No open items in the backlog.** 3 design items awaiting design input, 2
+blocked-on-external-input items, 5 items on your side, and 21 unscoped
+brainstorm ideas below. (The custom domain shipped as `lyusa.app`, so it moved
+to `docs/ROADMAP-COMPLETED.md` on 2026-10-01.) (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
 shipped 2026-07-02; see `docs/ROADMAP-COMPLETED.md`. The low-stock/webhook
 item formerly here shipped since — also moved there.)
@@ -27,7 +28,6 @@ or any other provider. Recorded rather than deleted so it stops resurfacing as
 | Item | What's blocking |
 |---|---|
 | **Erply auto-sync** | Waiting on Erply data being clean on their side |
-| **Custom domain** (`lyusacatalog.com`) | Not yet purchased — just DNS config once bought |
 | **Catalog access gate** | Built, dormant — flip `CATALOG_ACCESS_CODE` env var to activate |
 
 ---
@@ -116,7 +116,6 @@ Future Brainstorm below.
       "Set password" on `/admin/users` is the fix — it confirms the address at
       the same time. They may also have given up and moved on; worth a call
       before assuming they still want an account.
-- [ ] Purchase `lyusacatalog.com` and point it at Vercel (Settings → Domains)
 - [ ] Confirm Erply data is clean so auto-sync can be enabled
 - [ ] Formally test mobile layout on iOS Safari + Android Chrome
 

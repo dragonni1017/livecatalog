@@ -90,6 +90,10 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Supabase RLS — all public tables locked; admin reads/writes via service-role key
 - ✅ Cloudinary image CDN with responsive transforms
 - ✅ Catalog access code gate built (env-var activated, currently dormant)
+- ✅ Custom domain **`lyusa.app`** live (confirmed 2026-10-01). `www.lyusa.app`
+  and `livecatalog.vercel.app` both redirect to it, and `metadataBase`, the
+  sitemap and robots point at it. It replaced the planned
+  `lyusacatalog.com`, which was never bought and has no DNS.
 
 ### Recently Shipped (as of 2026-06-29)
 - ✅ Buyer profiles & pricing — `customers` table + `/admin/customers`; order detail page shows buyer discount + discounted subtotal
