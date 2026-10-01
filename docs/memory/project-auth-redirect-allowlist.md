@@ -35,7 +35,9 @@ The other three, all of which also failed silently:
    login form.
 
 Current allow-list: `lyusa.app/**` and `http://localhost:3000/**` allowed.
-`www.lyusa.app` is not allowed but also has no DNS, so it's a non-issue.
+`www.lyusa.app` is not allowed. As of 2026-10-01 it resolves and 307-redirects
+to `lyusa.app` before the app runs, so a reset started there still lands on an
+allowed origin. That's still a non-issue unless the redirect is ever removed.
 **`livecatalog.vercel.app` and all `*-git-*.vercel.app` preview URLs are now
 blocked** — the reset flow cannot be tested from a preview deployment, only
 from `lyusa.app` or localhost. Don't mistake that for the bug recurring.
