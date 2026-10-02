@@ -1,6 +1,6 @@
 ---
 name: project-new-arrivals-empty
-description: 2026-10-02 - /new-arrivals shows nothing - it filters created_at >= 30 days ago, but created_at is the import date, so 0 of 1,185 visible products qualify; NOT fixed yet
+description: 2026-10-02 - /new-arrivals was empty (created_at is the import date); FIXED same day to date by shipments.applied_at from receiving; the "Newest" catalog sort still uses created_at
 type: project
 ---
 
