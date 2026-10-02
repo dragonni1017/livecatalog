@@ -34,7 +34,7 @@ products with a category_id also had it in product_categories, and 666 more
 had a join row but a NULL category_id. The admin PATCH can't produce that
 state, so the old code very likely did. `syncToSupabase` now upserts new and
 existing rows in separate batches (`tests/product-sync-skip.test.ts`).
-**The 666 have NOT been repaired**: they still show in their category through
+**REPAIRED 2026-10-02** by Dragon via `scripts/repair-category-id-from-join.mjs --apply`: 666/666 verified, with the backup at `data/category-id-repair-backup-20261002.json`. An independent re-check found 0 null-with-join and 0 category_id outside its join rows. The 2026-10-02 08:33 sync, the first run with the fix live, created no new ones. (Original note:) they still show in their category through
 the join table, but anything reading only `products.category_id` misses them.
 Repairing means a live write: set category_id from the join row, which is
 ambiguous when a product has several.
