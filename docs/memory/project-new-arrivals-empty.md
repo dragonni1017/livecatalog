@@ -12,8 +12,13 @@ page is empty most of the time, and it fills with whatever a bulk import last
 touched, not real new stock. The "Newest" catalog sort has the same
 weakness.
 
-Found while scoping catalog filters; it's why "New arrivals" wasn't added as a
-filter. Not fixed.
+**FIXED 2026-10-02 (#91):** the page now lists SKUs on APPLIED shipments in
+the last 30 days (`lib/new-arrivals.ts`, `latestArrivalBySku`), dated by
+`shipments.applied_at` and read server-side with the admin client. It showed
+18 visible products at the time. Most of the 131 received SKUs were still
+hidden at $0 awaiting pricing. Arrivals before receiving went live
+(2026-09-23) are unknown. The catalog's "Newest" sort still orders by
+`created_at` and has the same weakness.
 
 **Why:** a real arrival date exists elsewhere. Receiving applies containers
 (`shipments.applied_at`, `products.dim_source_etd` for measured cartons), but
