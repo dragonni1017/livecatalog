@@ -52,15 +52,15 @@ language sql
 immutable
 parallel safe
 as $$
+  -- Flat CASE, no nesting: same results as packSpecConvention. A stated unit
+  -- decides with no fallback. Unstated: piece-sold if cs = pk*bx (this
+  -- includes pk = 1), else pack-sold if cs = bx, else neither.
   select case
     when m is null then null
-    -- A stated unit decides it, with no fallback (packSpecConvention).
-    when lower(m[4]) in ('pcs', 'pc') then
-      case when cs = pk * bx then 'piece' end
-    when m[4] is not null then
-      case when cs = bx then 'pack' end
-    -- Unstated: piece-sold if cs = pk*bx (this includes pk = 1), else
-    -- pack-sold if cs = bx, else neither.
+    when lower(m[4]) in ('pcs','pc') and cs = pk * bx then 'piece'
+    when lower(m[4]) in ('pcs','pc') then null
+    when m[4] is not null and cs = bx then 'pack'
+    when m[4] is not null then null
     when cs = pk * bx then 'piece'
     when cs = bx then 'pack'
   end
