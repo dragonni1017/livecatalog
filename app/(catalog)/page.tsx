@@ -104,7 +104,12 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       query = query.order('price_cents', { ascending: false })
       break
     case 'newest':
-      query = query.order('created_at', { ascending: false })
+      // Most recently received first (arrived_at, set from /admin/receiving;
+      // migration 0055). Products with no recorded arrival follow, in import
+      // order: created_at is only the date a row reached Supabase.
+      query = query
+        .order('arrived_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
       break
     case 'name':
       query = query.order('name', { ascending: true })
