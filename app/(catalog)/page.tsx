@@ -5,6 +5,7 @@ import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
+import { parseCaseSize, parseSoldBy } from '@/lib/catalog-filters'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +13,7 @@ const PER_PAGE_OPTIONS = [20, 50, 100]
 const DEFAULT_PER_PAGE = 20
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string }>
+  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string; soldby?: string; case?: string }>
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
@@ -25,7 +26,13 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     per: perParam,
     minPrice: minPriceRaw,
     maxPrice: maxPriceRaw,
+    soldby: soldByRaw,
+    case: caseRaw,
   } = await searchParams
+
+  // Unknown values are ignored rather than echoed (same reasoning as price).
+  const soldBy = parseSoldBy(soldByRaw)
+  const caseSize = parseCaseSize(caseRaw)
 
   // Reject non-numeric price params outright rather than letting them fall
   // through to a silently-skipped filter that still gets echoed verbatim in
@@ -71,6 +78,12 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   if (minCents) query = query.gte('price_cents', minCents)
   if (maxCents) query = query.lte('price_cents', maxCents)
 
+  // Generated columns from the name's pack spec (migration 0054). A product
+  // with no pack spec has NULLs and drops out of these filters only.
+  if (soldBy) query = query.eq('sold_by', soldBy)
+  if (caseSize?.min != null) query = query.gte('case_pieces', caseSize.min)
+  if (caseSize?.max != null) query = query.lte('case_pieces', caseSize.max)
+
   // Multi-word search: each word must appear in name, description, SKU, or
   // barcode, so "blue widget" matches "Widget, Blue" regardless of word
   // order, and scanning/typing a barcode finds the product directly. Strip
@@ -112,6 +125,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     if (category) params.set('category', category)
     if (sort !== 'sku') params.set('sort', sort)
     if (inStock) params.set('instock', '1')
+    if (soldBy) params.set('soldby', soldBy)
+    if (caseSize) params.set('case', caseSize.value)
     if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
     if (minPrice) params.set('minPrice', minPrice)
     if (maxPrice) params.set('maxPrice', maxPrice)
@@ -127,6 +142,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     if (category) params.set('category', category)
     if (sort !== 'sku') params.set('sort', sort)
     if (inStock) params.set('instock', '1')
+    if (soldBy) params.set('soldby', soldBy)
+    if (caseSize) params.set('case', caseSize.value)
     if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
     const qs = params.toString()
     return qs ? `/?${qs}` : '/'
@@ -169,6 +186,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           {category && <input type="hidden" name="category" value={category} />}
           {sort !== 'sku' && <input type="hidden" name="sort" value={sort} />}
           {inStock && <input type="hidden" name="instock" value="1" />}
+          {soldBy && <input type="hidden" name="soldby" value={soldBy} />}
+          {caseSize && <input type="hidden" name="case" value={caseSize.value} />}
           {pageSize !== DEFAULT_PER_PAGE && <input type="hidden" name="per" value={String(pageSize)} />}
           <span className="text-sm text-gray-500 font-medium">Price</span>
           <div className="flex items-center gap-2">
@@ -245,7 +264,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
               <div className="h-8 w-28 rounded-md bg-gray-200 animate-pulse" />
             </div>
           }>
-            <CatalogControls sort={sort} inStock={inStock} perPage={pageSize} />
+            <CatalogControls sort={sort} inStock={inStock} perPage={pageSize} soldBy={soldBy ?? ''} caseSize={caseSize?.value ?? ''} />
           </Suspense>
         </div>
 

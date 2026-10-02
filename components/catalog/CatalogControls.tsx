@@ -1,11 +1,14 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
+import { CASE_SIZES } from '@/lib/catalog-filters'
 
 interface Props {
   sort: string
   inStock: boolean
   perPage: number
+  soldBy: string
+  caseSize: string
 }
 
 const SORT_OPTIONS = [
@@ -19,10 +22,11 @@ const SORT_OPTIONS = [
 const PER_PAGE_OPTIONS = [20, 50, 100]
 const DEFAULT_PER_PAGE = 20
 
-// Sort dropdown + "in stock only" toggle for the catalog. Writes the choice to
-// the URL (?sort= / ?instock=) and resets to page 1, mirroring SearchInput so
-// the server component can read it back and re-query.
-export default function CatalogControls({ sort, inStock, perPage }: Props) {
+// Sort dropdown, "in stock only" toggle, and the Sold by / Case size filters
+// for the catalog. Writes the choice to the URL (?sort= / ?instock= /
+// ?soldby= / ?case=) and resets to page 1, mirroring SearchInput so the
+// server component can read it back and re-query.
+export default function CatalogControls({ sort, inStock, perPage, soldBy, caseSize }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -37,7 +41,7 @@ export default function CatalogControls({ sort, inStock, perPage }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-600 select-none">
         <input
           type="checkbox"
@@ -48,6 +52,37 @@ export default function CatalogControls({ sort, inStock, perPage }: Props) {
           className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
         />
         In stock only
+      </label>
+
+      <label className="flex items-center gap-1.5 text-sm text-gray-600">
+        <span className="hidden sm:inline">Sold by</span>
+        <select
+          aria-label="Sold by"
+          value={soldBy}
+          onChange={(e) => update((p) => (e.target.value ? p.set('soldby', e.target.value) : p.delete('soldby')))}
+          className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+        >
+          <option value="">Any</option>
+          <option value="piece">By the piece</option>
+          <option value="pack">By the pack</option>
+        </select>
+      </label>
+
+      <label className="flex items-center gap-1.5 text-sm text-gray-600">
+        <span className="hidden sm:inline">Case size</span>
+        <select
+          aria-label="Case size"
+          value={caseSize}
+          onChange={(e) => update((p) => (e.target.value ? p.set('case', e.target.value) : p.delete('case')))}
+          className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+        >
+          <option value="">Any</option>
+          {CASE_SIZES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="flex items-center gap-1.5 text-sm text-gray-600">
