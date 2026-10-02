@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientIp, createRateLimiter } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
+
+// Real browsing sends a few events a minute (658 in the 7 days to
+// 2026-10-02). Without a cap, one script could add unlimited rows and drown
+// the analytics. Over the limit is dropped silently, never an error.
+const limiter = createRateLimiter({ limit: 60, windowMs: 60_000 })
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -12,6 +18,10 @@ function isMockMode(): boolean {
 // Best-effort: never blocks or errors the user experience.
 export async function POST(request: NextRequest) {
   try {
+    if (!limiter.hit(clientIp(request))) {
+      return NextResponse.json({ ok: true, skipped: true })
+    }
+
     const body = await request.json().catch(() => ({}))
     const type = body.type
 
@@ -25,6 +35,9 @@ export async function POST(request: NextRequest) {
     if (type === 'view') {
       const pid = typeof body.productId === 'string' ? body.productId.trim() : ''
       if (!pid) return NextResponse.json({ error: 'productId required' }, { status: 400 })
+      // Real ids are short (prod-NNNNN). The FK rejects unknown ones anyway,
+      // so don't send the database a megabyte string first.
+      if (pid.length > 64) return NextResponse.json({ error: 'invalid productId' }, { status: 400 })
       productId = pid
     } else {
       // For 'search' events the payload key is `term`; for 'search_no_results' it is `query`.

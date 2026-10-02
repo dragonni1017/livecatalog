@@ -48,7 +48,8 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
    password compare isn't constant-time. Now `getLastError` needs a live session, and tickets die on
    `closed_at` or 2h after `opened_at` (`lib/qbwc-session.ts`; real sessions max out at 2.8 min).
    Username and password are both compared with `safeEqual`.
-6. `track`: unlimited inserts. `/api/*` also skips the `CATALOG_ACCESS_CODE`
+6. **`track` FIXED 2026-10-02 (best-effort):** 60 events/min per IP via `lib/rate-limit.ts`, which is in-memory and per-instance,
+   so not a global cap; a Vercel Firewall rule on `/api/track` would make it hard. productId is capped at 64 chars. Was: `track`: unlimited inserts. `/api/*` also skips the `CATALOG_ACCESS_CODE`
    gate, so `products/suggest` and `products/lookup` return prices while the
    catalog is gated.
 
