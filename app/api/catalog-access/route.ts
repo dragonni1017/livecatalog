@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { safeInternalPath } from '@/lib/safe-redirect'
 import { safeEqual } from '@/lib/request-auth'
+import { CATALOG_COOKIE, catalogAccessToken } from '@/lib/catalog-gate'
 
-const COOKIE = 'catalog_access'
 const COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: 'lax' as const,
@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
   // startsWith('/') && !startsWith('//') check let "/\evil.com" through,
   // which browsers read as //evil.com.
   const response = NextResponse.redirect(new URL(from, request.url), { status: 303 })
-  response.cookies.set(COOKIE, 'granted', COOKIE_OPTIONS)
+  // An HMAC of the code (lib/catalog-gate.ts). The literal 'granted' used to
+  // be settable by anyone, by hand.
+  response.cookies.set(CATALOG_COOKIE, await catalogAccessToken(expected), { ...COOKIE_OPTIONS, secure: true })
   return response
 }

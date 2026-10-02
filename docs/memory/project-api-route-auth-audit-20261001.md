@@ -49,9 +49,11 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
    `closed_at` or 2h after `opened_at` (`lib/qbwc-session.ts`; real sessions max out at 2.8 min).
    Username and password are both compared with `safeEqual`.
 6. **`track` FIXED 2026-10-02 (best-effort):** 60 events/min per IP via `lib/rate-limit.ts`, which is in-memory and per-instance,
-   so not a global cap; a Vercel Firewall rule on `/api/track` would make it hard. productId is capped at 64 chars. Was: `track`: unlimited inserts. `/api/*` also skips the `CATALOG_ACCESS_CODE`
+   so not a global cap; a Vercel Firewall rule on `/api/track` would make it hard. productId is capped at 64 chars. Was: `track`: unlimited inserts. **FIXED 2026-10-02:** `/api/*` also skips the `CATALOG_ACCESS_CODE`
    gate, so `products/suggest` and `products/lookup` return prices while the
-   catalog is gated.
+   catalog is gated. Worse, the gate cookie was the literal `granted`, settable by hand. Now it's an HMAC
+   of the code, and gated APIs return 401 without it (`lib/catalog-gate.ts`), except sign-in, the code
+   check, qbwc, cron and webhooks.
 
 **Why:** a missed `/api` route reads as fine. It just works, for anyone.
 **How to apply:** an admin-only route goes under `/admin/api/*`. A machine
