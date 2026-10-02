@@ -17,6 +17,7 @@ import ProductDetailPrice from '@/components/catalog/ProductDetailPrice'
 import TrackView from '@/components/catalog/TrackView'
 import BackInStockForm from '@/components/catalog/BackInStockForm'
 import ImageGallery from '@/components/catalog/ImageGallery'
+import { jsonLdScript, productJsonLd } from '@/lib/product-jsonld'
 
 // Cache the rendered page for 10 minutes (ISR). Product pages don't depend on
 // per-request state, so this serves them from cache and only re-queries Supabase
@@ -138,6 +139,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <div className="mx-auto max-w-4xl">
+      {/* schema.org Product for search rich results; mirrors what this page shows. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, settings)) }}
+      />
       <TrackView productId={product.id} />
       <div className="mb-6">
         <Link
