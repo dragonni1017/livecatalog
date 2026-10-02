@@ -1,33 +1,54 @@
 import { Suspense } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAdminClient } from '@/lib/supabase'
+import { latestArrivalBySku, NEW_ARRIVAL_DAYS, newArrivalsSinceMs, type ShipmentLineRow, type ShipmentRow } from '@/lib/new-arrivals'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-function daysAgoIso(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-}
-
+// Arrival dates come from receiving, not products.created_at (which is the
+// import date). See lib/new-arrivals.ts.
 export default async function NewArrivalsPage() {
-  const thirtyDaysAgo = daysAgoIso(30)
+  const sinceMs = newArrivalsSinceMs()
+
+  // shipments / shipment_lines are service-role only (RLS, no public policy),
+  // so they're read with the admin client here on the server. Only SKUs
+  // leave this step; the products themselves come from the public client
+  // with the usual visibility filters.
+  const db = getAdminClient()
+  const { data: shipments } = await db
+    .from('shipments')
+    .select('id, status, applied_at')
+    .eq('status', 'applied')
+    .gte('applied_at', new Date(sinceMs).toISOString())
+  const shipmentIds = (shipments ?? []).map((s) => s.id as string)
+  const { data: lines } = shipmentIds.length
+    ? await db.from('shipment_lines').select('shipment_id, sku, qty_received').in('shipment_id', shipmentIds)
+    : { data: [] }
+  const arrivedAt = latestArrivalBySku((shipments ?? []) as ShipmentRow[], (lines ?? []) as ShipmentLineRow[], sinceMs)
+  const skus = [...arrivedAt.keys()].slice(0, 500)
 
   const [{ data: categories }, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
-    supabase
-      .from('products')
-      .select(
-        'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
-      )
-      .eq('is_active', true)
-      .eq('manually_hidden', false)
-      .gte('created_at', thirtyDaysAgo)
-      .order('created_at', { ascending: false })
-      .limit(100),
+    skus.length
+      ? supabase
+          .from('products')
+          .select(
+            'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
+          )
+          .eq('is_active', true)
+          .eq('manually_hidden', false)
+          .in('sku', skus)
+      : Promise.resolve({ data: [] }),
   ])
 
-  const products = (data ?? []) as unknown as Product[]
+  // Most recent arrival first, then by name within one delivery.
+  const products = ((data ?? []) as unknown as Product[]).sort(
+    (a, b) =>
+      Date.parse(arrivedAt.get(b.sku) ?? '') - Date.parse(arrivedAt.get(a.sku) ?? '') ||
+      a.name.localeCompare(b.name),
+  )
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
@@ -59,12 +80,12 @@ export default async function NewArrivalsPage() {
         {/* Page heading */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">New Arrivals</h1>
-          <p className="mt-1 text-sm text-gray-500">Products added in the last 30 days</p>
+          <p className="mt-1 text-sm text-gray-500">Received in the last {NEW_ARRIVAL_DAYS} days</p>
         </div>
 
         {products.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white py-16 text-center">
-            <p className="text-sm text-gray-500">No new products in the last 30 days.</p>
+            <p className="text-sm text-gray-500">Nothing new has been received in the last {NEW_ARRIVAL_DAYS} days.</p>
           </div>
         ) : (
           <>
