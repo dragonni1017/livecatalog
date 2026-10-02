@@ -13,7 +13,7 @@
 
 import { hasBearerSecret } from '@/lib/request-auth'
 import { NextRequest, NextResponse } from 'next/server'
-import { getErplyProducts, getErplyStock, isConfigured } from '@/lib/erply'
+import { getErplyProducts, getErplyStock, isConfigured, syncPriceCents } from '@/lib/erply'
 import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/product-sync'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       sku: p.sku,
       barcode: p.barcode,
       name: p.name,
-      price_cents: Math.round(p.price * 100),
+      price_cents: syncPriceCents(p),
       description: p.description || null,
       stock_qty: p.stockQty,
       image_url: p.imageUrl,

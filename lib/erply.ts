@@ -100,6 +100,16 @@ export interface ErplySyncProduct {
   isActive: boolean
 }
 
+/**
+ * products.price_cents for a normalized Erply product -- the conversion both
+ * sync routes and /admin/api/cleanup/pull-prices use, so the "pull now"
+ * button writes exactly what the 08:00 UTC cron would. The price formula
+ * itself (multiplier + quarter rounding) is applied in normalizeProduct.
+ */
+export function syncPriceCents(p: Pick<ErplySyncProduct, 'price'>): number {
+  return Math.round(p.price * 100)
+}
+
 // ── Config helpers ────────────────────────────────────────────────────────────
 
 export function isConfigured(): boolean {

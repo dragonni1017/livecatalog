@@ -4,6 +4,8 @@ description: 2026-08-06 -- livecatalog storefront price formula changed from ret
 type: project
 ---
 
+**SUPERSEDED 2026-08-21 (found 2026-10-02):** lib/erply.ts now uses RETAIL_MULTIPLIER = 1, not x0.5. See [[project-needs-pricing-tab-20261002]]. The quarter rounding below still holds.
+
 **Decision (2026-08-06):** Dragon asked to change the livecatalog (public,
 Vercel-hosted) storefront pricing to "wholesale," and to round all prices
 to the nearest quarter, skipping `.75` (a price lands on `x.00`/`x.25`/
