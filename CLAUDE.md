@@ -70,6 +70,22 @@ code, not the file itself).
   sync response. Re-run `0052_products_id_seq_reseed.sql` after any script
   that assigns ids by hand. Bitten twice (0020 no-default 2026-08-05,
   sequence collision 2026-09-23).
+- Bulk upsert/insert: supabase-js sends ONE column list, the union of every
+  row's keys, and a row missing a key is sent NULL for it. On conflict that
+  NULL overwrites the stored value. NOT NULL columns fail the whole chunk;
+  nullable ones just get blanked silently. Never put a key on only some rows
+  of a batch (a conditional `...(x ? {k} : {})` spread is the usual culprit):
+  either every row carries it, or set it in a separate UPDATE.
+  `syncToSupabase` groups chunks by exact key set for this. Bitten twice
+  (`manually_hidden` failed 500 rows 2026-09-24; 666 `category_id`s blanked,
+  found 2026-10-01).
+- `middleware.ts` gates only `/admin/*` and `/rep/*`. **Every `/api/*` route is
+  public**, so the route's own check is the only guard. An admin-only route
+  goes under `/admin/api/*`. A cron or webhook route uses `lib/request-auth.ts`,
+  which rejects when the secret is unset: never `if (!secret) return true`.
+  Bitten twice: `/api/import` was unauthenticated with the service-role client,
+  and six routes failed open on a missing secret, `ERPLY_WEBHOOK_TOKEN` was
+  never set in prod (both found 2026-10-01).
 - Bulk product/data work (import, sync, backfill): run the matching script in
   `scripts/*.mjs` via Bash instead of inlining/iterating the data yourself.
 - `docs/*.md` (ROADMAP, handoff notes, plans): grep for the relevant heading
