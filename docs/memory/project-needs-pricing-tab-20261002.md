@@ -38,8 +38,8 @@ once they're priced (`/admin/api/cleanup/unhide`). The rules live in
 [[project-storefront-wholesale-quarter-rounding]]'s x0.5 is superseded.
 `scripts/sync-prices-only.mjs` still hard-codes `WHOLESALE_DISCOUNT = 0.5`
 and claims to mirror lib. Running it with `--apply` would halve ~3,000 live
-prices. It was NOT fixed in this change, so treat it as broken until someone
-fixes it.
+prices. It was **deleted 2026-10-02** (Dragon's call) rather than fixed. The Pull button and
+the cron cover what it did.
 
 **How to apply:** for any price question, read `normalizeProduct` in
 `lib/erply.ts`, not the memory nodes or the .mjs mirror. Never treat "hidden

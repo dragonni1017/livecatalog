@@ -21,7 +21,11 @@ to the nearest quarter, skipping `.75` (a price lands on `x.00`/`x.25`/
   price list discount (confirmed 50% in that same doc).
 - New `roundToQuarterSkip75()` helper applied to the result: nearest of
   `{x.00, x.25, x.50, (x+1).00}` — `.75` is never a landing point.
-- `scripts/sync-prices-only.mjs` has an identical, manually-mirrored copy of
+- **DELETED 2026-10-02:** `scripts/sync-prices-only.mjs` no longer exists. It still applied ×0.5
+  after lib moved to `RETAIL_MULTIPLIER = 1` (2026-08-21), so `--apply` would have halved ~3,000
+  live prices. For a price-only refresh use the "Pull prices from Erply now" button on
+  `/admin/cleanup?issue=pricing` (it only fills $0 rows) or wait for the 08:00 UTC sync.
+- (Historical) `scripts/sync-prices-only.mjs` had an identical, manually-mirrored copy of
   both the discount constant and the rounding function (same pattern as
   `lib/tier-mapping.ts` / `scripts/assign-woo-tier-roles.mjs` — .mjs scripts
   can't import from `lib/`, so keep both in sync by hand if either changes).
@@ -47,5 +51,5 @@ price list `discountPercent` (`check-erply-price-list-rules.mjs`, read-only)
 before assuming the code is still correct — the discount percentage is a
 live, admin-editable value in Erply, not a compile-time constant kept in
 sync automatically. If `WHOLESALE_DISCOUNT` and Erply's real discount ever
-diverge, `scripts/sync-prices-only.mjs` needs its copy updated too (no
-shared import between `lib/` and `scripts/*.mjs`).
+diverge, only `lib/erply.ts` needs changing now: the mirrored script copy
+was deleted 2026-10-02.
