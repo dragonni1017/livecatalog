@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { XMLParser } from 'fast-xml-parser'
 import { getAdminClient } from '@/lib/supabase'
 import { ilikeExact } from '@/lib/order-access'
+import { safeEqual } from '@/lib/request-auth'
+import { isQbwcSessionLive } from '@/lib/qbwc-session'
 import { logAudit } from '@/lib/audit'
 import {
   buildCustomerAddRq,
@@ -120,7 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     case 'connectionError':
       return xmlResponse(await handleConnectionError(db, params))
     case 'getLastError':
-      return xmlResponse(await handleGetLastError(db))
+      return xmlResponse(await handleGetLastError(db, params))
     case 'closeConnection':
       return xmlResponse(await handleCloseConnection(db, params))
     default:
@@ -146,15 +148,19 @@ type PendingRequestKind =
 
 interface QbSession {
   ticket: string
+  opened_at: string
+  closed_at: string | null
   pending_request_kind: PendingRequestKind | null
   pending_order_id: string | null
   pending_ref: string | null
 }
 
+// Closed or expired tickets are treated as unknown. See lib/qbwc-session.ts.
 async function getSession(db: Db, ticket: string): Promise<QbSession | null> {
   if (!ticket) return null
   const { data } = await db.from('qb_sessions').select('*').eq('ticket', ticket).maybeSingle()
-  return data as QbSession | null
+  const session = data as QbSession | null
+  return session && isQbwcSessionLive(session) ? session : null
 }
 
 async function setPending(
@@ -337,7 +343,11 @@ async function handleAuthenticate(db: Db, params: any): Promise<string> {
   const expectedUser = process.env.QBWC_USERNAME
   const expectedPass = process.env.QBWC_PASSWORD
 
-  if (!expectedUser || !expectedPass || username !== expectedUser || password !== expectedPass) {
+  // Constant-time, and both compared even when the first fails, so timing
+  // can't confirm a correct username on its own.
+  const userOk = !!expectedUser && safeEqual(username, expectedUser)
+  const passOk = !!expectedPass && safeEqual(password, expectedPass)
+  if (!userOk || !passOk) {
     return authenticateResult('', 'nvu') // "nvu" = not a valid user, per the QBWC protocol
   }
 
@@ -791,7 +801,13 @@ async function handleConnectionError(db: Db, params: any): Promise<string> {
   return simpleResult('connectionError', 'connectionErrorResult', 'done')
 }
 
-async function handleGetLastError(db: Db): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleGetLastError(db: Db, params: any): Promise<string> {
+  // QBWC sends its ticket here too. Without a live session, anyone could read
+  // the newest qb_sync_queue error, which can name customers and orders.
+  const session = await getSession(db, String(params.ticket ?? ''))
+  if (!session) return simpleResult('getLastError', 'getLastErrorResult', '')
+
   const { data, error } = await db
     .from('qb_sync_queue')
     .select('error_message')
