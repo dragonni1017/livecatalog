@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getErplyProducts, isConfigured, type ErplySyncProduct } from '@/lib/erply'
+import { getErplyProducts, isConfigured, syncPriceCents, type ErplySyncProduct } from '@/lib/erply'
 import { previewSync, syncToSupabase, type SyncProduct } from '@/lib/product-sync'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 
@@ -19,7 +19,7 @@ function toSyncProducts(erply: ErplySyncProduct[]): SyncProduct[] {
     sku: p.sku,
     barcode: p.barcode,
     name: p.name,
-    price_cents: Math.round(p.price * 100),
+    price_cents: syncPriceCents(p),
     description: p.description || null,
     stock_qty: p.stockQty,
     image_url: p.imageUrl,

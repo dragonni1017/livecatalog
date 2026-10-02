@@ -11,6 +11,9 @@ import {
 import CleanupPhotoDrop from '@/components/admin/CleanupPhotoDrop'
 import CleanupRowEditor from '@/components/admin/CleanupRowEditor'
 import CleanupNameFix from '@/components/admin/CleanupNameFix'
+import CleanupPricing, { type ReadyRow, type UnpricedRow } from '@/components/admin/CleanupPricing'
+import { fetchReceivingCohort, isReadyToShow, needsErplyPrice } from '@/lib/needs-pricing'
+import { fetchQbItemsBySku } from '@/lib/qb-item-directory'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,13 +29,23 @@ export const dynamic = 'force-dynamic'
 //    on insert only (skipFields), so an edit here survives it
 //  - names live in Erply, so a name fix writes Erply + Woo + Supabase via
 //    lib/product-name-fix.ts, and only where Erply is configured (locally)
+//  - prices are NOT set here (decided 2026-10-02): they're entered in Erply
+//    and the Erply sync owns price_cents. The "Needs pricing" tab pulls them
+//    early and unhides receiving-cohort products once priced
+//    (lib/needs-pricing.ts)
 const DISPLAY_PAGE_SIZE = 100
 
-const ISSUE_LABELS: Record<CleanupIssue, string> = {
+// 'pricing' isn't a classifyProduct flag: "ready to show" depends on the
+// receiving cohort, which lives in shipment_lines, not on the product row.
+type CleanupTab = CleanupIssue | 'pricing'
+const CLEANUP_TABS: CleanupTab[] = [...CLEANUP_ISSUES, 'pricing']
+
+const TAB_LABELS: Record<CleanupTab, string> = {
   photo: 'Needs photo',
   name: 'Name not to standard',
   category: 'No category',
   description: 'No description',
+  pricing: 'Needs pricing',
 }
 
 interface CleanupDbRow {
@@ -46,10 +59,13 @@ interface CleanupDbRow {
   manually_hidden: boolean
   is_active: boolean
   stock_qty: number | null
+  price_cents: number | null
+  case_pieces: number | null
+  arrived_at: string | null
 }
 
 const COLUMNS =
-  'id, sku, name, description, image_url, needs_photo, category_id, manually_hidden, is_active, stock_qty'
+  'id, sku, name, description, image_url, needs_photo, category_id, manually_hidden, is_active, stock_qty, price_cents, case_pieces, arrived_at'
 
 // Every product, not one page's worth: the counts and the issue filters are
 // computed in JS (auditProductName can't run in PostgREST), so the whole set
@@ -101,16 +117,17 @@ export default async function AdminCleanupPage({
   searchParams: Promise<{ issue?: string; q?: string; visibility?: string; page?: string }>
 }) {
   const { issue: issueParam, q, visibility, page: pageParam } = await searchParams
-  const issue: CleanupIssue = (CLEANUP_ISSUES as string[]).includes(issueParam ?? '')
-    ? (issueParam as CleanupIssue)
+  const issue: CleanupTab = (CLEANUP_TABS as string[]).includes(issueParam ?? '')
+    ? (issueParam as CleanupTab)
     : 'photo'
   const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1)
 
   const db = getAdminClient()
-  const [allRows, linkedIds, { data: categoryData, error: categoryError }] = await Promise.all([
+  const [allRows, linkedIds, { data: categoryData, error: categoryError }, cohort] = await Promise.all([
     fetchAllRows(db),
     fetchLinkedProductIds(db),
     db.from('categories').select('id, name').order('name'),
+    fetchReceivingCohort(db),
   ])
   if (categoryError) throw categoryError
   const categories = (categoryData ?? []).map((c) => ({ id: String(c.id), name: String(c.name) }))
@@ -128,7 +145,7 @@ export default async function AdminCleanupPage({
     )
   }
 
-  const counts: Record<CleanupIssue, number> = { photo: 0, name: 0, category: 0, description: 0 }
+  const counts: Record<CleanupTab, number> = { photo: 0, name: 0, category: 0, description: 0, pricing: 0 }
   for (const flags of flagsById.values()) {
     for (const key of CLEANUP_ISSUES) if (flags[key]) counts[key]++
   }
@@ -140,11 +157,62 @@ export default async function AdminCleanupPage({
   )
 
   const term = q?.trim().toLowerCase()
+  const matchesTerm = (row: CleanupDbRow) =>
+    !term || `${row.name} ${row.sku ?? ''}`.toLowerCase().includes(term)
+
+  // Needs pricing: two lists, unpaginated (~100 rows between them).
+  const readyAll = activeRows.filter((r) => r.sku && isReadyToShow(r, cohort))
+  const unpricedAll = activeRows
+    .filter((r) => r.sku && needsErplyPrice(r))
+    // Most recently arrived first: those are the ones on the floor now.
+    .sort(
+      (a, b) =>
+        (b.arrived_at ?? '').localeCompare(a.arrived_at ?? '') || (a.sku ?? '').localeCompare(b.sku ?? ''),
+    )
+  counts.pricing = readyAll.length + unpricedAll.length
+
+  let readyRows: ReadyRow[] = []
+  let unpricedRows: UnpricedRow[] = []
+  if (issue === 'pricing') {
+    readyRows = readyAll.filter(matchesTerm).map((r) => ({
+      id: r.id,
+      sku: r.sku as string,
+      name: r.name,
+      priceCents: r.price_cents ?? 0,
+      stockQty: r.stock_qty ?? 0,
+      thumb: resolveCdnImage(r.image_url, 56),
+    }))
+    const unpricedShown = unpricedAll.filter(matchesTerm)
+    // QuickBooks is a reference only -- the price still has to be entered in
+    // Erply. Matched case-insensitively (sku_norm, migration 0051).
+    const qb = await fetchQbItemsBySku(
+      db,
+      unpricedShown.map((r) => r.sku as string),
+    )
+    unpricedRows = unpricedShown.map((r) => {
+      const items = qb.get((r.sku as string).toUpperCase()) ?? []
+      const prices = [
+        ...new Set(items.map((i) => Number(i.sales_price)).filter((n) => Number.isFinite(n) && n > 0)),
+      ].sort((a, b) => a - b)
+      return {
+        id: r.id,
+        sku: r.sku as string,
+        name: r.name,
+        thumb: resolveCdnImage(r.image_url, 56),
+        casePieces: r.case_pieces,
+        arrivedAt: r.arrived_at,
+        qbPrices: prices,
+        inQuickBooks: items.length > 0,
+        inCohort: cohort.has((r.sku as string).trim().toUpperCase()),
+      }
+    })
+  }
+
   const filtered = activeRows.filter((row) => {
-    if (!flagsById.get(row.id)?.[issue]) return false
+    if (issue === 'pricing' || !flagsById.get(row.id)?.[issue]) return false
     if (visibility === 'visible' && row.manually_hidden !== false) return false
     if (visibility === 'hidden' && row.manually_hidden !== true) return false
-    if (term && !`${row.name} ${row.sku ?? ''}`.toLowerCase().includes(term)) return false
+    if (!matchesTerm(row)) return false
     return true
   })
 
@@ -162,7 +230,7 @@ export default async function AdminCleanupPage({
           .map((r) => ({ sku: r.sku as string, hasImage: Boolean((r.image_url ?? '').trim()) }))
       : []
 
-  const linkFor = (overrides: { issue?: CleanupIssue; page?: number }) => {
+  const linkFor = (overrides: { issue?: CleanupTab; page?: number }) => {
     const params = new URLSearchParams()
     const nextIssue = overrides.issue ?? issue
     if (nextIssue !== 'photo') params.set('issue', nextIssue)
@@ -183,13 +251,13 @@ export default async function AdminCleanupPage({
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Catalog Cleanup</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Active products that still need a photo, a standard name, a category or a description.
+            Active products that still need a photo, a standard name, a category, a description or a price.
           </p>
         </div>
 
         {/* Issue tabs double as the counts, so the remaining work is always visible */}
         <div className="mb-6 flex flex-wrap gap-2">
-          {CLEANUP_ISSUES.map((key) => {
+          {CLEANUP_TABS.map((key) => {
             const active = key === issue
             return (
               <Link
@@ -201,7 +269,7 @@ export default async function AdminCleanupPage({
                     : 'rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
                 }
               >
-                {ISSUE_LABELS[key]}{' '}
+                {TAB_LABELS[key]}{' '}
                 <span className={active ? 'font-semibold' : 'font-semibold text-gray-900'}>
                   {counts[key].toLocaleString()}
                 </span>
@@ -219,15 +287,18 @@ export default async function AdminCleanupPage({
             placeholder="Search name or SKU…"
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 w-56"
           />
-          <select
-            name="visibility"
-            defaultValue={visibility ?? ''}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
-          >
-            <option value="">All visibility</option>
-            <option value="visible">On the storefront</option>
-            <option value="hidden">Hidden</option>
-          </select>
+          {/* Everything on the pricing tab is hidden, so the filter would only confuse */}
+          {issue !== 'pricing' && (
+            <select
+              name="visibility"
+              defaultValue={visibility ?? ''}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            >
+              <option value="">All visibility</option>
+              <option value="visible">On the storefront</option>
+              <option value="hidden">Hidden</option>
+            </select>
+          )}
           <button
             type="submit"
             className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
@@ -242,7 +313,10 @@ export default async function AdminCleanupPage({
               Clear filters
             </a>
           )}
-          <span className="ml-auto text-sm text-gray-500">{filtered.length.toLocaleString()} matching</span>
+          <span className="ml-auto text-sm text-gray-500">
+            {(issue === 'pricing' ? readyRows.length + unpricedRows.length : filtered.length).toLocaleString()}{' '}
+            matching
+          </span>
         </form>
 
         {issue === 'photo' && <CleanupPhotoDrop products={photoProducts} />}
@@ -263,82 +337,86 @@ export default async function AdminCleanupPage({
           </p>
         )}
 
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3">SKU</th>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3 text-right">Stock</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">{issue === 'photo' ? 'Photo' : 'Fix'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {pageRows.length === 0 && (
+        {issue === 'pricing' && <CleanupPricing ready={readyRows} unpriced={unpricedRows} />}
+
+        {issue !== 'pricing' && (
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                    Nothing left here.
-                  </td>
+                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3 text-right">Stock</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">{issue === 'photo' ? 'Photo' : 'Fix'}</th>
                 </tr>
-              )}
-              {pageRows.map((row) => {
-                const nameAudit = issue === 'name' ? cleanupNameAudit(row.name ?? '') : null
-                const thumb = issue === 'photo' ? resolveCdnImage(row.image_url, 56) : null
-                return (
-                  <tr key={row.id} className="align-top">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700 whitespace-nowrap">{row.sku ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-900">
-                      {row.name}
-                      {nameAudit && (
-                        <div className="mt-1 text-xs text-gray-500">{nameAudit.issues.join(', ')}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-                      {(row.stock_qty ?? 0).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {row.manually_hidden ? (
-                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Hidden</span>
-                      ) : (
-                        <span className="rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">On storefront</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {issue === 'photo' &&
-                        (thumb ? (
-                          <div className="flex items-center gap-2">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={thumb} alt="" width={56} height={56} className="h-14 w-14 rounded object-cover" />
-                            <span className="text-xs text-amber-700">Flagged as needing a new photo</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">No image</span>
-                        ))}
-                      {issue === 'name' && row.sku && (
-                        <CleanupNameFix
-                          sku={row.sku}
-                          currentName={row.name}
-                          suggestion={nameAudit?.suggestion ?? null}
-                        />
-                      )}
-                      {(issue === 'category' || issue === 'description') && (
-                        <CleanupRowEditor
-                          id={row.id}
-                          mode={issue}
-                          description={row.description ?? ''}
-                          categories={categories}
-                        />
-                      )}
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pageRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                      Nothing left here.
                     </td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                )}
+                {pageRows.map((row) => {
+                  const nameAudit = issue === 'name' ? cleanupNameAudit(row.name ?? '') : null
+                  const thumb = issue === 'photo' ? resolveCdnImage(row.image_url, 56) : null
+                  return (
+                    <tr key={row.id} className="align-top">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700 whitespace-nowrap">{row.sku ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-900">
+                        {row.name}
+                        {nameAudit && (
+                          <div className="mt-1 text-xs text-gray-500">{nameAudit.issues.join(', ')}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                        {(row.stock_qty ?? 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {row.manually_hidden ? (
+                          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Hidden</span>
+                        ) : (
+                          <span className="rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">On storefront</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {issue === 'photo' &&
+                          (thumb ? (
+                            <div className="flex items-center gap-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={thumb} alt="" width={56} height={56} className="h-14 w-14 rounded object-cover" />
+                              <span className="text-xs text-amber-700">Flagged as needing a new photo</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">No image</span>
+                          ))}
+                        {issue === 'name' && row.sku && (
+                          <CleanupNameFix
+                            sku={row.sku}
+                            currentName={row.name}
+                            suggestion={nameAudit?.suggestion ?? null}
+                          />
+                        )}
+                        {(issue === 'category' || issue === 'description') && (
+                          <CleanupRowEditor
+                            id={row.id}
+                            mode={issue}
+                            description={row.description ?? ''}
+                            categories={categories}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {totalPages > 1 && (
+        {issue !== 'pricing' && totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
             <span>
               Showing {(from + 1).toLocaleString()}–
