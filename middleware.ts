@@ -1,8 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-
-const CATALOG_COOKIE = 'catalog_access'
+import { CATALOG_COOKIE, hasCatalogAccess, isUngatedApi } from '@/lib/catalog-gate'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -75,7 +74,21 @@ export async function middleware(request: NextRequest) {
   // that's admin-only belongs under /admin/api/*, which the admin gate
   // covers. /api/import sat here unauthenticated, writing products with the
   // service-role client, until 2026-10-01.
-  if (pathname === '/enter' || pathname.startsWith('/api')) return response
+  if (pathname === '/enter') return response
+
+  if (pathname.startsWith('/api')) {
+    // With the catalog code ON, the catalog's own APIs (search, lookup,
+    // cart pricing, orders, ...) need the same access as its pages, or
+    // prices leak through them while the pages are locked. Sign-in, the
+    // code check itself, and machine callers stay open (lib/catalog-gate.ts).
+    // A JSON 401 rather than a redirect: fetch() would follow a redirect to
+    // the HTML /enter page and fail to parse it.
+    const code = process.env.CATALOG_ACCESS_CODE
+    if (code && !isUngatedApi(pathname) && !(await hasCatalogAccess(request.cookies.get(CATALOG_COOKIE)?.value, code))) {
+      return NextResponse.json({ error: 'Catalog access code required.' }, { status: 401 })
+    }
+    return response
+  }
 
   // A customer clicking an emailed password-reset link has already proven
   // who they are via the Supabase grant in the URL/hash — bouncing them to
@@ -88,8 +101,8 @@ export async function middleware(request: NextRequest) {
   // Dormant unless CATALOG_ACCESS_CODE is set, so the catalog stays public
   // until you turn the gate on by setting that env var.
   if (process.env.CATALOG_ACCESS_CODE) {
-    const access = request.cookies.get(CATALOG_COOKIE)
-    if (!access || access.value !== 'granted') {
+    // An HMAC of the code, not the literal 'granted' anyone could set by hand.
+    if (!(await hasCatalogAccess(request.cookies.get(CATALOG_COOKIE)?.value, process.env.CATALOG_ACCESS_CODE))) {
       const enterUrl = new URL('/enter', request.url)
       enterUrl.searchParams.set('from', pathname + search)
       return NextResponse.redirect(enterUrl)
