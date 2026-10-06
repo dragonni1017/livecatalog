@@ -22,6 +22,12 @@
 // every comparable for exactly that reason: "60pk/cs" priced like a single
 // piece is the mistake this column could cause.
 //
+// The QuickBooks price column is the item's sales price in QuickBooks
+// Desktop (qb_item_directory, mirrored by the QBWC item pull). It is shown
+// as a reference for whoever sets prices, in QuickBooks' own unit, which has
+// not been checked against the catalog's pack spec. Blank when the SKU has
+// no QuickBooks record, a $0 price, or several records that disagree.
+//
 // Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import path from 'path'
@@ -75,6 +81,22 @@ for (const l of lines ?? []) {
 
 const priced = all.filter((p) => (p.price_cents ?? 0) > 0)
 const unpriced = all.filter((p) => (p.price_cents ?? 0) === 0)
+
+// QuickBooks sales prices for the unpriced SKUs (exact SKU, case-insensitive).
+const qbPrice = new Map()
+for (let i = 0; i < unpriced.length; i += 200) {
+  const skus = unpriced.slice(i, i + 200).map((p) => p.sku)
+  const { data: qb, error: qbErr } = await db.from('qb_item_directory').select('sku, sales_price').in('sku', skus)
+  if (qbErr) { console.error(`qb_item_directory: ${qbErr.message}`); process.exit(1) }
+  for (const q of qb ?? []) {
+    const key = String(q.sku).toUpperCase()
+    qbPrice.set(key, [...(qbPrice.get(key) ?? []), q.sales_price == null ? null : Number(q.sales_price)])
+  }
+}
+const qbPriceFor = (sku) => {
+  const prices = [...new Set((qbPrice.get(sku.toUpperCase()) ?? []).filter((v) => v != null && v > 0))]
+  return prices.length === 1 ? prices[0] : ''
+}
 const money = (c) => `$${(c / 100).toFixed(2)}`
 const median = (nums) => {
   const s = [...nums].sort((a, b) => a - b)
@@ -117,6 +139,7 @@ const rows = unpriced.map((p) => {
     'Pieces received': m?.qty ?? '',
     'Pieces per case': m?.ppc ?? '',
     'Erply product ID': m?.erplyId ?? '',
+    'QuickBooks price': qbPriceFor(p.sku),
     'Suggested price': suggestion == null ? '' : Number((suggestion / 100).toFixed(2)),
     'Suggestion based on': confidence,
     'Comparables': basis,
@@ -131,9 +154,9 @@ const wb = XLSX.utils.book_new()
 const ws = XLSX.utils.json_to_sheet(rows)
 ws['!cols'] = [
   { wpx: 120 }, { wpx: 330 }, { wpx: 130 }, { wpx: 110 }, { wpx: 90 }, { wpx: 90 },
-  { wpx: 90 }, { wpx: 95 }, { wpx: 115 }, { wpx: 320 }, { wpx: 130 }, { wpx: 150 },
+  { wpx: 90 }, { wpx: 95 }, { wpx: 95 }, { wpx: 115 }, { wpx: 320 }, { wpx: 130 }, { wpx: 150 },
 ]
-ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 11, r: rows.length } }) }
+ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 12, r: rows.length } }) }
 XLSX.utils.book_append_sheet(wb, ws, `Unpriced (${rows.length})`)
 
 const out = path.join(ROOT, 'data', `pricing-worklist-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`)
@@ -143,8 +166,11 @@ const fam = rows.filter((r) => r['Suggestion based on'] === 'family').length
 const cat = rows.filter((r) => r['Suggestion based on'] === 'category (weak)').length
 console.log(`${rows.length} unpriced product(s)`)
 console.log(`  ${fam} with a family comparable, ${cat} with only a category median, ${rows.length - fam - cat} with neither`)
+console.log(`  ${rows.filter((r) => r['QuickBooks price'] !== '').length} with a QuickBooks price`)
 console.log(`\nWritten: ${path.relative(ROOT, out)}`)
 console.log('\nPricing is a manual pass in Erply -- saveProduct cannot set a price on this account.')
 console.log('After pricing, run the Erply sync, then:')
 console.log('  node scripts/zero-price-visibility.mjs --unhide          (dry run)')
 console.log('  node scripts/zero-price-visibility.mjs --unhide --apply')
+console.log('--unhide covers only SKUs created through /admin/receiving. Products created any other')
+console.log('way (e.g. scripts/apply-qb-product-create.ts) need --include-sku=<SKU,SKU,...> as well.')
