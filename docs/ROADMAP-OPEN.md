@@ -28,7 +28,7 @@ or any other provider. Recorded rather than deleted so it stops resurfacing as
 | Item | What's blocking |
 |---|---|
 | **Erply auto-sync** | Waiting on Erply data being clean on their side |
-| **Catalog access gate** | Built, dormant — flip `CATALOG_ACCESS_CODE` env var to activate |
+| **Catalog access gate** | Built and hardened (#93, 2026-10-02: HMAC cookie, `/api/*` gated too), still dormant — set `CATALOG_ACCESS_CODE` to activate |
 
 ---
 

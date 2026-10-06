@@ -1,6 +1,6 @@
 ---
 name: project-new-arrivals-empty
-description: 2026-10-02 - /new-arrivals was empty (created_at is the import date); FIXED same day to date by shipments.applied_at from receiving; the "Newest" catalog sort still uses created_at
+description: 2026-10-02 - /new-arrivals was empty (created_at is the import date); FIXED same day to date by shipments.applied_at from receiving; "Newest" sort fixed too (#92, products.arrived_at)
 type: project
 ---
 
@@ -17,8 +17,11 @@ the last 30 days (`lib/new-arrivals.ts`, `latestArrivalBySku`), dated by
 `shipments.applied_at` and read server-side with the admin client. It showed
 18 visible products at the time. Most of the 131 received SKUs were still
 hidden at $0 awaiting pricing. Arrivals before receiving went live
-(2026-09-23) are unknown. The catalog's "Newest" sort still orders by
-`created_at` and has the same weakness.
+(2026-09-23) are unknown.
+
+**"Newest" sort FIXED 2026-10-02 (#92):** migration 0055 added
+`products.arrived_at`, kept by triggers from applied shipments, and the sort
+uses it instead of `created_at`.
 
 **Why:** a real arrival date exists elsewhere. Receiving applies containers
 (`shipments.applied_at`, `products.dim_source_etd` for measured cartons), but
