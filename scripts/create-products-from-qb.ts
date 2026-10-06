@@ -7,8 +7,8 @@
 // exist in NEITHER Erply nor the catalog, using QuickBooks Desktop as the
 // source of product info (docs/memory/project-local-photos-skus-not-in-erply.md,
 // project-qb-item-pull.md). DRY RUN ONLY. Writes nothing to Erply,
-// WooCommerce, Supabase or Cloudinary -- there is no --apply yet (see the TODO
-// at the bottom). Output: console summary + data/qb-product-create-plan-<YYYYMMDD>.csv.
+// WooCommerce, Supabase or Cloudinary -- creating is
+// scripts/apply-qb-product-create.ts (see the note at the bottom). Output: console summary + data/qb-product-create-plan-<YYYYMMDD>.csv.
 //
 // Input: data/local-photo-skus-qb-match-20261001.tsv (photo_sku, qb_sku, ...).
 // The TSV's flattened description is NOT trusted: every row is re-read from
@@ -80,7 +80,7 @@ const ROOT = path.join(__dirname, '..')
 config({ path: path.join(ROOT, '.env.local'), quiet: true })
 
 if (process.argv.includes('--apply')) {
-  console.error('--apply is not implemented. This script is dry-run only (see the TODO at the bottom).')
+  console.error('This script only plans. Create products with scripts/apply-qb-product-create.ts (see the note at the bottom).')
   process.exit(1)
 }
 const onlyArg = process.argv.find((a) => a.startsWith('--only='))
@@ -700,20 +700,7 @@ if (erplyPayloads[0]) console.log('  erply  ', JSON.stringify(erplyPayloads[0]))
 if (catalogPayloads[0]) console.log('  catalog', JSON.stringify(catalogPayloads[0]))
 console.log(`\nCSV: ${path.relative(ROOT, csvPath)}`)
 
-// TODO(--apply): NOT IMPLEMENTED ON PURPOSE. When it is built, it should:
-//   0. Refuse any row with a skip_reason, a name_status not explicitly
-//      approved, or no erply_group_id (receiving refuses a create without a
-//      group; so should this).
-//   1. Re-run the live Erply + catalog absence check per SKU immediately
-//      before each create (a fast double-submit has produced a duplicate
-//      Erply product before: F288132, 2026-09-23).
-//   2. Erply saveProduct one product per call (payloads above), log each
-//      productID to a CSV under data/ as it goes, then read every one back
-//      with getProducts code= -- and expect price 0.
-//   3. Catalog insert WITHOUT `id` (the sequence default), hidden at $0.
-//      First confirm products_id_seq is ahead of max(prod-NNNNN); if anything
-//      hand-assigned ids since 2026-09-25, re-run 0052 before inserting.
-//      Insert in small chunks and surface every chunk error.
-//   4. Photos via scripts/upload-container-photos.ts on exact-SKU files only;
-//      candidate_photo_files_unconfirmed need a human first.
-//   5. Never write WooCommerce from here -- Erply's integration owns that.
+// No --apply here, by design: this only plans. Creating goes through the fill
+// sheet (build-qb-product-fill-sheet.ts -> import-qb-product-fill-sheet.ts) and
+// then scripts/apply-qb-product-create.ts, which creates the importer's
+// "ready" rows in Erply and the catalog.

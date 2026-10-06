@@ -12,8 +12,8 @@
 //
 // Writes NOTHING to Erply, WooCommerce, Supabase or Cloudinary. Reads the
 // live category list (Supabase) and the Erply product list (getProducts only)
-// to resolve the Erply group a category maps to. See the --apply TODO at the
-// bottom of scripts/create-products-from-qb.ts -- the same steps apply here.
+// to resolve the Erply group a category maps to. Its CSV is the input to
+// scripts/apply-qb-product-create.ts, which creates the "ready" rows.
 //
 // Validation, per row:
 //   - Pieces per pack / Packs per case: blank or a positive whole number.
@@ -49,7 +49,7 @@ const ROOT = path.join(__dirname, '..')
 config({ path: path.join(ROOT, '.env.local'), quiet: true })
 
 if (process.argv.includes('--apply')) {
-  console.error('--apply is not implemented. This importer is dry-run only.')
+  console.error('This importer only validates. Create the ready rows with scripts/apply-qb-product-create.ts.')
   process.exit(1)
 }
 
@@ -294,5 +294,4 @@ const ready = out.filter((r) => r.status === 'ready')
 console.log(`\nready to create (${ready.length}):`)
 for (const r of ready) console.log(`  ${r.planned_sku.padEnd(16)} ${r.final_name}  [${r.catalog_category} / Erply ${r.erply_group_name} #${r.erply_group_id}]${r.photo_files ? '' : '  NO PHOTO'}`)
 console.log(`\nCSV: ${path.relative(ROOT, outPath)}`)
-// TODO(--apply): not implemented. Feed the "ready" rows to the same apply
-// steps listed at the bottom of scripts/create-products-from-qb.ts.
+console.log('Create the ready rows: node scripts/apply-qb-product-create.ts (dry run first).')
