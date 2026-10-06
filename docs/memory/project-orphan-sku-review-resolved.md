@@ -27,8 +27,11 @@ deactivate-candidates still unreviewed, DO NOT enable sync yet").
 **Current state (verified live 2026-08-06, not just from script comments):**
 Erply/Supabase prices match exactly, the 143 orphans are hidden from the
 public storefront but still `is_active = true` in the DB (reversible), and
-`sync-prices-only.mjs` is safe to re-run anytime as a narrow price-only
-sync. Full `app/api/sync/route.ts` (insert/update/deactivate/categories) is
+~~`sync-prices-only.mjs` is safe to re-run anytime as a narrow price-only
+sync.~~ **DELETED 2026-10-02:** `scripts/sync-prices-only.mjs` no longer exists. It still applied ×0.5
+  after lib moved to `RETAIL_MULTIPLIER = 1` (2026-08-21), so `--apply` would have halved ~3,000
+  live prices. For a price-only refresh use the "Pull prices from Erply now" button on
+  `/admin/cleanup?issue=pricing` (it only fills $0 rows) or wait for the 08:00 UTC sync. Full `app/api/sync/route.ts` (insert/update/deactivate/categories) is
 still NOT what's running — this is a hand-run narrow substitute, not the
 real sync being enabled.
 
@@ -39,8 +42,8 @@ sync would have deactivated all of them sight-unseen; this investigation
 
 **How to apply:** if asked "are Erply and the storefront prices in sync" or
 "what happened to the 143/146 mismatched SKUs," this is resolved — don't
-re-run the investigation from scratch, just re-run `sync-prices-only.mjs`
-(dry run) to confirm current state, since it's cheap and doesn't trust
+re-run the investigation from scratch, compare prices read-only
+(the script this used to name is deleted, see above) to confirm current state, since it's cheap and doesn't trust
 memory of a point-in-time snapshot. The full-sync-enablement blocker in
 [[project-erply-pagination-fix]] is only about `stock_qty`/`image_url` now,
 not the SKU-mismatch/deactivation risk.
