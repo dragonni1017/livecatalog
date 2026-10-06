@@ -96,6 +96,20 @@ cloned in QB: it was created with --no-case (no carton stored, so it is on the
 measurement worklist), and its QB desc still needs fixing. P257281 own figure is
 legacy-name, not tape-measured.
 
+**PACK RULES APPROVED BY DRAGON 2026-10-06** (written into the fill sheet, 51 rows; backup
+data/qb-product-fill-in-20261001.backup-20261006.xlsx; each row's Notes say RULE ...):
+1/pk Nbx/cs sold by piece for T6422xx tumblers (not T642208-tumbler, not T642240 Mini
+Shopping Cart, which shares the SKU range), F288023/F288024 cylinder box sets, F288101/F288103
+foldable 2-pc box sets. Neighbour rules: F287947 = twin F287946 (5/pk 36bx), K229492-K229560
+keychains 12/pk (case/12; not K229497 until QB 40/cs is fixed, not K229491), G333172-75 flower
+bags 12/pk. Rejected as 1/pk by catalog evidence: squish, 3D printed, umbrellas, tissue/paper,
+crowns, pot bases. After this the importer reports 55 ready (4 already created + 51).
+F288023 x4 are "ready" but their QB name says 5 Piece Set while the label lists 6 sizes:
+confirm before creating.
+CREATED 2026-10-06: the 47 rule rows (all except F288023 x4), Erply #3175 onward, all hidden
+at $0 with photos; log data/qb-product-create-applied-20261006.csv. 51 of the 122 planned SKUs
+now exist (4 + 47); all await Erply prices, then unhide with --include-sku.
+
 **Still outstanding:** someone has to fill the sheet (pack specs, about 107
 categories, the T642208 choice) and price the products by hand in Erply.
 See [[project-local-photos-skus-not-in-erply]], [[project-qb-item-pull]] and
