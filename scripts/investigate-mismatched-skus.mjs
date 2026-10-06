@@ -2,8 +2,8 @@
 //
 // Read-only investigation of the ~146 products active on the livecatalog
 // (Supabase) storefront whose SKU doesn't appear in Erply's ACTIVE product
-// feed (surfaced by scripts/preview-erply-sync.mjs and
-// scripts/sync-prices-only.mjs, both of which deliberately leave these
+// feed (surfaced by scripts/preview-erply-sync.mjs and the since-deleted
+// scripts/sync-prices-only.mjs, both of which deliberately left these
 // untouched rather than deactivating them).
 //
 // For each mismatched SKU, checks whether it:

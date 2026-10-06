@@ -3,7 +3,8 @@
 // Rounds Erply's own retail-anchor product prices to the nearest quarter,
 // skipping .75 (a price lands on x.00/x.25/x.50, or rounds up to the next
 // whole dollar -- never x.75). Same rounding rule as roundToQuarterSkip75()
-// in lib/erply.ts / scripts/sync-prices-only.mjs, applied here to the
+// in lib/erply.ts (scripts/sync-prices-only.mjs, deleted 2026-10-06, had a
+// stale copy), applied here to the
 // SOURCE price in Erply itself rather than the derived storefront price --
 // decided 2026-08-06, so POS/Retail-tier prices also land on clean amounts,
 // not just the livecatalog display.
