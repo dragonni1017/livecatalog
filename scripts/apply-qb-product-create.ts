@@ -4,6 +4,7 @@
 //           node scripts/apply-qb-product-create.ts --limit=1 --apply       (first ready row only)
 //           node scripts/apply-qb-product-create.ts --apply
 //           node scripts/apply-qb-product-create.ts --file=data/qb-product-create-plan-20261001-from-fill.csv
+//           node scripts/apply-qb-product-create.ts --root="C:/..."  (if the planner ran with --root)
 //
 // The --apply step of the QuickBooks product-create flow. The chain is:
 //   1. scripts/create-products-from-qb.ts        plan CSV           (dry run)
@@ -109,6 +110,8 @@ if (SHEET && fs.statSync(SHEET).mtimeMs > fs.statSync(FILE).mtimeMs) {
 }
 // photo_dir lives only in the planner's CSV; used for the photo commands at the end.
 const PLAN = newest(/^qb-product-create-plan-\d{8}\.csv$/)
+// Must match the --root the planner ran with (its default is Downloads).
+const PHOTO_ROOT = arg('root') ?? 'C:/Users/Dragon/Downloads'
 
 type Row = Record<string, string>
 const readCsv = (f: string): Row[] => {
@@ -333,8 +336,12 @@ if (done.length) {
     const files = r.photo_files.split(/\s+/).filter(Boolean)
     if (!files.length) { none.push(d.sku); continue }
     if (!files.some((f) => stem(f) === d.sku.toUpperCase() || stem(f).replace(/-\d+$/, '') === d.sku.toUpperCase())) manual.push(`${d.sku} <- ${files.join(' ')}`)
-    const dir = photoDirBySku.get(d.sku.toUpperCase())
-    if (dir) dirs.add(dir)
+    // The planner writes photo_dir relative to its search root (Downloads by
+    // default), " | "-joined when a SKU's photos span folders, while
+    // upload-container-photos.ts takes --dir as given -- so make it absolute.
+    for (const dir of (photoDirBySku.get(d.sku.toUpperCase()) ?? '').split(' | ').filter(Boolean)) {
+      dirs.add(path.resolve(PHOTO_ROOT, dir).replace(/\\/g, '/'))
+    }
   }
   console.log('\nNEXT:')
   console.log('  1. Price these in Erply by hand, then /admin/cleanup?issue=pricing -> "Pull prices from Erply now".')
