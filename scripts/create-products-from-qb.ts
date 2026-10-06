@@ -69,7 +69,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
-import { auditProductName, normalizeDescriptor, formatPackSpec } from '../lib/product-naming.ts'
+import { auditProductName, formatPackSpec } from '../lib/product-naming.ts'
+import { descriptorFromQbDesc } from '../lib/qb-descriptor.ts'
 import { implausibleCaseMeasurement } from '../lib/measurements.ts'
 import { resolveErplyCategoryAlias } from '../lib/erply-category-aliases.ts'
 import { matchFilesToProducts } from '../lib/photo-matching.ts'
@@ -267,28 +268,12 @@ function buildSpec(p: Pack): { spec: string | null; note: string } {
   return { spec: `${p.perPack}/pk ${p.perCase}bx/cs cs.${p.perCase}${p.perCaseUnit}`, note: `stated ${p.perCaseUnit} per case` }
 }
 
-const MINOR = new Set(['a', 'an', 'and', 'of', 'with', 'w/', 'w', 'the', 'in', 'for', 'or', 'to', 'on', 'at', '&'])
-/** Capitalises all-lowercase words only; anything already carrying a capital (LOVE, MOM, POE, 3D) is kept. */
-function titleCase(s: string): string {
-  const cap = (w: string) => w.replace(/^([^A-Za-z0-9]*)([a-z])/, (_, p, c) => p + c.toUpperCase()) // "(orange)" -> "(Orange)"
-  return s.split(' ').map((word, i) => {
-    if (!word || word !== word.toLowerCase()) {
-      // "Beige/pink" -> "Beige/Pink"; leave "w/" alone
-      return word.includes('/') && word !== 'w/' ? word.split('/').map((p) => (p === p.toLowerCase() && !/^\d/.test(p) ? cap(p) : p)).join('/') : word
-    }
-    if (i > 0 && MINOR.has(word)) return word
-    if (/^\d/.test(word)) return word // 40oz, 650ml, 2-pc, 8ribbed stay as written
-    return word.includes('/') && word !== 'w/' ? word.split('/').map(cap).join('/') : cap(word)
-  }).join(' ')
-}
-
 // Spotted in this QuickBooks data. Flagged for a human, never auto-corrected.
 const SUSPECTED_TYPOS: Record<string, string> = {
   Grauation: 'Graduation', Fodable: 'Foldable', Tumber: 'Tumbler', Suitecase: 'Suitcase', Majong: 'Mahjong',
   Unpatented: 'Unpatterned?',
 }
 
-const SIZE_SEG_RE = /^\d+(?:\.\d+)?\s*(?:cm|mm|inch(?:es)?|in|"|ft|feet)$/i
 type NameStatus = 'ok' | 'needs_pack_spec' | 'needs_review'
 
 function planName(desc: string, sku: string, qbFullName = '') {
@@ -299,23 +284,10 @@ function planName(desc: string, sku: string, qbFullName = '') {
   const { m, rest: noCarton } = parseMeasurements(flat)
   const { pack, stated, rest } = parsePack(noCarton)
 
-  // "4 Style" means four styles assorted. normalizeDescriptor strips the
-  // supplier-invoice filler word "Style", which would turn "4 Style Plush
-  // Cup" into "4 Plush Cup" -- so protect the counted form first.
-  const protectedText = rest.replace(/(\d+)\s*-?\s*style(s)?\b/gi, '$1\u00a7')
-  const segs = protectedText.split(/\s+-\s+|\s*-\s*$|^\s*-\s*/)
-    .map((s) => s.replace(/^[\s,.-]+|[\s,.-]+$/g, '').trim()).filter(Boolean)
-  const sizes = segs.filter((s) => SIZE_SEG_RE.test(s))
-  const words = segs.filter((s) => !SIZE_SEG_RE.test(s))
-  let descriptor = normalizeDescriptor(words.join(' ')).replace(/(\d+)\u00a7/g, '$1 Style')
-  descriptor = titleCase(descriptor.replace(/\s+/g, ' ').trim())
-
-  // A size encoded in a variant SKU ("P273833-30cm") that the desc omits.
-  const skuSize = /-(\d+(?:cm|inch|in))$/i.exec(sku)?.[1]
-  if (skuSize && !sizes.length && !new RegExp(`\\b${skuSize}\\b`, 'i').test(descriptor)) {
-    sizes.push(skuSize.toLowerCase()); notes.push(`size ${skuSize} taken from the SKU suffix, not the desc`)
-  }
-  const head = [descriptor, ...sizes].filter(Boolean).join(' ')
+  // Descriptor + size, shared with receiving's "fill names from QuickBooks"
+  // (lib/qb-descriptor.ts) so the two can't strip differently.
+  const { head, descriptor, sizeFromSku } = descriptorFromQbDesc(desc, sku)
+  if (sizeFromSku) notes.push(`size ${sizeFromSku} taken from the SKU suffix, not the desc`)
 
   let status: NameStatus = 'ok'
   if (!descriptor) { status = 'needs_review'; notes.push('no descriptor left after stripping pack/carton text') }
