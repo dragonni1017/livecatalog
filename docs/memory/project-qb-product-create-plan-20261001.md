@@ -1,6 +1,6 @@
 ---
 name: project-qb-product-create-plan-20261001
-description: 2026-10-01 dry-run plan for creating the 113 local-photo SKUs from QuickBooks; plush 1/pk rule approved by Dragon; fill-in xlsx round trip built; 118 rows still need pack spec, category or a decision; no --apply
+description: 2026-10-01 dry-run plan for creating the 113 local-photo SKUs from QuickBooks; plush 1/pk rule approved by Dragon; fill-in xlsx round trip built; 118 rows still need pack spec, category or a decision; --apply built 2026-10-06 (scripts/apply-qb-product-create.ts), not yet run
 type: project
 ---
 
@@ -72,8 +72,19 @@ sheet, rebuilds names with buildProductName + auditProductName, and writes
 - Pack figures that conflict with the QB desc are an ERROR, not an override.
   QB is the source, so fix QB first (this matters for K229497's 40-vs-240).
 
+**--apply built 2026-10-06:** `scripts/apply-qb-product-create.ts` reads the
+importer's `-from-fill.csv` (`ready` rows only) and refuses to run if the fill
+sheet was saved after that CSV. It creates each SKU in Erply through
+lib/erply.ts createErplyProduct, reads it back, then inserts one catalog row per
+call (no `id`, hidden, $0), and STOPS on a products_pkey collision (re-run 0052,
+then re-run the script, which resumes an Erply-created SKU that is missing from
+the catalog). Its log is `data/qb-product-create-applied-<date>.csv`. Photos are
+NOT uploaded: it prints `upload-container-photos.ts --dir` commands instead. These
+SKUs are outside zero-price-visibility's receiving cohort, so unhide them with
+`--include-sku`. A dry run on the blank sheet shows 4 ready. P257282/P257286 are
+among them and still carry P257281's copied carton figures (see above).
+
 **Still outstanding:** someone has to fill the sheet (pack specs, about 107
-categories, the T642208 choice), price the products by hand in Erply, and build
-`--apply`.
+categories, the T642208 choice) and price the products by hand in Erply.
 See [[project-local-photos-skus-not-in-erply]], [[project-qb-item-pull]] and
 [[project-receiving-to-catalog-20260923]].
