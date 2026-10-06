@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
 import { logAudit } from '@/lib/audit'
 import { resolveSkus } from '@/lib/qb-item-directory'
+import { descriptorFromQbDesc } from '@/lib/qb-descriptor'
 
 export const dynamic = 'force-dynamic'
 
@@ -114,6 +115,14 @@ export async function PUT() {
   const filledSkus: string[] = []
   for (const r of resolutions) {
     if (!r.match?.sales_desc) continue
+    // proposed_name is the DESCRIPTOR only -- the receiving screen appends the
+    // pack spec from the pieces-per-pack typed there. The raw description
+    // carries the carton and case pack ("- 60pk/cs - 25" x 13" x 6" - 40lbs"),
+    // and copying it verbatim put that text into 88 live product names on
+    // 2026-09-23. lib/qb-descriptor.ts strips it, the same way the
+    // QuickBooks product-create planner does.
+    const name = descriptorFromQbDesc(r.match.sales_desc, r.sku).head
+    if (!name) continue
     const ids = blank.get(r.sku.toUpperCase())?.ids ?? []
     if (ids.length === 0) continue
     // Target the exact rows read above, and re-assert the blank-name
@@ -121,7 +130,7 @@ export async function PUT() {
     // the write is never overwritten.
     const { data: updated, error } = await db
       .from('shipment_lines')
-      .update({ proposed_name: r.match.sales_desc })
+      .update({ proposed_name: name })
       .in('id', ids)
       .is('proposed_name', null)
       .is('erply_created_product_id', null)
