@@ -1,6 +1,6 @@
 ---
 name: project-qb-product-create-plan-20261001
-description: 2026-10-01 dry-run plan for creating the 113 local-photo SKUs from QuickBooks; plush 1/pk rule approved by Dragon; fill-in xlsx round trip built; 118 rows still need pack spec, category or a decision; --apply built 2026-10-06 (scripts/apply-qb-product-create.ts), not yet run
+description: 2026-10-01 dry-run plan for creating the 113 local-photo SKUs from QuickBooks; plush 1/pk rule approved by Dragon; fill-in xlsx round trip built; 118 rows still need pack spec, category or a decision; --apply built + first live SKU 2026-10-06 (scripts/apply-qb-product-create.ts)
 type: project
 ---
 
@@ -83,6 +83,10 @@ NOT uploaded: it prints `upload-container-photos.ts --dir` commands instead. The
 SKUs are outside zero-price-visibility's receiving cohort, so unhide them with
 `--include-sku`. A dry run on the blank sheet shows 4 ready. P257282/P257286 are
 among them and still carry P257281's copied carton figures (see above).
+FIRST LIVE RUN 2026-10-06: P273796-25cm (Corgi plush) -> Erply #3171, catalog
+prod-87243, hidden at $0, photo uploaded; still needs its price in Erply, then
+an unhide. Its label photo shows UPC 737879103203, so label photos are a possible
+barcode source (code2 is not sent today).
 
 **Still outstanding:** someone has to fill the sheet (pack specs, about 107
 categories, the T642208 choice) and price the products by hand in Erply.
