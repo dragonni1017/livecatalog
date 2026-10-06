@@ -5,6 +5,9 @@
 //           node scripts/apply-qb-product-create.ts --apply
 //           node scripts/apply-qb-product-create.ts --file=data/qb-product-create-plan-20261001-from-fill.csv
 //           node scripts/apply-qb-product-create.ts --root="C:/..."  (if the planner ran with --root)
+//           node scripts/apply-qb-product-create.ts --only=P257286 --no-case=P257286
+//             (create WITHOUT the carton figures QuickBooks gave, when they are
+//              known to be wrong -- it then lands on the measurement worklist)
 //
 // The --apply step of the QuickBooks product-create flow. The chain is:
 //   1. scripts/create-products-from-qb.ts        plan CSV           (dry run)
@@ -132,6 +135,20 @@ if (ONLY) {
 }
 if (LIMIT != null) rows = rows.slice(0, LIMIT)
 
+// --no-case: drop QuickBooks carton figures that are known to be wrong (e.g.
+// P257286's cloned from P257281, 2026-10-06), rather than store them as
+// 'manual' -- which would also keep them off the measurement worklist.
+const NO_CASE = arg('no-case') ? new Set(arg('no-case')!.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)) : new Set<string>()
+const noCaseUnknown = [...NO_CASE].filter((s) => !rows.some((r) => r.planned_sku.toUpperCase() === s))
+if (noCaseUnknown.length) { console.error(`--no-case SKU(s) not among the rows being created: ${noCaseUnknown.join(', ')}`); process.exit(1) }
+const CASE_COLS = ['case_length_in', 'case_width_in', 'case_height_in', 'case_weight_lb']
+const droppedCase = new Map<string, string>()
+for (const r of rows) {
+  if (!NO_CASE.has(r.planned_sku.toUpperCase())) continue
+  droppedCase.set(r.planned_sku, `${r.case_length_in || '-'}x${r.case_width_in || '-'}x${r.case_height_in || '-'} ${r.case_weight_lb || '-'}lb`)
+  for (const c of CASE_COLS) r[c] = ''
+}
+
 const statusCounts = new Map<string, number>()
 for (const r of all) statusCounts.set(r.status, (statusCounts.get(r.status) ?? 0) + 1)
 console.log(`input: ${path.relative(ROOT, FILE)}  (${[...statusCounts].map(([k, v]) => `${k} ${v}`).join(', ')})`)
@@ -222,7 +239,8 @@ for (const r of rows) {
 
 for (const p of planned) {
   const r = p.r
-  const dims = r.case_length_in || r.case_weight_lb ? `  {${r.case_length_in || '-'}x${r.case_width_in || '-'}x${r.case_height_in || '-'} ${r.case_weight_lb || '-'}lb}` : ''
+  const dims = droppedCase.has(r.planned_sku) ? `  {carton DROPPED: ${droppedCase.get(r.planned_sku)}}`
+    : r.case_length_in || r.case_weight_lb ? `  {${r.case_length_in || '-'}x${r.case_width_in || '-'}x${r.case_height_in || '-'} ${r.case_weight_lb || '-'}lb}` : ''
   console.log(`  [${p.action.padEnd(6)}] ${r.planned_sku.padEnd(16)} ${r.final_name}  [${r.catalog_category} / Erply #${r.erply_group_id}]${dims}${r.photo_files ? '' : '  NO PHOTO'}${p.why ? `\n${' '.repeat(28)}${p.why}` : ''}`)
 }
 const todo = planned.filter((p) => p.action !== 'skip')
@@ -303,7 +321,8 @@ for (const p of todo) {
     }
     continue
   }
-  log({ sku, step: 'catalog', result: 'inserted', erply_product_id: erplyId, catalog_id: data.id, name: r.final_name })
+  log({ sku, step: 'catalog', result: 'inserted', erply_product_id: erplyId, catalog_id: data.id, name: r.final_name,
+    detail: droppedCase.has(sku) ? `--no-case: QB carton ${droppedCase.get(sku)} not stored` : '' })
   done.push({ sku, erplyId: erplyId!, catalogId: data.id, warning })
   console.log(`  ok ${sku.padEnd(16)} Erply #${erplyId}  catalog ${data.id}${warning ? `  WARNING: ${warning}` : ''}`)
 }
