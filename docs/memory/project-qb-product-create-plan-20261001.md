@@ -87,6 +87,14 @@ FIRST LIVE RUN 2026-10-06: P273796-25cm (Corgi plush) -> Erply #3171, catalog
 prod-87243, hidden at $0, photo uploaded; still needs its price in Erply, then
 an unhide. Its label photo shows UPC 737879103203, so label photos are a possible
 barcode source (code2 is not sent today).
+All 4 ready rows DONE 2026-10-06, each with its photo uploaded, all hidden at $0
+awaiting Erply prices: P273796-25cm #3171, P273817-25cm #3172, P257282 #3173,
+P257286 #3174. The 25x25x25 42lbs is in QUICKBOOKS ITSELF for P257281/82/86, not
+a planner copy. P257282 (giant fur pen, same 12x24=288 packing as P257281) kept
+it. P257286 is a 5.9in pen packed 24x16=384, so the figure is almost certainly
+cloned in QB: it was created with --no-case (no carton stored, so it is on the
+measurement worklist), and its QB desc still needs fixing. P257281 own figure is
+legacy-name, not tape-measured.
 
 **Still outstanding:** someone has to fill the sheet (pack specs, about 107
 categories, the T642208 choice) and price the products by hand in Erply.
