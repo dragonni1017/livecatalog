@@ -23,12 +23,18 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   Supabase rename sticks.
 
 **Not fixed, needs a human:**
-- About 70 specs are the receiving placeholder `N/pk 1bx/cs cs.N`, with the
-  whole QB case treated as one pack. The new floral papers (F2880xx/F2881xx,
-  `60/pk 1bx/cs cs.60`) conflict with the confirmed paper rule, `20/pk 60bx/cs`
-  pack-sold. See the PACK-SOLD note in lib/product-naming.ts.
-- 10 names still have no pack spec: CM072310, F288081, F288082, F288090,
-  K229581, P273839-60cm, P273863-110cm, P273863-90cm, T642212 and T642288.
+- About 50 specs are still the receiving placeholder `N/pk 1bx/cs cs.N`,
+  with the whole QB case treated as one pack.
+  FLORAL PAPERS FIXED 2026-10-13: 22 papers (18 of them `60/pk 1bx/cs cs.60`,
+  plus CM072310, F288081, F288082 and F288090, which had no spec) are now
+  `20/pk 60bx/cs cs.60` pack-sold in Erply, Woo and Supabase.
+  `scripts/plan-floral-paper-pack-fixes.ts` produced the change; the log is
+  `data/product-name-fixes-applied-floral-paper-20261013.csv`. QB says 60pk/cs,
+  and the confirmed rule is 20 sheets/pack. All 22 were hidden at $0 and a
+  case is still 60 units, so neither prices nor stock needed changing.
+  F288118 Newspaper Bouquet Wrap was left out: QB says `60/cs`, so it's open.
+- 6 names still have no pack spec: K229581, P273839-60cm, P273863-110cm,
+  P273863-90cm, T642212 and T642288.
 - QB typos were left as written: Cirlce (F288022), Ballon (D701141), and
   "Christmas Three in Dome" (F286555, probably Tree). FD400033/FD400038 lack
   the word "Ribbon".
