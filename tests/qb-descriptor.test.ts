@@ -21,6 +21,16 @@ describe('descriptorFromQbDesc', () => {
     expect(head('White with Pink Flower Paper - 20/pk - 60pk/cs')).toBe('White with Pink Flower Paper')
   })
 
+  it('strips pairs, each and case spellings of the case count', () => {
+    expect(head('Fluffy Pig Slippers - 12 pairs/cs 27" x 13" x 22" - 15 lbs')).toBe('Fluffy Pig Slippers')
+    expect(head('3D Printed Dragon No Wings 12" - 360ea/c 23" x 16" x 11" - 19 lbs')).toBe('3D Printed Dragon No Wings 12"')
+    expect(head('Fox Tail Keychain Dark Blue - 120/case18x16x18 20lbs')).toBe('Fox Tail Keychain Dark Blue')
+    expect(head('Preserved Rose Bear Fuchsia - 30ea 27X16X18 29LBS')).toBe('Preserved Rose Bear Fuchsia')
+    expect(head('Squishy Unicorn - 144ea12bx/cs 17x14x11 37lbs')).toBe('Squishy Unicorn')
+    // A count that is part of the product, not the case pack, stays.
+    expect(head('GWL Goodie Bag 2024 (100 EA) 19X15X15-16LB')).toBe('GWL Goodie Bag 2024 (100 EA)')
+  })
+
   it('reports whether carton text was present', () => {
     expect(descriptorFromQbDesc('Silver Crown - 240/cs - 20" x 16" x 13" - 34lbs').hadCarton).toBe(true)
     expect(descriptorFromQbDesc('Boba Keychain - 40pc/cs').hadCarton).toBe(false)

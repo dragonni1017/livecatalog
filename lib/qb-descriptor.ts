@@ -29,13 +29,17 @@ export const CARTON_WEIGHT_RE = new RegExp(`${NUM}\\s*(lbs?|pounds?|kgs?)\\b`, '
  *   containers per case  "60pk/cs", "150 pk's/cs", "24/bx/cs", "16bx/cs"
  *   sets per case        "12sets/cs"
  *   pieces per pack      "12/pk", "50pc/pk", "12/bx", "24pcs/bx"
- *   pieces per case      "48 pcs/cs", "24/cs", "240pc/cs"
+ *   pieces per case      "48 pcs/cs", "24/cs", "240pc/cs", "12 pairs/cs",
+ *                        "360ea/c", "120/case"
+ *   bare each-count      "30ea", "144ea" -- lowercase and glued to the
+ *                        number only, so a product's own "(100 EA)" survives
  */
 export const PACK_TOKEN_RES = [
   /(\d+)\s*\/?\s*(pk's|pks|pk|bx|box(?:es)?)\s*\/\s*cs\b/i,
   /(\d+)\s*sets?\s*\/\s*cs\b/i,
   /(\d+)\s*(?:pcs?|pc)?\s*\/\s*(?:pk|bx)\b/i,
-  /(\d+)\s*(?:pcs?|pc)?\s*\/\s*cs\b/i,
+  /(\d+)\s*(?:pcs?|pc|pairs?|ea)?\s*\/\s*(?:cs|case|c)\b/i,
+  /(\d+)ea\b/,
 ]
 
 const MINOR = new Set(['a', 'an', 'and', 'of', 'with', 'w/', 'w', 'the', 'in', 'for', 'or', 'to', 'on', 'at', '&'])

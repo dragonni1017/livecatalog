@@ -2,6 +2,7 @@
 // Run with: node scripts/fix-product-names.ts                     (dry run)
 //           node scripts/fix-product-names.ts --apply
 //           node scripts/fix-product-names.ts --only=T641077
+//           node scripts/fix-product-names.ts --plan=data/product-name-fixes-plan-carton.csv [--apply]
 //
 // Applies agreed product-name corrections to Erply, WooCommerce and Supabase.
 // DRY RUN BY DEFAULT; --apply is required to write anything.
@@ -25,6 +26,11 @@
 // that system is SKIPPED and reported, never overwritten. So the script is
 // safe to re-run, and can't clobber an edit made by hand in the meantime.
 //
+// --plan=<csv> reads the changes from a sku,expect,to,why CSV instead of
+// CHANGES, for batches too long to list here. The CSV must come from a
+// committed planner script that records the reasoning, e.g.
+// scripts/plan-carton-name-fixes.ts.
+//
 // Each correction must be justified in CHANGES below. Nothing is inferred:
 // the naming audit deliberately proposes no fix for an inconsistent spec
 // (scripts/audit-product-names.ts, docs/PRODUCT-NAMING-STANDARD.md), so every
@@ -41,6 +47,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import * as XLSX from 'xlsx'
 import { applyNameChange, WOO_NOT_CONFIGURED } from '../lib/product-name-fix.ts'
 import { isWooConfigured } from '../lib/woo.ts'
 
@@ -211,7 +218,13 @@ const CHANGES: Change[] = [
 
 const APPLY = process.argv.includes('--apply')
 const ONLY = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length)
-const changes = ONLY ? CHANGES.filter((c) => c.sku.toUpperCase() === ONLY.toUpperCase()) : CHANGES
+const PLAN = process.argv.find((a) => a.startsWith('--plan='))?.slice('--plan='.length)
+function readPlan(file: string): Change[] {
+  const wb = XLSX.read(fs.readFileSync(path.resolve(ROOT, file)), { type: 'buffer', raw: true })
+  return XLSX.utils.sheet_to_json<Change>(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' })
+}
+const source = PLAN ? readPlan(PLAN) : CHANGES
+const changes = ONLY ? source.filter((c) => c.sku.toUpperCase() === ONLY.toUpperCase()) : source
 
 if (changes.length === 0) {
   console.error(ONLY ? `No change defined for ${ONLY}.` : 'No changes defined.')
