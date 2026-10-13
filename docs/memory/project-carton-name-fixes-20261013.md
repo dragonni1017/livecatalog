@@ -32,6 +32,11 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
 - QB typos were left as written: Cirlce (F288022), Ballon (D701141), and
   "Christmas Three in Dome" (F286555, probably Tree). FD400033/FD400038 lack
   the word "Ribbon".
-- **F287279-B/-Pp/-R store the product size `7x23x17` in the case_*_in
-  columns.** That figure is cm and isn't the carton, and bin-capacity maths
-  reads those columns.
+- F287279-B/-Pp/-R carton figures were the box's own size, 7x23x17 cm.
+  FIXED 2026-10-13. Erply -B's L/W/H were set to 0. Woo -Pp/-R went from
+  17.78x58.42x43.18 (the size x2.54) to 7x23x17. Woo's unit setting is cm, so
+  that matches -B, which was left alone. Supabase case_* and
+  measurements_source were nulled, which puts all three on the measurement
+  worklist. `backfill-product-measurements.mjs` now skips them
+  (NOT_A_CARTON), because it reads Woo's cm as carton inches. **The real
+  18-box carton still needs a tape measure.**

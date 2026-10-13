@@ -171,6 +171,18 @@ async function fetchCatalog() {
 
 const FIELDS = ['case_length_in', 'case_width_in', 'case_height_in', 'case_weight_lb']
 
+// SKUs whose upstream figures are known not to be the carton, so they must
+// stay blank here until someone tape-measures the carton. Woo legitimately
+// keeps the PRODUCT size (cm) for these, which this script would otherwise
+// read as carton inches.
+const NOT_A_CARTON = new Map([
+  // Heart boxes: 7x23x17 is the box itself in cm (it's in the name), not the
+  // 18-box carton. Cleared 2026-10-13, docs/memory/project-carton-name-fixes-20261013.md.
+  ['F287279-B', 'box size 7x23x17cm, not the carton'],
+  ['F287279-Pp', 'box size 7x23x17cm, not the carton'],
+  ['F287279-R', 'box size 7x23x17cm, not the carton'],
+])
+
 // Everything runs inside main() so an early exit is a `return`. Calling
 // process.exit() here instead tripped a libuv assertion on Windows
 // ("!(handle->flags & UV_HANDLE_CLOSING)") by tearing down while the
@@ -188,12 +200,13 @@ console.log(`${catalog.length} active products; Erply has ${erply.size} SKUs, Wo
 
 const updates = []
 const stats = {
-  fromErply: 0, fromWoo: 0, skippedManual: 0, noSource: 0, alreadyCurrent: 0,
+  fromErply: 0, fromWoo: 0, skippedManual: 0, notACarton: 0, noSource: 0, alreadyCurrent: 0,
   protectedExisting: 0, toppedUpProtected: 0,
 }
 
 for (const row of catalog) {
   if (row.measurements_source === 'manual') { stats.skippedManual++; continue }
+  if (NOT_A_CARTON.has(row.sku)) { stats.notACarton++; continue }
 
   const e = erply.get(row.sku)
   const w = woo.get(row.sku)
@@ -286,6 +299,7 @@ console.table([
   { outcome: '  ...of those, topping up someone else\'s row', count: stats.toppedUpProtected },
   { outcome: 'already up to date', count: stats.alreadyCurrent },
   { outcome: 'skipped (hand-measured)', count: stats.skippedManual },
+  { outcome: 'skipped (upstream figure is not the carton)', count: stats.notACarton },
   { outcome: 'kept existing un-owned values', count: stats.protectedExisting },
   { outcome: 'NO SOURCE - needs measuring', count: stats.noSource },
 ])
