@@ -147,7 +147,7 @@ async function main() {
         Barcode: p.barcode ?? '',
         Name: p.name,
         Category: categoriesById.get(p.category_id) ?? '',
-        'Price ($)': (p.price_cents / 100).toFixed(2),
+        'Price ($)': p.price_cents / 100,
         'Stock Qty (Erply live)': erply ? erply.stockQty : '',
         'Unit Type': p.unit_type ?? '',
         Status: p.is_active ? 'active' : 'inactive',
@@ -170,6 +170,14 @@ async function main() {
     { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
     { wch: 60 }, { wch: 10 },
   ]
+  // Price as a real number with currency format (not text), so Excel can
+  // sort/sum it; filter dropdowns on the header row.
+  const range = XLSX.utils.decode_range(sheet['!ref'])
+  for (let r = 1; r <= range.e.r; r++) {
+    const cell = sheet[XLSX.utils.encode_cell({ r, c: 4 })]
+    if (cell && cell.t === 'n') cell.z = '"$"#,##0.00'
+  }
+  sheet['!autofilter'] = { ref: sheet['!ref'] }
   XLSX.utils.book_append_sheet(wb, sheet, 'All Products')
 
   const outPath = path.join(ROOT, 'data', 'all-products-export.xlsx')
