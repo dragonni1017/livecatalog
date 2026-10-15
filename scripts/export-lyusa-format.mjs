@@ -20,6 +20,10 @@
 // it, then CATEGORY_CODES below by primary category. A SKU in the template also fills
 // case dims/weight/UPC the database is missing.
 //
+// Products whose name has no pack spec take pieces per carton (Unit,
+// Unit/Case, "N/cs ... cs.N" description) and a missing UPC from
+// data/lyusa-sku-supplier-facts.csv (supplier shipping documents).
+//
 // Also writes <out>-needs-code.csv listing products left without a Class#.
 // Writes nothing to Supabase.
 
@@ -113,12 +117,14 @@ const num = (v) => String(Number(Number(v).toFixed(2)))
 const unitCode = (n) => (n < 100 ? `CS${n}` : `C${n}`)
 const quote = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
-function buildRow(p, tpl, codes, today) {
+function buildRow(p, tpl, codes, today, facts) {
   const m = p.name.match(PACK_RE)
   const base = m ? p.name.slice(0, m.index).trim() : p.name.trim()
   const pk = m ? Number(m[1]) : null
   const bx = m ? Number(m[2]) : null
-  const pieces = p.case_pieces ?? (m ? pk * bx : null)
+  // No pack spec in the name: fall back to the supplier's pieces per carton.
+  const factPieces = !m && facts?.pieces ? facts.pieces : null
+  const pieces = p.case_pieces ?? (m ? pk * bx : factPieces)
 
   let dims = p.case_length_in ? [p.case_length_in, p.case_width_in, p.case_height_in] : null
   let wt = p.case_weight_lb
@@ -135,7 +141,9 @@ function buildRow(p, tpl, codes, today) {
   // style, sold by the case. Otherwise one figure per case, sold by the piece.
   const multiPack = m && (pk > 1 && bx > 1 || p.sold_by === 'pack')
   let description
-  if (!m) {
+  if (!m && factPieces) {
+    description = [base, `${factPieces}/cs`, dimStr, wtStr, `cs.${factPieces}`].filter(Boolean).join(' - ')
+  } else if (!m) {
     description = [base, dimStr, wtStr].filter(Boolean).join(' - ')
   } else if (multiPack) {
     description = [base, `${pk}/pk`, `${bx}pk/cs`, dimStr && `case dim. ${dimStr}`, wtStr].filter(Boolean).join(' - ')
@@ -157,7 +165,7 @@ function buildRow(p, tpl, codes, today) {
     'Image Name': `Z:\\Pic\\${p.sku}.jpg`,
     'Unit/Case': useTpl ? tpl['Unit/Case'] : pieces ?? '',
     'Default Unit': useTpl ? tpl['Default Unit'] : multiPack ? 'CS' : 'PC',
-    'UPC Code': p.barcode || tpl?.['UPC Code'] || '',
+    'UPC Code': p.barcode || tpl?.['UPC Code'] || facts?.upc || '',
     'Case Wt': wt ? num(wt) : '0',
   }
 }
@@ -175,6 +183,17 @@ async function main() {
     const wb = XLSX.readFile(skuCodesPath, { raw: true })
     for (const r of XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' })) {
       skuCodes.set(r.SKU.trim().toUpperCase(), [r['Dept#'], r['Class#']])
+    }
+  }
+
+  // Per-SKU pieces per carton and UPC from supplier shipping documents, for
+  // products whose name has no pack spec / that have no barcode.
+  const factsPath = path.join(ROOT, 'data', 'lyusa-sku-supplier-facts.csv')
+  const skuFacts = new Map()
+  if (fs.existsSync(factsPath)) {
+    const wb = XLSX.readFile(factsPath, { raw: true })
+    for (const r of XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' })) {
+      skuFacts.set(r.SKU.trim().toUpperCase(), { pieces: Number(r['Pieces per case']) || null, upc: r.UPC.trim() })
     }
   }
 
@@ -199,7 +218,7 @@ async function main() {
     if (tpl) stats.fromTemplate++
     if (!codes) needsCode.push([p.sku, p.name, category])
 
-    const row = buildRow(p, tpl, codes, today)
+    const row = buildRow(p, tpl, codes, today, skuFacts.get(p.sku.trim().toUpperCase()))
     if (!row.Unit) stats.noPack++
     if (row['Case Wt'] === '0') stats.noWeight++
     lines.push(header.map((h) => quote(h in row ? row[h] : filler[h])).join(','))
