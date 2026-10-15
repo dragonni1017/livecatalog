@@ -46,8 +46,17 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   alone and needs a human. Prices run from $1.25 to $10.25 across the 10
   colours and now read per 20-sheet pack; that is unresolved, and not ours
   to set.
-  About 26 other PAPER SKUs ship 60/carton with no pack column (7 say
-  20张/包 in 品名). They likely follow the same rule but are unconfirmed.
+  26 MORE PAPERS FIXED 2026-10-15. The supplier documents gave 60/carton with
+  no pack column (7 say 20张/包 in 品名). Dragon confirmed they follow the
+  same rule, so they are now `20/pk 60bx/cs cs.60`.
+  `scripts/plan-floral-paper-60cs-pack-fixes.ts` made the change, again with a
+  second Woo plan. Erply and Supabase are 26/26, Woo 24/26.
+  **Woo F287826 and F287984 were left alone**: Woo names them "Taupe Floral
+  Wrapping Paper (20PCS)" and "Baby Blue Floral Wrapping Paper (20PCS)",
+  but Erply has "Light Green Solid Color Paper" and "Baby Blue Solid Paper".
+  Check whether they are the same products. The 3 other 60/carton items
+  (F288016 basket, P273854 plush, T642285 fan) aren't paper and weren't
+  touched.
 - 6 names still have no pack spec: K229581, P273839-60cm, P273863-110cm,
   P273863-90cm, T642212 and T642288.
 - QB typos were left as written: Cirlce (F288022), Ballon (D701141), and
