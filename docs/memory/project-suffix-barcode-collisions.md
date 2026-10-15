@@ -1,6 +1,6 @@
 ---
 name: project-suffix-barcode-collisions
-description: 2026-09-17 — 52 suffixed SKUs share a barcode with their own base; 51 are hidden and inert, F286411-M is the only VISIBLE one and the only real hazard
+description: 2026-09-17 — 52 suffixed SKUs share a barcode with their own base; 51 are hidden and inert, F286411-M was the only visible one and was hidden too on 2026-09-17, so there is no storefront hazard
 type: project
 ---
 
