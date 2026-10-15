@@ -1,6 +1,6 @@
 ---
 name: project-api-route-auth-audit-20261001
-description: 2026-10-01 audit of every app/api route (middleware lets /api/* through ungated). Import was open (fixed #79), 6 routes failed open on a missing secret (fixed, ERPLY_WEBHOOK_TOKEN was unset in prod), 6 lower findings still OPEN
+description: 2026-10-01 audit of every app/api route (middleware lets /api/* through ungated). Import was open (fixed #79), 6 routes failed open on a missing secret (fixed, ERPLY_WEBHOOK_TOKEN was unset in prod), all 6 lower findings fixed 2026-10-01/02
 type: project
 ---
 
@@ -20,7 +20,7 @@ public**, so the route's own check is the only guard. Read-only audit of all 24
   weren't exploitable there. The Erply/Woo webhooks aren't registered with either
   vendor, so failing closed broke nothing.
 
-**Still OPEN (not fixed)**, most severe first:
+**Lower findings**, most severe first (all fixed; re-checked 2026-10-15):
 1. **FIXED 2026-10-01 (PR after #80).** `cart-session` POST: no auth. Client-supplied names and prices are emailed by
    `lib/abandoned-cart.ts` from company SMTP to any address, which makes it a
    spam/phishing relay. It can also overwrite a real customer's saved cart. Now only `{sku, qty}` is taken from the caller.
