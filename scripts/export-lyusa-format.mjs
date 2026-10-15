@@ -15,8 +15,9 @@
 // spec "<pk>/pk <bx>bx/cs cs.<N>" (docs/PRODUCT-NAMING-STANDARD.md):
 //   single unit per case side:  "<Name> - 20/cs - 29" x 22" x 16" - 33lbs - cs.20"  (Default Unit PC)
 //   packs of several pieces:    "<Name> - 12/pk - 20pk/cs - case dim. 31" x 18" x 16" - 26lbs"  (Default Unit CS)
-// Class#/Dept# come from the template for SKUs already in it, otherwise from
-// CATEGORY_CODES below by primary category. A SKU in the template also fills
+// Class#/Dept# come from data/lyusa-sku-codes.csv (per-SKU codes for
+// products with no catalog category), then the template for SKUs already in
+// it, then CATEGORY_CODES below by primary category. A SKU in the template also fills
 // case dims/weight/UPC the database is missing.
 //
 // Also writes <out>-needs-code.csv listing products left without a Class#.
@@ -168,6 +169,15 @@ async function main() {
   const filler = tplRows[0]
   const tplBySku = new Map(tplRows.map((r) => [r['Item#'].trim().toUpperCase(), r]))
 
+  const skuCodesPath = path.join(ROOT, 'data', 'lyusa-sku-codes.csv')
+  const skuCodes = new Map()
+  if (fs.existsSync(skuCodesPath)) {
+    const wb = XLSX.readFile(skuCodesPath, { raw: true })
+    for (const r of XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' })) {
+      skuCodes.set(r.SKU.trim().toUpperCase(), [r['Dept#'], r['Class#']])
+    }
+  }
+
   const { data: cats, error } = await supabase.from('categories').select('id, name')
   if (error) { console.error('Supabase category read error:', error.message); process.exit(1) }
   const catName = new Map(cats.map((c) => [c.id, c.name]))
@@ -184,7 +194,8 @@ async function main() {
   for (const p of products.sort((a, b) => a.sku.localeCompare(b.sku))) {
     const tpl = tplBySku.get(p.sku.trim().toUpperCase())
     const category = catName.get(p.category_id) ?? ''
-    const codes = tpl && tpl['Class#'] ? [tpl['Dept#'], tpl['Class#']] : CATEGORY_CODES[category]
+    const codes = skuCodes.get(p.sku.trim().toUpperCase())
+      ?? (tpl && tpl['Class#'] ? [tpl['Dept#'], tpl['Class#']] : CATEGORY_CODES[category])
     if (tpl) stats.fromTemplate++
     if (!codes) needsCode.push([p.sku, p.name, category])
 
