@@ -41,9 +41,7 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   live name (`...-moonrise-paper-woo.csv`): the guard makes Erply/Supabase
   "already correct" on that pass. Logs are
   `data/product-name-fixes-applied-moonrise-paper[-woo]-20261015.csv`.
-  **Woo's F287957 is a different product**, "Red Flower Pattern Floral Paper",
-  versus Erply's "Moonrise Floral Paper Burgundy". Its Woo name was left
-  alone and needs a human. Prices run from $1.25 to $10.25 across the 10
+  (Woo's F287957 is resolved; see the Woo name mismatches below.) Prices run from $1.25 to $10.25 across the 10
   colours and now read per 20-sheet pack; that is unresolved, and not ours
   to set.
   26 MORE PAPERS FIXED 2026-10-15. The supplier documents gave 60/carton with
@@ -51,12 +49,24 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   same rule, so they are now `20/pk 60bx/cs cs.60`.
   `scripts/plan-floral-paper-60cs-pack-fixes.ts` made the change, again with a
   second Woo plan. Erply and Supabase are 26/26, Woo 24/26.
-  **Woo F287826 and F287984 were left alone**: Woo names them "Taupe Floral
-  Wrapping Paper (20PCS)" and "Baby Blue Floral Wrapping Paper (20PCS)",
-  but Erply has "Light Green Solid Color Paper" and "Baby Blue Solid Paper".
-  Check whether they are the same products. The 3 other 60/carton items
-  (F288016 basket, P273854 plush, T642285 fan) aren't paper and weren't
-  touched.
+  The 3 other 60/carton items (F288016 basket, P273854 plush, T642285 fan)
+  aren't paper and weren't touched.
+  WOO NAME MISMATCHES (F287957, F287826, F287984), checked 2026-10-15. All
+  three Woo products are unpublished drafts from a 2026-07-23 bulk import
+  (no price, Uncategorized). Each one's photo is identical to the catalog's,
+  with SKU and UPC printed on it, and the UPCs match the supplier's 2026-05
+  1297ctn Original List. So these are the SAME products under different
+  names, not different products.
+  - F287957 and F287984: Woo renamed to Erply's name
+    (`data/product-name-fixes-plan-woo-name-mismatch.csv`).
+  - **F287826 is still open, and Erply's name is the likely error.** The
+    photo is plainly taupe/greige, and Woo's independent import also says
+    "Taupe". Erply and the catalog say "Light Green Solid Color Paper".
+    Dragon chose to leave it until someone checks the physical paper; then
+    rename Erply, Woo and Supabase together.
+  Also: the 2020 UPC assignment file has an OLDER F287957 family
+  (-Bl/-Blue/-Pk/-R, UPCs 6814023931xx), so that SKU was reused. The
+  current product's UPC is 737879105825.
 - 6 names still have no pack spec: K229581, P273839-60cm, P273863-110cm,
   P273863-90cm, T642212 and T642288.
 - QB typos were left as written: Cirlce (F288022), Ballon (D701141), and
