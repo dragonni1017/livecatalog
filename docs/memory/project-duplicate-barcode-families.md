@@ -1,6 +1,6 @@
 ---
 name: project-duplicate-barcode-families
-description: 104-106 barcode groups share a barcode across multiple SKUs; F286606 confirmed+deactivated everywhere 2026-08-18; 6 more likely-duplicate candidates found 2026-08-18 but on hold (price mismatch); ~15 more cross-family collisions found, not yet merged into the 41-item collision doc
+description: 104-106 barcode groups share a barcode across multiple SKUs; F286606 confirmed+deactivated everywhere 2026-08-18; 6 more likely-duplicate candidates found 2026-08-18 but on hold (price mismatch); ~15 more cross-family collisions found, not yet merged into the 41-item collision doc; re-checked 2026-10-15, no new groups and none with 2+ visible rows
 type: project
 ---
 
@@ -118,3 +118,18 @@ different colors) found two genuinely new buckets:
    deactivate any of them until the price discrepancy is checked against a
    supplier invoice or QuickBooks. Do not re-propose deactivating these
    without new price-resolution information.
+
+**Re-check 2026-10-15: nothing customer-facing left.** Still exactly 106
+groups / 252 rows, the same count as August, so nothing new has appeared.
+**No group has two or more storefront-visible rows** (active and not
+`manually_hidden`), so a customer can't see two listings for one barcode.
+The 7 held pairs above (F286573 plus the 6) were checked against
+`qb_item_directory`. **QuickBooks doesn't settle the prices.** It lists
+*both* SKUs of D751067, D751052 and T642023 as separate items at the same
+price ($10, $1.50 and $9). Both F286573 and H424249 rows are $0.00 there.
+T641545-1 and both F286162 Panda rows aren't in QB at all. So the hold
+stands, but the risk is low: 13 of the 14 rows are hidden, and none has
+ever been ordered. The only visible one is T642023 (Baseball Diamond cup),
+and its pair T642023-YELLOW is named *Softball*, so that pair may be two
+real products and not a duplicate. Remaining work is physical or supplier
+checking only, and there's no storefront hazard to rush it.
