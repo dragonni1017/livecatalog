@@ -35,8 +35,6 @@
 scripts/_tmp_*.mjs
 scripts/_*.mjs
 /_tmp_*
-/data/livecatalog-category-breakdown.xlsx
-/data/*.bak
 
 # root-level scratch exports (inventory counts, image backfill mappings,
 # QB comparisons, etc.) — these belong in data/ or docs/, never commit
@@ -51,33 +49,12 @@ scripts/_*.mjs
 /recent-3mo-images/
 /*.ps1
 
-# scratch working files relocated from repo root 2026-07-15 — same
-# never-commit intent as the root-level rules above, just organized by topic
-/data/images/
-/data/inventory-counts/
-/data/price-comparisons/
-/data/livecatalog-products.xlsx
-/data/products-with-images-and-inventory.xlsx
-/data/all-customers-export.xlsx
-/data/erply-review/
-/data/erply-woo-review/
-/data/erply-woo-customer-backfill/
-/data/erply-duplicate-cleanup/
-/data/price-rebase-review/
-/data/product-review/
-/data/price-quarter-round-review/
-/data/woo-tier-review/
-/data/woo-category-review/
-/data/erply-bulk-import/
-/data/qbd-catalog-compare/
-# regenerate with scripts/build-measurement-worklist.mjs; the filled-in copy
-# is warehouse working paper, not source
-/data/measurement-worklist.xlsx
+# data/ is local-only. The repo is public and these files hold product
+# exports, supplier details, prices and customer lists. Untracked 2026-10-15
+# (they stay in older commits' history). See data/README.md for the layout.
+/data/*
+!/data/README.md
 /export-out/
-
-# superseded scratch exports moved aside (not deleted) during the 2026-07-14
-# cleanup — same never-commit intent, newer versions live in the folders above
-/data/archive/
 
 # Excel lock files
 ~$*.xls*
