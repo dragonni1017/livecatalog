@@ -33,6 +33,21 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   and the confirmed rule is 20 sheets/pack. All 22 were hidden at $0 and a
   case is still 60 units, so neither prices nor stock needed changing.
   F288118 Newspaper Bouquet Wrap was left out: QB says `60/cs`, so it's open.
+  MOONRISE PAPERS FIXED 2026-10-15: F287948-F287957 had no spec and are now
+  `20/pk 60bx/cs cs.60` pack-sold. The supplier's 2026-04 ETD 0417 1078ctn
+  Original List states `bx`=20 and `bx/cs`=60 outright.
+  `scripts/plan-moonrise-paper-pack-fixes.ts` made the change. Woo kept the
+  older `SKU - name` form, so it needed a second plan whose expect is Woo's
+  live name (`...-moonrise-paper-woo.csv`): the guard makes Erply/Supabase
+  "already correct" on that pass. Logs are
+  `data/product-name-fixes-applied-moonrise-paper[-woo]-20261015.csv`.
+  **Woo's F287957 is a different product**, "Red Flower Pattern Floral Paper",
+  versus Erply's "Moonrise Floral Paper Burgundy". Its Woo name was left
+  alone and needs a human. Prices run from $1.25 to $10.25 across the 10
+  colours and now read per 20-sheet pack; that is unresolved, and not ours
+  to set.
+  About 26 other PAPER SKUs ship 60/carton with no pack column (7 say
+  20张/包 in 品名). They likely follow the same rule but are unconfirmed.
 - 6 names still have no pack spec: K229581, P273839-60cm, P273863-110cm,
   P273863-90cm, T642212 and T642288.
 - QB typos were left as written: Cirlce (F288022), Ballon (D701141), and
