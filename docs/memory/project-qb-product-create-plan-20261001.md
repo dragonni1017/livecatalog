@@ -78,7 +78,7 @@ sheet was saved after that CSV. It creates each SKU in Erply through
 lib/erply.ts createErplyProduct, reads it back, then inserts one catalog row per
 call (no `id`, hidden, $0), and STOPS on a products_pkey collision (re-run 0052,
 then re-run the script, which resumes an Erply-created SKU that is missing from
-the catalog). Its log is `data/qb-product-create-applied-<date>.csv`. Photos are
+the catalog). Its log is `data/fix-logs/qb-product-create-applied-<date>.csv`. Photos are
 NOT uploaded: it prints `upload-container-photos.ts --dir` commands instead. These
 SKUs are outside zero-price-visibility's receiving cohort, so unhide them with
 `--include-sku`. A dry run on the blank sheet shows 4 ready. P257282/P257286 are
@@ -97,7 +97,7 @@ measurement worklist), and its QB desc still needs fixing. P257281 own figure is
 legacy-name, not tape-measured.
 
 **PACK RULES APPROVED BY DRAGON 2026-10-06** (written into the fill sheet, 51 rows; backup
-data/qb-product-fill-in-20261001.backup-20261006.xlsx; each row's Notes say RULE ...):
+data/archive/2026-10-15/qb-product-fill-in-20261001.backup-20261006.xlsx; each row's Notes say RULE ...):
 1/pk Nbx/cs sold by piece for T6422xx tumblers (not T642208-tumbler, not T642240 Mini
 Shopping Cart, which shares the SKU range), F288023/F288024 cylinder box sets, F288101/F288103
 foldable 2-pc box sets. Neighbour rules: F287947 = twin F287946 (5/pk 36bx), K229492-K229560
@@ -107,7 +107,7 @@ crowns, pot bases. After this the importer reports 55 ready (4 already created +
 F288023 x4 are "ready" but their QB name says 5 Piece Set while the label lists 6 sizes:
 confirm before creating.
 CREATED 2026-10-06: the 47 rule rows (all except F288023 x4), Erply #3175 onward, all hidden
-at $0 with photos; log data/qb-product-create-applied-20261006.csv. 51 of the 122 planned SKUs
+at $0 with photos; log data/fix-logs/qb-product-create-applied-20261006.csv. 51 of the 122 planned SKUs
 now exist (4 + 47); all await Erply prices, then unhide with --include-sku.
 
 **Still outstanding:** someone has to fill the sheet (pack specs, about 107

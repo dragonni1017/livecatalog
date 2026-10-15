@@ -8,9 +8,9 @@ The 108 SKUs in `data/broken-product-names-20261006.csv` had raw QuickBooks
 descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
 - 30lbs - 30/pk 1bx/cs cs.30`. They were renamed 2026-10-13 with
 `scripts/plan-carton-name-fixes.ts`, which writes
-`data/product-name-fixes-plan-carton.csv`, and then
+`data/fix-logs/product-name-fixes-plan-carton.csv`, and then
 `scripts/fix-product-names.ts --plan=... --apply`. The log is
-`data/product-name-fixes-applied-carton-20261013.csv` (T642288 hit a transient Erply
+`data/fix-logs/product-name-fixes-applied-carton-20261013.csv` (T642288 hit a transient Erply
 "fetch failed" and was re-run with --only; all 108 done).
 
 - **Cosmetic only.** The base was cleaned with `descriptorFromQbDesc`. The pack
@@ -29,7 +29,7 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   plus CM072310, F288081, F288082 and F288090, which had no spec) are now
   `20/pk 60bx/cs cs.60` pack-sold in Erply, Woo and Supabase.
   `scripts/plan-floral-paper-pack-fixes.ts` produced the change; the log is
-  `data/product-name-fixes-applied-floral-paper-20261013.csv`. QB says 60pk/cs,
+  `data/fix-logs/product-name-fixes-applied-floral-paper-20261013.csv`. QB says 60pk/cs,
   and the confirmed rule is 20 sheets/pack. All 22 were hidden at $0 and a
   case is still 60 units, so neither prices nor stock needed changing.
   F288118 Newspaper Bouquet Wrap was left out: QB says `60/cs`, so it's open.
@@ -40,7 +40,7 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   older `SKU - name` form, so it needed a second plan whose expect is Woo's
   live name (`...-moonrise-paper-woo.csv`): the guard makes Erply/Supabase
   "already correct" on that pass. Logs are
-  `data/product-name-fixes-applied-moonrise-paper[-woo]-20261015.csv`.
+  `data/fix-logs/product-name-fixes-applied-moonrise-paper[-woo]-20261015.csv`.
   (Woo's F287957 is resolved; see the Woo name mismatches below.) Prices run from $1.25 to $10.25 across the 10
   colours and now read per 20-sheet pack; that is unresolved, and not ours
   to set.
@@ -58,7 +58,7 @@ descriptions as their names, e.g. `Glass Flower Vase - 30/cs - 23" x 14" x 15"
   1297ctn Original List. So these are the SAME products under different
   names, not different products.
   - F287957 and F287984: Woo renamed to Erply's name
-    (`data/product-name-fixes-plan-woo-name-mismatch.csv`).
+    (`data/fix-logs/product-name-fixes-plan-woo-name-mismatch.csv`).
   - **F287826 is still open, and Erply's name is the likely error.** The
     photo is plainly taupe/greige, and Woo's independent import also says
     "Taupe". Erply and the catalog say "Light Green Solid Color Paper".
