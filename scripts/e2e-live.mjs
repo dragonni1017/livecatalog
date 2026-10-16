@@ -176,6 +176,13 @@ try {
   check(`card count matches the DB for ${cat.slug} (${visible.length})`, count(x.text, 'class="flex break-inside-avoid flex-col') === visible.length, `page ${count(x.text, 'class="flex break-inside-avoid flex-col')}`)
   x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&hideprices=1`)
   check('hide prices removes every price', count(x.text, 'class="text-sm font-bold">$') === 0)
+  check('no QR codes unless asked', count(x.text, 'data-qr-url="') === 0)
+  x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&qr=1`)
+  const qrUrls = [...x.text.matchAll(/data-qr-url="([^"]+)"/g)].map((m) => m[1])
+  const expectedUrls = new Set(visible.map((p) => `https://lyusa.app/product/${p.id}`))
+  check(`qr=1 puts one QR per card, each linking to that product (${visible.length})`, qrUrls.length === visible.length && qrUrls.every((u) => expectedUrls.has(u)) && new Set(qrUrls).size === qrUrls.length, `${qrUrls.length} codes`)
+  const sample = await fetch(qrUrls[0], { redirect: 'manual' })
+  check('a QR target URL is a live page on the site', sample.status < 400, `${qrUrls[0]} -> ${sample.status}`)
 
   // ── Priced line cards and customer pricing ───────────────────────────────
   section('Pricing (line card, price list, cart)')

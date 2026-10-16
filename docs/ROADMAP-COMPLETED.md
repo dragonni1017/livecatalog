@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**109 items completed** (102 shipped-feature bullets + 7 checked-off backlog/design items).
+**111 items completed** (104 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -16,6 +16,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Related products ("More in this category") on product detail page
 - ✅ Back-in-stock notification — email capture on out-of-stock products, auto-fires on restock
 - ✅ SEO metadata + Open Graph per product page
+- ✅ schema.org Product structured data on product pages (`lib/product-jsonld.ts`, tested); was still listed as an idea until 2026-10-16
 - ✅ ISR caching (10-min revalidate) on product pages
 - ✅ L&Y USA logo branding on header, product, and cart pages
 - ✅ Sitemap + robots.txt
@@ -67,6 +68,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Printable wholesale price list (`/admin/price-list`) — filterable by category
 - ✅ Photo line card (`/admin/line-card`, `/rep/line-card`, 2026-10-16): printable photo grid by categories or a pasted SKU list, prices on/off, in-stock only, 3 or 4 per row, custom title; saved with the browser's Save as PDF; only visible, priced products
 - ✅ Priced line cards and price lists (2026-10-16): "Prices at" catalog / an active tier / a customer profile, on the line card (admin + rep) and `/admin/price-list`, using the same `applyTierDiscount` math as orders
+- ✅ QR codes on line cards (2026-10-16): optional `qr=1`, one vector QR per card linking to `https://lyusa.app/product/<id>`; a test decodes the printed path back to the URL
 - ✅ Import page — drag-and-drop Excel, diff preview, one-click confirm
 - ✅ Import history log (`/admin/imports`)
 - ✅ Sync page — manual Erply sync trigger + status (`/admin/sync`)

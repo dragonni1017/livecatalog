@@ -6,6 +6,7 @@ import type { Category } from '@/lib/types'
 import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/lib/line-card'
 import { applyTierDiscount } from '@/lib/order-rules'
 import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
+import { productUrl, qrPath } from '@/lib/qr'
 
 // Printable product line card: a photo grid for reps and trade shows, saved
 // with the browser's "Save as PDF" like /admin/price-list. Shared by
@@ -14,6 +15,7 @@ import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
 //
 // Everything comes from GET params, so a configured card is a shareable URL:
 //   cat=<slug> (repeatable) · skus=<list> · hideprices=1 · instock=1 · cols=3|4 · title=<text>
+//   price=tier:<code>|customer:<uuid> · qr=1 (QR code per card → its product page)
 
 export type LineCardParams = Record<string, string | string[] | undefined>
 
@@ -41,6 +43,25 @@ function all(v: string | string[] | undefined): string[] {
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
+}
+
+/** Scannable link to the product page; ~0.5in square when printed. */
+function ProductQr({ productId }: { productId: string }) {
+  const url = productUrl(productId)
+  const { size, d } = qrPath(url)
+  return (
+    <svg
+      viewBox={`-1 -1 ${size + 2} ${size + 2}`}
+      className="h-12 w-12 shrink-0"
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label={`QR code: ${url}`}
+      data-qr-url={url}
+    >
+      <rect x="-1" y="-1" width={size + 2} height={size + 2} fill="#fff" />
+      <path d={d} fill="#000" />
+    </svg>
+  )
 }
 
 const SELECT = 'id, sku, name, price_cents, stock_qty, image_url, image_urls, category_id'
@@ -100,6 +121,7 @@ export default async function LineCard({
   const skus = parseSkuList(skuRaw)
   const hidePrices = first(params.hideprices) === '1'
   const inStockOnly = first(params.instock) === '1'
+  const showQr = first(params.qr) === '1'
   const cols = first(params.cols) === '3' ? 3 : 4
   const title = first(params.title).trim().slice(0, 80) || 'Wholesale Line Card'
 
@@ -195,6 +217,10 @@ export default async function LineCard({
               In stock only
             </label>
             <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" name="qr" value="1" defaultChecked={showQr} className="h-4 w-4 rounded border-gray-300 text-red-600" />
+              QR codes
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
               Per row
               <select name="cols" defaultValue={String(cols)} className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm">
                 <option value="4">4</option>
@@ -266,9 +292,12 @@ export default async function LineCard({
                       </div>
                       <p className="line-clamp-2 text-xs font-semibold leading-snug">{pTitle}</p>
                       {spec && <p className="mt-0.5 text-[10px] leading-snug text-gray-500">{spec}</p>}
-                      <div className="mt-auto flex items-end justify-between pt-1">
-                        <span className="font-mono text-[10px] text-gray-500">{p.sku}</span>
-                        {!hidePrices && <span className="text-sm font-bold">{formatPrice(unitPrice(p.price_cents))}</span>}
+                      <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+                        <div className={showQr ? 'flex flex-col' : 'contents'}>
+                          <span className="font-mono text-[10px] text-gray-500">{p.sku}</span>
+                          {!hidePrices && <span className="text-sm font-bold">{formatPrice(unitPrice(p.price_cents))}</span>}
+                        </div>
+                        {showQr && <ProductQr productId={p.id} />}
                       </div>
                     </div>
                   )

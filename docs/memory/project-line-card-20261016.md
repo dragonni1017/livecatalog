@@ -31,3 +31,12 @@ built card is a shareable URL.
 
 **Why:** reps and trade shows (e.g. ASD) had only a text price list, and reps
 couldn't open even that.
+
+**QR codes (2026-10-16, later):** `qr=1` adds a QR per card linking to
+`https://lyusa.app/product/<id>` (`lib/qr.ts`). It's drawn as our own SVG
+`<path>` from `qrcode`'s module matrix (no `dangerouslySetInnerHTML`) at error
+correction M, about 0.5in printed. It's off by default so existing card links
+don't change. `tests/qr.test.ts` rasterizes the exact path and decodes it with
+`jsqr` (a dev dependency) back to the URL. Scans aren't tagged with a source,
+so the funnel can't yet tell QR visits apart; add a `?src=` param if that's
+ever wanted.
