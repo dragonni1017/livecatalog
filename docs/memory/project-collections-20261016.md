@@ -33,3 +33,14 @@ Collections are curated product groups ("Valentine's", "Graduation"), with
 
 **Why:** buyers had only categories, New Arrivals and Best Sellers, with no
 way to feature a season.
+
+**Homepage strip (later the same day, migration 0060):** "Shop collections"
+cards show only on the **landing view**: no q, category, sort, filters or
+page > 1 (`isLandingView` in `app/(catalog)/page.tsx`). Each card uses the
+optional `collections.cover_image_url` (https only, enforced by both the DB
+check and `parseCollectionInput`, uploaded with the existing
+`ImageUploadField` to the public product-images bucket). Without a cover it
+shows a 2×2 mosaic of the first visible product photos by position.
+Collections with no visible products are skipped (`buildStripCards`, pure
+and tested). It was checked visually in Chrome (narrow viewport) with two
+temp collections, which were deleted afterwards.

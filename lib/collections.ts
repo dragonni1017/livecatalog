@@ -16,9 +16,11 @@ export interface Collection {
   starts_on: string | null
   ends_on: string | null
   display_order: number
+  /** Optional homepage-strip cover (migration 0060). Null = product-photo mosaic. */
+  cover_image_url: string | null
 }
 
-export const COLLECTION_FIELDS = 'id, slug, name, description, is_active, starts_on, ends_on, display_order'
+export const COLLECTION_FIELDS = 'id, slug, name, description, is_active, starts_on, ends_on, display_order, cover_image_url'
 export const MAX_COLLECTION_PRODUCTS = 300
 
 /** Today as YYYY-MM-DD in Los Angeles. */
@@ -55,7 +57,10 @@ export function slugify(name: string): string {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
-export type CollectionInput = Pick<Collection, 'slug' | 'name' | 'description' | 'is_active' | 'starts_on' | 'ends_on' | 'display_order'>
+export type CollectionInput = Pick<
+  Collection,
+  'slug' | 'name' | 'description' | 'is_active' | 'starts_on' | 'ends_on' | 'display_order' | 'cover_image_url'
+>
 
 /** Validates an admin create/update body. */
 export function parseCollectionInput(body: Record<string, unknown>): { value: CollectionInput } | { error: string } {
@@ -77,9 +82,77 @@ export function parseCollectionInput(body: Record<string, unknown>): { value: Co
   if (starts_on && ends_on && starts_on > ends_on) return { error: 'The start date is after the end date.' }
   const order = Number(body.display_order ?? 0)
   if (!Number.isInteger(order) || order < -1000 || order > 1000) return { error: 'Order must be a whole number.' }
+  const cover = typeof body.cover_image_url === 'string' && body.cover_image_url.trim() ? body.cover_image_url.trim() : null
+  if (cover && (!/^https:\/\/[^\s"'<>]+$/.test(cover) || cover.length > 1000)) return { error: 'The cover image must be an https:// link.' }
   return {
-    value: { slug, name, description, is_active: body.is_active !== false, starts_on, ends_on, display_order: order },
+    value: { slug, name, description, is_active: body.is_active !== false, starts_on, ends_on, display_order: order, cover_image_url: cover },
   }
+}
+
+// ── Homepage strip ──────────────────────────────────────────────────────────
+
+export interface StripCard {
+  slug: string
+  name: string
+  cover: string | null
+  /** Up to 4 product photos for the mosaic when there's no cover. */
+  mosaic: string[]
+  productCount: number
+}
+
+/**
+ * Pure: live collections + their links + visible products → strip cards.
+ * Collections with no visible products are skipped; links keep their order.
+ */
+export function buildStripCards(
+  collections: Pick<Collection, 'id' | 'slug' | 'name' | 'cover_image_url'>[],
+  links: { collection_id: string; product_id: string; position: number }[],
+  visibleProducts: { id: string; image_url: string | null }[],
+): StripCard[] {
+  const visible = new Map(visibleProducts.map((p) => [p.id, p]))
+  const byCollection = new Map<string, { product_id: string; position: number }[]>()
+  for (const l of links) {
+    if (!visible.has(l.product_id)) continue
+    const list = byCollection.get(l.collection_id) ?? []
+    list.push(l)
+    byCollection.set(l.collection_id, list)
+  }
+  const cards: StripCard[] = []
+  for (const c of collections) {
+    const items = (byCollection.get(c.id) ?? []).sort((a, b) => a.position - b.position)
+    if (items.length === 0) continue
+    const mosaic = items
+      .map((l) => visible.get(l.product_id)?.image_url)
+      .filter((u): u is string => !!u)
+      .slice(0, 4)
+    cards.push({ slug: c.slug, name: c.name, cover: c.cover_image_url, mosaic, productCount: items.length })
+  }
+  return cards
+}
+
+/** Strip cards for the homepage: live collections that have visible products. */
+export async function loadCollectionStrip(db: Db): Promise<StripCard[]> {
+  const { data, error } = await db.from('collections').select(COLLECTION_FIELDS).eq('is_active', true).order('display_order').order('name')
+  if (error) return []
+  const today = todayPacific()
+  const live = ((data ?? []) as Collection[]).filter((c) => isLive(c, today))
+  if (live.length === 0) return []
+  const { data: links } = await db
+    .from('collection_products')
+    .select('collection_id, product_id, position')
+    .in('collection_id', live.map((c) => c.id))
+  const ids = [...new Set(((links ?? []) as { product_id: string }[]).map((l) => l.product_id))]
+  const visible: { id: string; image_url: string | null }[] = []
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: rows } = await db
+      .from('products')
+      .select('id, image_url')
+      .eq('is_active', true)
+      .eq('manually_hidden', false)
+      .in('id', ids.slice(i, i + 200))
+    visible.push(...((rows ?? []) as typeof visible))
+  }
+  return buildStripCards(live, (links ?? []) as { collection_id: string; product_id: string; position: number }[], visible)
 }
 
 type Db = ReturnType<typeof getAdminClient>
