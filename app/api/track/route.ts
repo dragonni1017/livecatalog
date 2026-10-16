@@ -13,9 +13,16 @@ function isMockMode(): boolean {
   return !url || url === 'your-supabase-url' || url.includes('placeholder')
 }
 
-// POST /api/track — record a public analytics event (product view or search).
-// Public + unauthenticated by design; inserts go through the service-role client.
-// Best-effort: never blocks or errors the user experience.
+const TYPES = new Set(['view', 'search', 'search_no_results', 'add_to_cart', 'cart_view', 'quote_submitted'])
+// Funnel steps with no payload beyond the visitor id (see lib/track.ts).
+const FUNNEL_TYPES = new Set(['add_to_cart', 'cart_view', 'quote_submitted'])
+// lib/track.ts sends a UUID, or a short fallback id where crypto.randomUUID
+// is missing. Anything else is dropped to null rather than rejecting the event.
+const VISITOR_ID = /^[A-Za-z0-9-]{8,64}$/
+
+// POST /api/track — record a public analytics event (product view, search,
+// or a funnel step). Public + unauthenticated by design; inserts go through
+// the service-role client. Best-effort: never blocks or errors the user experience.
 export async function POST(request: NextRequest) {
   try {
     if (!limiter.hit(clientIp(request))) {
@@ -25,14 +32,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const type = body.type
 
-    if (type !== 'view' && type !== 'search' && type !== 'search_no_results') {
+    if (typeof type !== 'string' || !TYPES.has(type)) {
       return NextResponse.json({ error: 'invalid type' }, { status: 400 })
     }
+
+    const visitorId = typeof body.visitorId === 'string' && VISITOR_ID.test(body.visitorId)
+      ? body.visitorId
+      : null
 
     let productId: string | null = null
     let term: string | null = null
 
-    if (type === 'view') {
+    if (FUNNEL_TYPES.has(type)) {
+      // A funnel step means nothing without a visitor to attach it to.
+      if (!visitorId) return NextResponse.json({ ok: true, skipped: true })
+    } else if (type === 'view') {
       const pid = typeof body.productId === 'string' ? body.productId.trim() : ''
       if (!pid) return NextResponse.json({ error: 'productId required' }, { status: 400 })
       // Real ids are short (prod-NNNNN). The FK rejects unknown ones anyway,
@@ -54,11 +68,18 @@ export async function POST(request: NextRequest) {
 
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
-    // analytics_events.type check constraint only allows 'view' and 'search';
-    // store 'search_no_results' as type='search' with a term prefix so it's queryable.
+    // 'search_no_results' isn't in analytics_events.type's check constraint;
+    // store it as type='search' with a term prefix so it's queryable.
+    // visitor_id needs migration 0056: without the column, every insert here
+    // fails (views and searches too), so 0056 must be applied before deploy.
     const insertType = type === 'search_no_results' ? 'search' : type
     const insertTerm = type === 'search_no_results' ? `[no_results] ${term}` : term
-    const { error } = await db.from('analytics_events').insert({ type: insertType, product_id: productId, term: insertTerm })
+    const { error } = await db.from('analytics_events').insert({
+      type: insertType,
+      product_id: productId,
+      term: insertTerm,
+      visitor_id: visitorId,
+    })
     if (error) {
       // Table may not exist yet (migration 0003 not run) — swallow, never 500 the public site.
       console.error('[track] insert failed:', error.message)

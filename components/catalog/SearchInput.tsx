@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import BarcodeScanner from './BarcodeScanner'
 import { resolveCdnImage } from '@/lib/image'
+import { track } from '@/lib/track'
 
 interface SuggestResult {
   id: string
@@ -85,11 +86,7 @@ export default function SearchInput() {
         // Zero-results tracking — fire once per unique query
         if (data.results.length === 0 && !firedNoResults.current.has(q)) {
           firedNoResults.current.add(q)
-          fetch('/api/track', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'search_no_results', query: q }),
-          }).catch(() => {})
+          track({ type: 'search_no_results', query: q })
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -122,14 +119,7 @@ export default function SearchInput() {
     setOpen(false)
     setHighlightIdx(-1)
 
-    if (trimmed.length >= 2) {
-      fetch('/api/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'search', term: trimmed }),
-        keepalive: true,
-      }).catch(() => {})
-    }
+    if (trimmed.length >= 2) track({ type: 'search', term: trimmed })
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {

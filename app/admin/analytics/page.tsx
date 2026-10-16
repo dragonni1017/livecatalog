@@ -42,6 +42,88 @@ function topCounts<K extends string>(keys: (K | null)[], limit: number): { key: 
     .slice(0, limit)
 }
 
+// ── Funnel ──────────────────────────────────────────────────────────────────
+// Distinct visitors per step, from events carrying an anonymous visitor_id
+// (migration 0056, lib/track.ts). Events from before 0056 have no visitor_id
+// and are ignored, so the funnel only covers time since tracking started.
+
+const FUNNEL_PAGE = 1000 // PostgREST's default max rows per request
+const FUNNEL_ROW_CAP = 200_000
+
+interface FunnelRow {
+  visitor_id: string
+  type: string
+}
+
+interface FunnelStep {
+  label: string
+  visitors: number
+}
+
+async function loadFunnel(
+  db: ReturnType<typeof getAdminClient>,
+  since: string | null,
+): Promise<{ steps: FunnelStep[]; trackingSince: string | null; truncated: boolean; error: boolean }> {
+  const rows: FunnelRow[] = []
+  let truncated = false
+  for (let from = 0; ; from += FUNNEL_PAGE) {
+    let q = db
+      .from('analytics_events')
+      .select('visitor_id, type')
+      .not('visitor_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, from + FUNNEL_PAGE - 1)
+    if (since) q = q.gte('created_at', since)
+    const { data, error } = await q
+    // Before 0056 the column doesn't exist and this errors; report "not set up".
+    if (error) return { steps: [], trackingSince: null, truncated: false, error: true }
+    rows.push(...((data ?? []) as FunnelRow[]))
+    if (!data || data.length < FUNNEL_PAGE) break
+    if (rows.length >= FUNNEL_ROW_CAP) {
+      truncated = true
+      break
+    }
+  }
+
+  const { data: first } = await db
+    .from('analytics_events')
+    .select('created_at')
+    .not('visitor_id', 'is', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+
+  const all = new Set<string>()
+  const byType = new Map<string, Set<string>>()
+  for (const r of rows) {
+    all.add(r.visitor_id)
+    let s = byType.get(r.type)
+    if (!s) byType.set(r.type, (s = new Set()))
+    s.add(r.visitor_id)
+  }
+  const count = (t: string) => byType.get(t)?.size ?? 0
+
+  return {
+    // Step 1 is every tracked visitor, not only those who viewed or searched,
+    // so someone who went straight to Quick Order still counts as a visitor.
+    // Later steps are each counted on their own, not as a strict subset of
+    // the step before (a reorder skips "added to cart" via the product page).
+    steps: [
+      { label: 'Visited (viewed, searched or used the cart)', visitors: all.size },
+      { label: 'Added to cart', visitors: count('add_to_cart') },
+      { label: 'Opened cart', visitors: count('cart_view') },
+      { label: 'Submitted a quote', visitors: count('quote_submitted') },
+    ],
+    trackingSince: (first?.[0] as { created_at: string } | undefined)?.created_at ?? null,
+    truncated,
+    error: false,
+  }
+}
+
+function pct(n: number, of: number): string {
+  if (of === 0) return '–'
+  return `${Math.round((n / of) * 100)}%`
+}
+
 function formatDollars(cents: number) {
   return '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
@@ -196,7 +278,7 @@ export default async function AdminAnalyticsPage({
     ordersQuery = ordersQuery.gte('created_at', since)
   }
 
-  const [eventsResult, ordersResult] = await Promise.all([eventsQuery, ordersQuery])
+  const [eventsResult, ordersResult, funnel] = await Promise.all([eventsQuery, ordersQuery, loadFunnel(db, since)])
 
   const tableMissing = !!eventsResult.error
   const events = (eventsResult.data ?? []) as EventRow[]
@@ -362,6 +444,62 @@ export default async function AdminAnalyticsPage({
               <BarChart labels={chartLabels} counts={chartCounts} />
             )}
           </div>
+        </section>
+
+        {/* Visitor funnel */}
+        <section className="mb-8 rounded-xl bg-white border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Visitor funnel</h2>
+            {funnel.trackingSince && (
+              <p className="mt-1 text-xs text-gray-400">
+                Tracked since {new Date(funnel.trackingSince).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.
+                Counts unique browsers, so one buyer on two devices counts twice, and buyers who block scripts aren&apos;t counted.
+              </p>
+            )}
+          </div>
+          {funnel.error ? (
+            <p className="px-4 py-4 text-sm text-amber-800 bg-amber-50">
+              Funnel tracking isn&apos;t set up yet. Run{' '}
+              <code className="font-mono">supabase/migrations/0056_analytics_funnel_events.sql</code> in the Supabase SQL editor.
+            </p>
+          ) : funnel.steps[0]?.visitors === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-gray-400">No tracked visitors in this period yet.</p>
+          ) : (
+            <ol className="divide-y divide-gray-100">
+              {funnel.steps.map((step, i) => {
+                const top = funnel.steps[0].visitors
+                const prev = i > 0 ? funnel.steps[i - 1].visitors : top
+                return (
+                  <li key={step.label} className="px-4 py-3">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-gray-800">{step.label}</span>
+                      <span className="shrink-0">
+                        <span className="font-semibold text-gray-900">{step.visitors.toLocaleString()}</span>
+                        {i > 0 && (
+                          <span className="ml-2 text-xs text-gray-500" title="Of the step above">
+                            {pct(step.visitors, prev)} of above
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-2 rounded-full bg-gray-100">
+                      <div
+                        className="h-2 rounded-full bg-red-600"
+                        style={{ width: top > 0 ? `${Math.max((step.visitors / top) * 100, step.visitors > 0 ? 1 : 0)}%` : 0 }}
+                      />
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+          {!funnel.error && funnel.steps[0]?.visitors > 0 && (
+            <p className="px-4 py-2.5 border-t border-gray-100 text-xs text-gray-500">
+              Check: {totalOrders.toLocaleString()} quote{totalOrders === 1 ? '' : 's'} actually submitted in this period
+              (includes rep-placed orders and any made before tracking started).
+              {funnel.truncated && ' Showing the first 200,000 events only.'}
+            </p>
+          )}
         </section>
 
         {tableMissing ? (
