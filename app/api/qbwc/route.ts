@@ -445,7 +445,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const { data: order, error: orderError } = await db
     .from('order_requests')
-    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, notes, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
+    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, notes, promo_code, promo_discount_cents, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
     .eq('id', queueRow.order_id)
     .single()
   const { data: items, error: itemsError } = await db
@@ -558,7 +558,14 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   })
   const xml = buildSalesOrderAddRq({
     qbCustomerListId,
-    memo: order.notes ? `${order.reference_code}\n${order.notes}` : order.reference_code,
+    // Promo line (0064) so whoever keys the order sees why line rates are lower.
+    memo: [
+      order.reference_code,
+      order.promo_code ? `Promo ${order.promo_code} (-$${((order.promo_discount_cents ?? 0) / 100).toFixed(2)})` : null,
+      order.notes || null,
+    ]
+      .filter(Boolean)
+      .join('\n'),
     poNumber: order.po_number || fallbackPoNumber(order.reference_code),
     shipAddress: order.ship_address1
       ? {

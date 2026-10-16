@@ -59,7 +59,6 @@ Future Brainstorm below.
 - Manager approval step (rep → manager → admin)
 
 **Pricing & customers**
-- Promo codes / time-limited sale pricing
 - Sales-tax calculation by ship-to state
 
 **Inventory & fulfillment**

@@ -3,10 +3,11 @@ import { getAdminClient } from '@/lib/supabase'
 import { getSessionUser } from '@/lib/auth-server'
 import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation'
 import { notifyReps, notifyCustomer } from '@/lib/order-emails'
-import { applyTierDiscount, isSignedInAsOrderEmail } from '@/lib/order-rules'
+import { isSignedInAsOrderEmail } from '@/lib/order-rules'
 import { buildLineItems, insertOrder } from '@/lib/order-submission'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 import { resolveCustomerPricing } from '@/lib/customer-pricing'
+import { loadPromotion, priceWithPromotion } from '@/lib/promotions'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,12 +113,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (discountPct > 0) {
-      for (const li of lineItems) {
-        if (overriddenProductIds.has(li.product_id)) continue
-        li.line_total_cents = applyTierDiscount(li.line_total_cents, discountPct)
+    // ── 2d. Tier/customer pricing, then an optional promo code ───────────────
+    // lib/promotions.ts: per line the better of the tier price and the promo
+    // price, never stacked; hand-priced (rep override) lines are left alone.
+    // An unknown / expired / used-up code is refused so the buyer isn't
+    // surprised; a valid code that saves nothing here is simply not applied.
+    let promo: { id: string; code: string } | null = null
+    let eligible: Set<string> | null = null
+    let promoArg: Parameters<typeof priceWithPromotion>[1]['promo'] = null
+    const rawPromo = (body as { promoCode?: unknown })?.promoCode
+    if (typeof rawPromo === 'string' && rawPromo.trim()) {
+      const loaded = await loadPromotion(db, rawPromo, lineItems.map((li) => li.product_id))
+      if (!loaded.promotion) {
+        return NextResponse.json({ error: `${loaded.reason} Remove the code to place your order.` }, { status: 400 })
       }
+      promo = { id: loaded.promotion.id, code: loaded.promotion.code }
+      promoArg = loaded.promotion
+      eligible = loaded.eligible
     }
+    const pricing = priceWithPromotion(
+      lineItems.map((li) => ({ product_id: li.product_id, base_total_cents: li.line_total_cents, overridden: overriddenProductIds.has(li.product_id) })),
+      { tierPct: discountPct, promo: promoArg, eligible: eligible ? (id) => eligible!.has(id) : undefined },
+    )
+    lineItems.forEach((li, i) => {
+      li.line_total_cents = pricing.totals[i]
+    })
+    const promoApplied = !!promo && pricing.applied
 
     const subtotalCents = lineItems.reduce((sum, li) => sum + li.line_total_cents, 0)
 
@@ -125,6 +146,19 @@ export async function POST(request: NextRequest) {
     const minErr = validateOrderMinimum(subtotalCents)
     if (minErr) {
       return NextResponse.json({ error: minErr.error }, { status: minErr.status })
+    }
+
+    // Take one use of the code atomically (usage cap). Given back below if the
+    // order insert fails.
+    if (promoApplied) {
+      const { data: claimed, error: claimErr } = await db.rpc('claim_promotion_use', { p_id: promo!.id })
+      if (claimErr) {
+        console.error('[orders] promo claim failed:', claimErr.message)
+        return NextResponse.json({ error: 'Could not apply the promo code. Please try again.' }, { status: 500 })
+      }
+      if (!claimed) {
+        return NextResponse.json({ error: `${promo!.code} has reached its limit. Remove the code to place your order.` }, { status: 400 })
+      }
     }
 
     // ── 4. Atomically insert order + items via RPC (Django atomic() pattern) ─
@@ -137,6 +171,18 @@ export async function POST(request: NextRequest) {
       appliedTierCode,
       appliedTierDiscountPercent: appliedTierCode ? discountPct : null,
     })
+    if (!inserted.ok && promoApplied) {
+      await db.rpc('release_promotion_use', { p_id: promo!.id })
+    }
+    if (inserted.ok && promoApplied) {
+      // Recorded after the insert (insert_order's RPC signature is unchanged).
+      // Best-effort: the prices are already final either way.
+      const { error: promoErr } = await db
+        .from('order_requests')
+        .update({ promo_code: promo!.code, promo_discount_cents: pricing.promoDiscountCents })
+        .eq('id', inserted.orderId)
+      if (promoErr) console.error('[orders] could not record promo on order:', promoErr.message)
+    }
     if (!inserted.ok) {
       return NextResponse.json({ error: inserted.error }, { status: inserted.status })
     }

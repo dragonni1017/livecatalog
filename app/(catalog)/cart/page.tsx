@@ -303,7 +303,39 @@ export default function CartPage() {
     setContact({ ...contact, shipAddress1: a.address1, shipAddress2: a.address2 ?? '', shipCity: a.city, shipState: a.state, shipZip: a.zip })
   }
 
-  const belowMinimum = !meetsOrderMinimum(subtotalCents)
+  // ── Promo code (lib/promotions.ts) ─────────────────────────────────────────
+  // Checked with its own reprice call that includes hand-priced rep lines
+  // (flagged), reading only the promo result so item prices stay untouched.
+  // The order route re-checks and recomputes everything server-side.
+  const [promoInput, setPromoInput] = useState('')
+  const [promoCode, setPromoCode] = useState<string | null>(null)
+  const [promo, setPromo] = useState<{ code: string; applied: boolean; discountCents: number; percentOff?: number; reason?: string } | null>(null)
+  const promoKey = items.map((i) => `${i.productId}:${i.qty}:${i.isCustomPrice ? 1 : 0}`).join('|')
+  useEffect(() => {
+    if (!promoCode || !hydrated) return
+    let cancelled = false
+    fetch('/api/cart/reprice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        promoCode,
+        items: items.map((i) => ({ productId: i.productId, qty: i.qty, customPrice: !!i.isCustomPrice })),
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.promo) setPromo(data.promo)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- promoKey captures the items that matter
+  }, [promoCode, promoKey, hydrated])
+  const promoDiscount = promo?.applied ? promo.discountCents : 0
+  const estimatedTotal = subtotalCents - promoDiscount
+
+  const belowMinimum = !meetsOrderMinimum(estimatedTotal)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -338,6 +370,8 @@ export default function CartPage() {
             ...(i.isCustomPrice ? { unitPriceOverrideCents: i.priceCents } : {}),
           })),
           contact: { ...contact, notes: finalNotes || undefined },
+          // Only a code that applies is sent; one that saves nothing is left off.
+          ...(promo?.applied ? { promoCode: promo.code } : {}),
         }),
       })
       const data = await res.json()
@@ -374,6 +408,9 @@ export default function CartPage() {
         /* localStorage unavailable */
       }
       clear()
+      setPromoCode(null)
+      setPromo(null)
+      setPromoInput('')
       setConfirmed({ referenceCode: data.referenceCode })
       track({ type: 'quote_submitted' })
     } catch (err) {
@@ -531,9 +568,69 @@ export default function CartPage() {
         {/* Checkout form + summary */}
         <div className="lg:col-span-1">
           <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-600">Subtotal</span>
-              <span className="text-lg font-bold text-gray-900">{formatPrice(subtotalCents)}</span>
+              <span className={promoDiscount ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(subtotalCents)}</span>
+            </div>
+            {promoDiscount > 0 && promo && (
+              <>
+                <div className="mb-1 flex items-center justify-between text-sm text-green-700">
+                  <span>
+                    Promo {promo.code}
+                    {promo.percentOff ? ` (${promo.percentOff}% off eligible items)` : ''}
+                  </span>
+                  <span className="ml-2 whitespace-nowrap">−{formatPrice(promoDiscount)}</span>
+                </div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Estimated total</span>
+                  <span className="text-lg font-bold text-gray-900">{formatPrice(estimatedTotal)}</span>
+                </div>
+              </>
+            )}
+            <div className="mb-4">
+              {promoCode ? (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className={promo?.applied ? 'text-green-700' : 'text-amber-700'}>
+                    {promo ? (promo.applied ? `${promo.code} applied` : promo.reason ?? `${promo.code} doesn't apply`) : `Checking ${promoCode}…`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPromoCode(null)
+                      setPromo(null)
+                      setPromoInput('')
+                    }}
+                    className="text-gray-500 underline hover:text-gray-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (promoInput.trim()) setPromoCode(promoInput.trim().toUpperCase())
+                      }
+                    }}
+                    placeholder="Promo code"
+                    maxLength={32}
+                    aria-label="Promo code"
+                    className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm uppercase placeholder:normal-case"
+                  />
+                  <button
+                    type="button"
+                    disabled={!promoInput.trim()}
+                    onClick={() => setPromoCode(promoInput.trim().toUpperCase())}
+                    className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:border-gray-400 disabled:opacity-50"
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
             </div>
             <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
               <svg className="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -685,7 +782,7 @@ export default function CartPage() {
             {belowMinimum && (
               <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Minimum order is {formatPrice(MIN_ORDER_SUBTOTAL_CENTS)}. Add{' '}
-                {formatPrice(MIN_ORDER_SUBTOTAL_CENTS - subtotalCents)} more to submit.
+                {formatPrice(MIN_ORDER_SUBTOTAL_CENTS - estimatedTotal)} more to submit.
               </p>
             )}
 
