@@ -1,6 +1,6 @@
 ---
 name: project-dependency-security-20261016
-description: 2026-10-16 npm audit 18 -> 6 (critical 0, production 1); next 16.2.6->16.3.8 (pinned), nodemailer 9->10.0.16; what's left and why: xlsx (no npm fix, decision pending) and an unfixable dev-only braces chain
+description: 2026-10-16 npm audit 18 -> 5 (0 critical, PRODUCTION 0): next 16.3.8 pinned, nodemailer 10.0.16, xlsx -> SheetJS 0.20.3 from cdn.sheetjs.com; only an unfixable dev-only braces chain remains
 type: project
 ---
 
@@ -20,13 +20,22 @@ type: project
 - **Next 16.3 writes an "agent rules" block into CLAUDE.md** whenever
   `next dev` detects an AI agent. It's turned off with `agentRules: false` in
   `next.config.ts`, and verified to stay off.
+- **`xlsx` 0.18.5 → SheetJS 0.20.3 from `cdn.sheetjs.com`** (same day, by
+  user decision). It fixes prototype pollution and ReDoS. npm stopped at
+  0.18.5, so **never `npm install xlsx` by name**: that pulls the vulnerable
+  version back. The lockfile pins the tarball's integrity.
+  - Regression check: I parsed all 135 local spreadsheets (315 sheets, 923k
+    cells) with 0.18.5 and 0.20.3 in the app's three parse modes. 131 were
+    identical.
+  - 3 CSV logs differ because **0.20 turns ISO timestamps in a CSV into
+    Excel date numbers by default**. `{ raw: true }` keeps the text, and the
+    scripts that read CSVs already pass it. App uploads accept `.xlsx`/`.xls`
+    only (the picker and drag-and-drop both check).
+  - 1 sheet differs only by `\r\n` → `\n` inside cells.
+  - `tests/xlsx.test.ts` pins the version, the app's round trip and the CSV
+    behaviour. Its hostile-header test also passes on 0.18.5, so it isn't a
+    CVE reproduction. The advisories need crafted files.
 - **Still open:**
-  - `xlsx` 0.18.5 (high: prototype pollution, ReDoS). SheetJS stopped
-    publishing to npm, and the fix (0.20.3) is only on cdn.sheetjs.com.
-    Server code only *writes* xlsx. *Parsing* happens in admin browsers on
-    uploaded supplier/import sheets (`ReceivingUpload`, `NewProductsPanel`,
-    `ExcelDropzone`) and in `scripts/`. Switching the dependency source is
-    the user's call.
   - `braces` ≤ 3.0.3 via `eslint-config-next` → `fast-glob` → `micromatch`.
     No fixed version exists (3.0.3 is the latest). It's dev-only lint tooling
     that globs our own files, so there's nothing to exploit. npm's suggested
