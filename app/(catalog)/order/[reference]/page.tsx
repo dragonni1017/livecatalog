@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import { resolveCdnImage } from '@/lib/image'
 import ReorderButton from '@/components/catalog/ReorderButton'
+import PrintButton from '@/components/admin/PrintButton'
 
 function formatPrice(cents: number): string {
   return '$' + (cents / 100).toFixed(2)
@@ -98,7 +99,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
   const { data: order } = await db
     .from('order_requests')
     .select(
-      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id',
+      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id, ship_address1, ship_address2, ship_city, ship_state, ship_zip',
     )
     .eq('reference_code', reference.toUpperCase())
     .single()
@@ -134,12 +135,28 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
     qty: item.qty,
   }))
 
+  const shipTo = order.ship_address1
+    ? [
+        order.ship_address1,
+        order.ship_address2,
+        [order.ship_city, [order.ship_state, order.ship_zip].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+      ].filter(Boolean)
+    : []
+
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl print:max-w-none">
+      <style>{'@page { size: letter; margin: 0.5in; }'}</style>
+
+      {/* Print-only letterhead: the on-screen chrome (back link, buttons, reply form) is hidden in print. */}
+      <div className="mb-4 hidden border-b-2 border-gray-900 pb-2 print:block">
+        <p className="text-lg font-bold">L &amp; Y USA — Quote request</p>
+        <p className="text-xs text-gray-600">626-552-4120 · www.ly-usa.com · Quote request; prices are confirmed by our team at fulfillment.</p>
+      </div>
+
       {/* Back link */}
       <Link
         href="/"
-        className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 print:hidden"
       >
         <svg
           className="h-4 w-4"
@@ -159,9 +176,12 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
       </Link>
 
       {/* Heading */}
-      <h1 className="mb-4 text-2xl font-bold text-gray-900">
-        Order {order.reference_code}
-      </h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">Order {order.reference_code}</h1>
+        <div className="print:hidden">
+          <PrintButton />
+        </div>
+      </div>
 
       {/* Status + date */}
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -184,6 +204,41 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
             Placed {formatDate(order.created_at)}
           </span>
         </div>
+      </div>
+
+      {/* Order details */}
+      <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-white p-5 text-sm shadow-sm sm:grid-cols-2 print:shadow-none">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Customer</p>
+          <p className="mt-1 text-gray-900">{order.customer_name}</p>
+          {order.customer_company && <p className="text-gray-700">{order.customer_company}</p>}
+          <p className="text-gray-600">{order.customer_email}</p>
+          {order.customer_phone && <p className="text-gray-600">{order.customer_phone}</p>}
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ship to</p>
+          {shipTo.length ? (
+            shipTo.map((line, i) => (
+              <p key={i} className={i === 0 ? 'mt-1 text-gray-900' : 'text-gray-700'}>
+                {line}
+              </p>
+            ))
+          ) : (
+            <p className="mt-1 text-gray-500">—</p>
+          )}
+        </div>
+        {order.po_number && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">PO number</p>
+            <p className="mt-1 font-mono text-gray-900">{order.po_number}</p>
+          </div>
+        )}
+        {order.notes && (
+          <div className="sm:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Notes</p>
+            <p className="mt-1 whitespace-pre-wrap text-gray-700">{order.notes}</p>
+          </div>
+        )}
       </div>
 
       {/* Items table */}
@@ -240,7 +295,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
       </div>
 
       {/* Reorder */}
-      <div className="mt-6">
+      <div className="mt-6 print:hidden">
         <ReorderButton items={reorderItems} />
         <p className="mt-2 text-xs text-gray-500">
           Prices are confirmed by our team at time of fulfillment.
@@ -248,9 +303,11 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
       </div>
 
       {/* Customer reply */}
-      <OrderReplyForm reference={order.reference_code} token={token ?? null} customerName={order.customer_name} />
+      <div className="print:hidden">
+        <OrderReplyForm reference={order.reference_code} token={token ?? null} customerName={order.customer_name} />
+      </div>
 
-      <p className="mt-4 text-center text-xs text-gray-400">
+      <p className="mt-4 text-center text-xs text-gray-400 print:hidden">
         <Link href="/my-orders" className="hover:text-gray-600 underline">
           View all your orders →
         </Link>

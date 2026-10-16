@@ -6,6 +6,7 @@ import { ilikeExact } from '@/lib/order-access'
 import { formatPrice } from '@/lib/cart-context'
 import type { OrderStatus } from '@/lib/types'
 import { getSessionUser } from '@/lib/auth-server'
+import ReorderButton from '@/components/catalog/ReorderButton'
 
 
 function statusBadge(status: OrderStatus) {
@@ -63,6 +64,7 @@ export default async function MyOrdersPage() {
     subtotal_cents: number
     created_at: string
   }> | null = null
+  const itemsByOrder = new Map<string, { productId: string | null; sku: string; name: string; priceCents: number; qty: number }[]>()
 
   if (trimmedEmail) {
     const db = getAdminClient()
@@ -73,6 +75,20 @@ export default async function MyOrdersPage() {
       .order('created_at', { ascending: false })
       .limit(50)
     orders = data ?? []
+
+    // Line items for every listed order in one query, for the per-row Reorder.
+    const ids = orders.map((o) => o.id)
+    if (ids.length) {
+      const { data: items } = await db
+        .from('order_items')
+        .select('order_id, product_id, sku, name, unit_price_cents, qty')
+        .in('order_id', ids)
+      for (const it of (items ?? []) as { order_id: string; product_id: string | null; sku: string; name: string; unit_price_cents: number; qty: number }[]) {
+        const list = itemsByOrder.get(it.order_id) ?? []
+        list.push({ productId: it.product_id, sku: it.sku, name: it.name, priceCents: it.unit_price_cents, qty: it.qty })
+        itemsByOrder.set(it.order_id, list)
+      }
+    }
   }
 
   return (
@@ -141,6 +157,7 @@ export default async function MyOrdersPage() {
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3"><span className="sr-only">Reorder</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -163,13 +180,16 @@ export default async function MyOrdersPage() {
                         <td className="px-4 py-3 text-right font-medium text-gray-900">
                           {formatPrice(o.subtotal_cents)}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <ReorderButton items={itemsByOrder.get(o.id) ?? []} variant="compact" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="mt-3 text-xs text-gray-400">
-                Click a reference number to view full order details and reorder.
+                Click a reference number for full details, shipping and a printable copy. Reorder adds that order&apos;s items to your cart at today&apos;s prices.
               </p>
             </>
           )}

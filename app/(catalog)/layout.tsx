@@ -19,7 +19,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
     <FavoritesProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Sticky top nav */}
-      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm print:hidden">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 lg:px-8">
           {/* L&Y USA logo */}
           <Link href="/" className="group shrink-0">
