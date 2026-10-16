@@ -171,6 +171,8 @@ async function fetchErplyCrmApiUrl() {
 // same caution as project-erply-customer-tiers.md's "How to apply" note.
 // Endpoint shape assumed to mirror the confirmed POST/PATCH
 // /v1/customers/groups calls; not yet verified against a live GET.
+// Kept as reference for the CRM groups endpoint (see note above); not called.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchErplyGroups(sessionKey) {
   const crmApiUrl = await fetchErplyCrmApiUrl()
   // Per wiki.erply.com/article/1321-crm-customer-api: send both clientCode

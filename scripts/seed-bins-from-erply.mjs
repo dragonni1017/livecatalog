@@ -203,6 +203,8 @@ async function main() {
   // runs. Same trap as backfill-product-measurements.mjs.
   let updated = 0
   for (const u of updates) {
+    // `changed` is pulled out on purpose so it is NOT sent as a column.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, changed, ...fields } = u
     const { error } = await supabase
       .from('bins')

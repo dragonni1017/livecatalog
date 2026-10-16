@@ -144,7 +144,6 @@ function appendResults(rows) {
 
 async function main() {
   console.log('Loading active Supabase products missing image_url...')
-  const missing = [] // { sku, ids: [] }
   const bySkuIds = new Map()
   const PAGE = 1000
   for (let from = 0; ; from += PAGE) {
