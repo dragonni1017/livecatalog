@@ -233,7 +233,7 @@ interface Job { sku: string; file: string; row?: Record<string, unknown>; plan?:
 const IMG = /\.(jpe?g|png|webp)$/i
 let jobs: Job[] = []
 let sheetFile: string | null = null
-let sheetWb: any = null
+let sheetWb: import('xlsx').WorkBook | null = null
 let sheetRows: Record<string, unknown>[] = []
 let sheetHeader: string[] = []
 
@@ -245,8 +245,9 @@ if (DIR) {
   sheetFile = newest(/^qb-product-fill-in-\d{8}\.xlsx$/)
   const planFile = newest(/^qb-product-create-plan-\d{8}\.csv$/)
   if (!sheetFile || !planFile) { console.error('No fill sheet / plan CSV in data/. Run build-qb-product-fill-sheet.ts first, or pass --dir=.'); process.exit(1) }
-  sheetWb = XLSX.readFile(sheetFile)
-  sheetRows = XLSX.utils.sheet_to_json(sheetWb.Sheets['Fill In'], { defval: '' })
+  const wb: import('xlsx').WorkBook = XLSX.readFile(sheetFile)
+  sheetWb = wb
+  sheetRows = XLSX.utils.sheet_to_json(wb.Sheets['Fill In'], { defval: '' })
   sheetHeader = Object.keys(sheetRows[0] ?? {})
   const planWb = XLSX.readFile(planFile, { raw: true })
   const plan: Record<string, string>[] = XLSX.utils.sheet_to_json(planWb.Sheets[planWb.SheetNames[0]], { defval: '', raw: true })
