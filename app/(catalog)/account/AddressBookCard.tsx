@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { AddressInput, CustomerAddress } from '@/lib/customer-addresses'
+import StateSelect from '@/components/catalog/StateSelect'
 
 const EMPTY: AddressInput = { label: '', address1: '', address2: '', city: '', state: '', zip: '' }
 
@@ -127,7 +128,18 @@ export default function AddressBookCard({ initial }: { initial: CustomerAddress[
           {field('address2', 'Suite / unit', { max: 200 })}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {field('city', 'City', { required: true, max: 100 })}
-            {field('state', 'State', { required: true, max: 50 })}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600" htmlFor="addr-state">
+                State *
+              </label>
+              <StateSelect
+                id="addr-state"
+                value={form.state ?? ''}
+                onChange={(v) => setForm({ ...form, state: v })}
+                required
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
             {field('zip', 'ZIP', { required: true, max: 20 })}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -7,6 +7,8 @@ import { resolveCdnImage } from '@/lib/image'
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
 import { track } from '@/lib/track'
 import { addressSummary, sameAddress, type AddressInput, type CustomerAddress } from '@/lib/customer-addresses'
+import { normalizeUsState } from '@/lib/us-states'
+import StateSelect from '@/components/catalog/StateSelect'
 import type { CartItem, CheckoutContact } from '@/lib/types'
 
 interface SavedContact {
@@ -239,7 +241,8 @@ export default function CartPage() {
         if (saved.ship_address1) { next.shipAddress1 = saved.ship_address1; didPrefill = true }
         if (saved.ship_address2) { next.shipAddress2 = saved.ship_address2; didPrefill = true }
         if (saved.ship_city) { next.shipCity = saved.ship_city; didPrefill = true }
-        if (saved.ship_state) { next.shipState = saved.ship_state; didPrefill = true }
+        // Older saved contacts may hold free text ("Texas"); keep the code.
+        if (saved.ship_state) { next.shipState = normalizeUsState(saved.ship_state) ?? saved.ship_state; didPrefill = true }
         if (saved.ship_zip) { next.shipZip = saved.ship_zip; didPrefill = true }
         return next
       })
@@ -617,7 +620,10 @@ export default function CartPage() {
               />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Field label="City *" value={contact.shipCity ?? ''} onChange={(v) => setContact({ ...contact, shipCity: v })} required />
-                <Field label="State *" value={contact.shipState ?? ''} onChange={(v) => setContact({ ...contact, shipState: v })} required />
+                <div>
+                  <label htmlFor="shipState" className="mb-1 block text-xs font-medium text-gray-600">State *</label>
+                  <StateSelect id="shipState" value={contact.shipState ?? ''} onChange={(v) => setContact({ ...contact, shipState: v })} required />
+                </div>
                 <Field label="ZIP *" value={contact.shipZip ?? ''} onChange={(v) => setContact({ ...contact, shipZip: v })} required />
               </div>
               {canSaveAddress && (
