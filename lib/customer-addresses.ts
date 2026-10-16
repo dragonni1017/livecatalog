@@ -1,3 +1,5 @@
+import { normalizeUsState } from '@/lib/us-states'
+
 // Ship-to address book (migration 0058). Shared by /api/account/addresses,
 // the /account card and the cart's "Ship to" picker.
 
@@ -41,6 +43,11 @@ export function parseAddress(body: Record<string, unknown>): { address: AddressI
     const value = address[key as keyof AddressInput]
     if (value && value.length > max) return { error: `${key} is too long (max ${max} characters).` }
   }
+  // Saved addresses are always a two-letter code (the form uses a state
+  // picker); "Texas" / "tx" are accepted and stored as "TX".
+  const state = normalizeUsState(address.state)
+  if (!state) return { error: 'Choose a US state.' }
+  address.state = state
   return { address }
 }
 

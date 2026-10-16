@@ -1,5 +1,6 @@
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS, formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
+import { normalizeUsState } from '@/lib/us-states'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -38,6 +39,11 @@ export function validateOrderInput(body: unknown): OrderInputResult {
   ) {
     return { ok: false, error: 'A shipping address (street, city, state, ZIP) is required.', status: 400 }
   }
+  // Store the two-letter code ("Texas", "tx" → "TX") so orders, QuickBooks
+  // ship-to and any future tax rule agree. Lenient on purpose: an unknown
+  // value is kept as typed rather than blocking the quote.
+  const state = normalizeUsState(contact.shipState)
+  if (state) contact.shipState = state
 
   const items = rawItems
     .filter((i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0)

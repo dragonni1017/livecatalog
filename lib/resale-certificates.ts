@@ -36,12 +36,8 @@ export const RESALE_CERT_TYPES: Record<string, string> = {
   png: 'image/png',
 }
 
-export const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA',
-  'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM',
-  'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA',
-  'WV', 'WI', 'WY', 'PR',
-] as const
+// One shared list (lib/us-states.ts), so certificates and ship-to agree.
+export { US_STATES } from '@/lib/us-states'
 
 /** Today in YYYY-MM-DD (UTC), for comparing against expires_on. */
 export function todayIso(): string {
