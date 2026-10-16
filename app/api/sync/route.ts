@@ -24,6 +24,21 @@ import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/prod
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
 import { recordSyncRun } from '@/lib/sync-runs'
+import { checkCertificateReminders } from '@/lib/cert-reminders'
+
+/**
+ * Resale-certificate expiry emails (lib/cert-reminders.ts). Never throws; any
+ * failed send is reported as an `error` so the run is recorded as partial.
+ */
+async function runCertReminders(db: Parameters<typeof checkCertificateReminders>[0]): Promise<Record<string, unknown>> {
+  try {
+    const r = await checkCertificateReminders(db)
+    return r.failed ? { ...r, error: `${r.failed} certificate email(s) failed to send` } : { ...r }
+  } catch (err) {
+    console.error('[sync] certificate reminders failed (non-fatal):', err)
+    return { error: String(err) }
+  }
+}
 
 // Default Vercel function timeout (10s) isn't enough for the batched
 // adjust_stock() calls a full-catalog stock sync makes (see
@@ -71,11 +86,12 @@ export async function GET(request: NextRequest) {
     }
     try {
       const { getAdminClient } = await import('@/lib/supabase')
+      const certReminders = await runCertReminders(getAdminClient())
       await recordSyncRun(getAdminClient(), {
         source: 'cron',
         startedAt: Date.now(),
         skippedReason: 'Erply not configured',
-        details: { lowStock, abandonedCarts },
+        details: { lowStock, abandonedCarts, certReminders },
       })
     } catch {
       // history is best-effort
@@ -164,10 +180,11 @@ export async function GET(request: NextRequest) {
       console.error('[sync] abandoned-cart check failed (non-fatal):', err)
       abandonedCarts = { error: String(err) }
     }
+    const certReminders = await runCertReminders(db)
 
     const elapsed = Date.now() - startedAt
     console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length} stockSync:${JSON.stringify(stockSync)}`)
-    await recordSyncRun(db, { source: 'cron', startedAt, result, details: { stockSync, lowStock, abandonedCarts } })
+    await recordSyncRun(db, { source: 'cron', startedAt, result, details: { stockSync, lowStock, abandonedCarts, certReminders } })
 
     return NextResponse.json({
       ok: true,
@@ -175,6 +192,7 @@ export async function GET(request: NextRequest) {
       durationMs: elapsed,
       lowStock,
       abandonedCarts,
+      certReminders,
       stockSync,
       ...result,
     })

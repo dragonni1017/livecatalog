@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**117 items completed** (110 shipped-feature bullets + 7 checked-off backlog/design items).
+**118 items completed** (111 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -74,6 +74,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ QR scan tracking (2026-10-16): line-card QR links carry `?src=qr`; the product page tags that view `source=qr` (migration 0062) and cleans the URL; `/admin/analytics` shows scans, scanners and their add-to-cart / cart / quote follow-through
 - ✅ Rep dashboard (2026-10-16): `/rep/quotes` (a rep's own quotes, this-month / open / converted totals) and `/admin/reps` rebuilt (one row per rep account, date range, open-quote value, last quote, unlinked legacy names listed apart); shared rule in `lib/rep-attribution.ts`
 - ✅ Customer order portal additions (2026-10-16): order page shows customer, ship-to, PO and notes plus a Print / Save as PDF quote layout (site chrome hidden in print); per-order Reorder on `/my-orders`
+- ✅ Resale certificate expiry emails (2026-10-16): nightly, once per certificate — a reminder at ≤30 days and an expired notice within 30 days of expiry; stamped only after a successful send; shown on `/admin/resale-certificates` and in sync run history (migration 0063)
 - ✅ Import page — drag-and-drop Excel, diff preview, one-click confirm
 - ✅ Import history log (`/admin/imports`)
 - ✅ Sync page — manual Erply sync trigger + status (`/admin/sync`)

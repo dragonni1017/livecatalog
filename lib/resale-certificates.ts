@@ -23,6 +23,9 @@ export interface ResaleCertificate {
   reviewed_at: string | null
   replaced_at: string | null
   created_at: string
+  /** Expiry emails (migration 0063, lib/cert-reminders.ts). */
+  reminder_sent_at?: string | null
+  expired_notice_sent_at?: string | null
 }
 
 /** Extension → content type. The bucket enforces the same list server-side. */
