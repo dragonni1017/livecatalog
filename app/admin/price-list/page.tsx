@@ -1,6 +1,8 @@
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { getAdminClient, supabase } from '@/lib/supabase'
 import PrintButton from '@/components/admin/PrintButton'
+import { applyTierDiscount } from '@/lib/order-rules'
+import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
 import type { Category, Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -10,14 +12,17 @@ function formatPrice(cents: number): string {
 }
 
 interface PriceListPageProps {
-  searchParams: Promise<{ category?: string }>
+  searchParams: Promise<{ category?: string; price?: string }>
 }
 
 // Printable wholesale price list grouped by category. Back-office tool: print or
 // Save-as-PDF to email/hand to reps and customers. Optional ?category=<slug>
-// narrows it to one category.
+// narrows it to one category; ?price= prices it for a tier or a customer
+// (lib/price-scope.ts), using the same per-unit math as an order.
 export default async function PriceListPage({ searchParams }: PriceListPageProps) {
-  const { category } = await searchParams
+  const { category, price } = await searchParams
+  const adminDb = getAdminClient()
+  const [priceScope, priceOptions] = await Promise.all([resolvePriceScope(adminDb, price), loadPriceOptions(adminDb)])
 
   const { data: catData } = await supabase.from('categories').select('*').order('display_order')
   const categories = (catData ?? []) as Category[]
@@ -32,6 +37,8 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
       .select('*, category:categories!products_category_id_fkey(*)')
       .eq('is_active', true)
       .eq('manually_hidden', false)
+      // A $0 product has no price yet; it never belongs on a price sheet.
+      .gt('price_cents', 0)
     if (activeCat) q = q.eq('category_id', activeCat.id)
     const { data, error } = await q.order('name').range(from, from + PAGE - 1)
     if (error) break
@@ -70,6 +77,27 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
                 </option>
               ))}
             </select>
+            <select
+              name="price"
+              defaultValue={price ?? ''}
+              className="ml-2 max-w-[16rem] rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm"
+            >
+              <option value="">Catalog price</option>
+              {priceOptions.tiers.length > 0 && (
+                <optgroup label="Price tier">
+                  {priceOptions.tiers.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              {priceOptions.customers.length > 0 && (
+                <optgroup label="Customer">
+                  {priceOptions.customers.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
             <button type="submit" className="ml-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
               Apply
             </button>
@@ -87,6 +115,9 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
         <p className="text-sm text-gray-600">
           626-552-4120 · www.ly-usa.com{activeCat ? ` · ${activeCat.name}` : ''} · {products.length} items
         </p>
+        <p className="text-xs text-gray-500">
+          {priceScope.label ? `Prices for ${priceScope.label}` : 'Catalog prices'} · per unit, subject to change
+        </p>
       </header>
 
       {groupNames.map((name) => (
@@ -100,7 +131,7 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
                 <tr key={p.id} className="border-b border-gray-100">
                   <td className="py-1.5 pr-3 font-mono text-xs text-gray-500 align-top whitespace-nowrap">{p.sku}</td>
                   <td className="py-1.5 pr-3">{p.name}</td>
-                  <td className="py-1.5 text-right font-semibold whitespace-nowrap">{formatPrice(p.price_cents)}</td>
+                  <td className="py-1.5 text-right font-semibold whitespace-nowrap">{formatPrice(applyTierDiscount(p.price_cents, priceScope.discountPct))}</td>
                 </tr>
               ))}
             </tbody>
