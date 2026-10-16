@@ -3,6 +3,7 @@ import { getAdminClient } from '@/lib/supabase'
 import { resolveCdnImage } from '@/lib/image'
 import PrintButton from '@/components/admin/PrintButton'
 import type { Category } from '@/lib/types'
+import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/lib/line-card'
 
 // Printable product line card: a photo grid for reps and trade shows, saved
 // with the browser's "Save as PDF" like /admin/price-list. Shared by
@@ -15,7 +16,6 @@ import type { Category } from '@/lib/types'
 export type LineCardParams = Record<string, string | string[] | undefined>
 
 const PAGE = 1000 // PostgREST's default max rows per request
-const MAX_SKUS = 300
 const IMAGE_WIDTH = 400 // ~2x a 4-across card at print size
 
 interface CardProduct {
@@ -39,29 +39,6 @@ function all(v: string | string[] | undefined): string[] {
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
-}
-
-/** "Floral Paper Burgundy - 20/pk 60bx/cs cs.60" → name + pack spec. */
-export function splitPackSpec(name: string): { title: string; spec: string | null } {
-  const i = name.lastIndexOf(' - ')
-  if (i > 0) {
-    const spec = name.slice(i + 3).trim()
-    if (/\/pk|bx\/cs|\bcs\.\d/i.test(spec)) return { title: name.slice(0, i).trim(), spec }
-  }
-  return { title: name, spec: null }
-}
-
-export function parseSkuList(raw: string): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const s of raw.split(/[\s,;]+/)) {
-    const sku = s.trim()
-    if (sku && !seen.has(sku.toUpperCase())) {
-      seen.add(sku.toUpperCase())
-      out.push(sku)
-    }
-  }
-  return out.slice(0, MAX_SKUS)
 }
 
 const SELECT = 'id, sku, name, price_cents, stock_qty, image_url, image_urls, category_id'

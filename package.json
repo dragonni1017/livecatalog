@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e-live.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

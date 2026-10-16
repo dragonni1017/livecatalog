@@ -7,6 +7,10 @@ quote-request ordering flow; admin keys approved orders into QuickBooks Desktop.
 
 - xlsx import/export already uses the `xlsx` npm package — reuse it, don't
   reach for a different library or re-derive parsing logic.
+- Tests: `npm test` (vitest, offline unit tests in `tests/`) runs in CI with
+  typecheck + lint on every PR. `E2E_LIVE=1 npm run test:e2e` is the opt-in
+  live check against the real Supabase project (needs a dev server on :3456).
+  Add to these instead of writing throwaway check scripts.
 
 ## Never read these in full as text (generated/binary/large)
 

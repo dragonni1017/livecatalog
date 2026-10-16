@@ -1,0 +1,47 @@
+# Typecheck, unit tests and lint on every PR and every push to main.
+#
+# Needs no secrets: the vitest suite in tests/ is offline unit tests (env is
+# stubbed per test, nothing touches Supabase). The live end-to-end checks are
+# a separate, opt-in `npm run test:e2e` that never runs here, because it
+# creates and deletes throwaway accounts on the production project.
+#
+# `next build` isn't run: it needs the Supabase env vars, and Vercel already
+# builds every PR as a preview deployment.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+
+      - name: Unit tests
+        run: npm test
+
+      # Errors fail the job; warnings (unused vars in one-off scripts) don't.
+      - name: Lint
+        run: npm run lint

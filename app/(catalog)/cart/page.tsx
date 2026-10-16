@@ -82,7 +82,6 @@ export default function CartPage() {
         setContact((c) => ({ ...c, notes: draft.notes }))
       }
       if (draft.requiredShipDate) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRequiredShipDate(draft.requiredShipDate)
       }
     } catch {
@@ -198,22 +197,26 @@ export default function CartPage() {
   // "Placed by (rep)" is a dropdown of real rep accounts, not free text —
   // fetch the list once. Public/unauthenticated endpoint, same as the
   // ?rep= link and "CC sales rep" field already expose rep emails.
+  //
+  // A ?rep= link (or a saved value from a prior order) only pre-selects the
+  // dropdown if it exactly matches a real, currently active rep — otherwise
+  // it's cleared rather than silently submitting an unlisted value. Done in
+  // the fetch callback (it always resolves after the mount-time prefill below
+  // has run), not in an effect keyed on `reps`, which would set state
+  // synchronously inside an effect.
   useEffect(() => {
     fetch('/api/reps')
       .then((res) => res.json())
-      .then((data) => setReps(Array.isArray(data.reps) ? data.reps : []))
+      .then((data) => {
+        const list: string[] = Array.isArray(data.reps) ? data.reps : []
+        setReps(list)
+        if (list.length === 0) return
+        setContact((c) =>
+          c.placedByRep && !list.includes(c.placedByRep) ? { ...c, placedByRep: '' } : c,
+        )
+      })
       .catch(() => {})
   }, [])
-
-  // A ?rep= link (or a saved value from a prior order) only pre-selects the
-  // dropdown if it exactly matches a real, currently active rep — otherwise
-  // it's cleared rather than silently submitting an unlisted value.
-  useEffect(() => {
-    if (reps.length === 0) return
-    setContact((c) =>
-      c.placedByRep && !reps.includes(c.placedByRep) ? { ...c, placedByRep: '' } : c,
-    )
-  }, [reps])
 
   // Prefill the rep from a per-rep link: a ?rep= visit is stashed in
   // localStorage by RepCapture, so it survives navigation to the cart.
