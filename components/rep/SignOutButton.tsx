@@ -12,6 +12,8 @@ export default function SignOutButton() {
     try {
       await fetch('/api/rep/auth?action=logout', { cache: 'no-store' })
     } finally {
+      // Deliberately a full reload, not router.push (see above).
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = '/rep/login'
     }
   }
