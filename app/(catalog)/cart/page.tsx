@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useCart, formatPrice } from '@/lib/cart-context'
 import { resolveCdnImage } from '@/lib/image'
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
+import { track } from '@/lib/track'
 import type { CartItem, CheckoutContact } from '@/lib/types'
 
 interface SavedContact {
@@ -53,6 +54,21 @@ export default function CartPage() {
       /* localStorage unavailable */
     }
   }, [])
+
+  // Funnel step "opened cart": once per browser session, and only with
+  // something in it, since an empty cart isn't a step toward a quote.
+  const cartViewTracked = useRef(false)
+  useEffect(() => {
+    if (!hydrated || items.length === 0 || cartViewTracked.current) return
+    cartViewTracked.current = true
+    try {
+      if (sessionStorage.getItem('tracked_cart_view')) return
+      sessionStorage.setItem('tracked_cart_view', '1')
+    } catch {
+      // sessionStorage unavailable — still track, just without dedupe.
+    }
+    track({ type: 'cart_view' })
+  }, [hydrated, items.length])
 
   // Restore any in-progress notes / ship-by date from a previous visit this
   // order, same one-time-hydration pattern as the cart itself (lib/cart-context).
@@ -291,6 +307,7 @@ export default function CartPage() {
       }
       clear()
       setConfirmed({ referenceCode: data.referenceCode })
+      track({ type: 'quote_submitted' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {

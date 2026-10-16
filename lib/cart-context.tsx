@@ -17,8 +17,16 @@ import {
   useState,
 } from 'react'
 import type { CartItem } from './types'
+import { track } from './track'
 
 const STORAGE_KEY = 'livecatalog_cart_v1'
+
+// Reorder, CSV upload and loading a draft call addItem once per line, so a
+// 40-line reorder would send 40 events and trip /api/track's 60/min limit.
+// The funnel only needs "this visitor added something", so a burst within
+// this window sends one event.
+const ADD_TRACK_WINDOW_MS = 5_000
+let lastAddTrackedAt = 0
 
 interface CartContextValue {
   items: CartItem[]
@@ -80,6 +88,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback((item: Omit<CartItem, 'qty'>, qty = 1) => {
     if (qty <= 0) return
+    const now = Date.now()
+    if (now - lastAddTrackedAt > ADD_TRACK_WINDOW_MS) {
+      lastAddTrackedAt = now
+      track({ type: 'add_to_cart' })
+    }
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === item.productId)
       if (existing) {
