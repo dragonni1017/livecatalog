@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**104 items completed** (97 shipped-feature bullets + 7 checked-off backlog/design items).
+**105 items completed** (98 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -83,6 +83,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Product view tracking (`/api/track` — fires on every product detail page load)
 - ✅ Search term tracking (fires on debounced search input)
 - ✅ Orders tracked in `order_requests` + `order_items` tables
+- ✅ Visitor funnel on `/admin/analytics` (2026-10-16, #117): visited → added to cart → opened cart → submitted quote, as distinct anonymous visitors per period. Tracking started 2026-10-16 (migration 0056, `lib/track.ts`), so there is no earlier funnel data
 
 ### Infrastructure
 - ✅ Vercel deployment with auto-deploy on push
