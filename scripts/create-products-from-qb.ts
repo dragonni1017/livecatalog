@@ -367,7 +367,6 @@ console.log(`${qbAll.length} QuickBooks items in qb_item_directory`)
 const products = await selectAll<{ sku: string; name: string; category_id: string | null }>('products', 'sku, name, category_id')
 const catalogBySku = new Map(products.map((p) => [p.sku.trim().toUpperCase(), p]))
 const categories = await selectAll<{ id: string; name: string }>('categories', 'id, name')
-const catIdByName = new Map(categories.map((c) => [c.name.toLowerCase(), c]))
 console.log(`${products.length} catalog products, ${categories.length} categories`)
 
 const erplyList = await erplyAll()

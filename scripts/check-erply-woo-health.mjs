@@ -139,10 +139,8 @@ async function main() {
 
   console.log('\n--- 2. Erply image API access ---')
   const sample = products.slice(0, Math.min(2, products.length))
-  let anyImages = false
   for (const p of sample) {
     const has = Array.isArray(p.images) && p.images.length > 0
-    if (has) anyImages = true
     console.log(`  ${p.code ?? p.productID}: images field ${p.images === undefined ? 'ABSENT' : has ? `present (${p.images.length})` : 'present but empty'}`)
   }
   // Widen the check across the full sample so a spot-check pair that happens

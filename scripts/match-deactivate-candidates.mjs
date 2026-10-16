@@ -134,7 +134,6 @@ async function main() {
   const erplyCodes = await getAllErplyActiveCodes()
   console.log(`  ${erplyCodes.length} active Erply codes`)
 
-  const erplyCodeSet = new Set(erplyCodes.map((c) => c.toUpperCase()))
   const erplyNoHyphenSet = new Map() // normalized-no-hyphen -> original code
   for (const c of erplyCodes) erplyNoHyphenSet.set(normalizeNoHyphen(c), c)
 
@@ -147,7 +146,6 @@ async function main() {
 
   const results = candidates.map((row) => {
     const sku = row.sku
-    const skuUpper = sku.toUpperCase()
     const skuBase = baseCode(sku).toUpperCase()
 
     const hyphenMatch = erplyNoHyphenSet.get(normalizeNoHyphen(sku))

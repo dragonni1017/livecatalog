@@ -5,10 +5,8 @@
 import fs from 'fs'
 import path from 'path'
 import https from 'https'
-import { fileURLToPath } from 'url'
 import { config } from 'dotenv'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = 'C:\\Users\\Dragon\\Downloads\\livecatalog\\livecatalog'
 config({ path: path.join(ROOT, '.env.local') })
 
