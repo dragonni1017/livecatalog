@@ -91,7 +91,11 @@ export default function ResaleCertificateTable({ initialCertificates }: { initia
                   <span className="font-medium">{c.state}</span>{' '}
                   <span className="font-mono">{c.permit_number}</span>
                 </td>
-                <td className="px-4 py-3">{c.expires_on ? formatDate(c.expires_on) : 'No expiry'}</td>
+                <td className="px-4 py-3">
+                  {c.expires_on ? formatDate(c.expires_on) : 'No expiry'}
+                  {c.reminder_sent_at && <div className="text-xs text-gray-400">Reminder sent {formatDate(c.reminder_sent_at)}</div>}
+                  {c.expired_notice_sent_at && <div className="text-xs text-gray-400">Expired notice sent {formatDate(c.expired_notice_sent_at)}</div>}
+                </td>
                 <td className="px-4 py-3">{formatDate(c.created_at)}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${certStatusClasses(c)}`}>

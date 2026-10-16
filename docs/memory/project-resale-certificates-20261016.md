@@ -33,3 +33,15 @@ handled over email outside the app.
 `resale_certificates`: the files carry tax IDs. Before wiring status into
 pricing or QuickBooks, treat it like the deferred net-terms wiring and ask
 first.
+
+**Expiry emails (later 2026-10-16, migration 0063).** `lib/cert-reminders.ts`
+runs in the nightly `/api/sync` (both paths). It sends a **reminder** once at
+≤30 days before `expires_on` (LA date), and an **expired notice** once, only
+within 30 days after expiry, so certificates that expired before this
+shipped get no surprise mail. It skips rejected, replaced and undated
+certificates, and caps at 50 per run. `reminder_sent_at` and
+`expired_notice_sent_at` are stamped **only after a successful send**, so a
+failure retries the next night and marks the sync run `partial`. A new
+upload is a new row, so the cycle restarts. It only emails when
+`isSmtpConfigured()`. The live check used a fake sender, so no real email
+was sent.
