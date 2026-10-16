@@ -5,6 +5,7 @@ import OrderStatusControls from '@/components/admin/OrderStatusControls'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
+import { certStatusClasses, certStatusLabel, type ResaleCertificate } from '@/lib/resale-certificates'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,17 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
   } catch (err) {
     console.warn('[AdminOrderDetail] customers table not available yet:', err)
   }
+
+  // The customer's active resale certificate, matched by order email (0057).
+  const { data: certData } = await db
+    .from('resale_certificates')
+    .select('id, state, permit_number, expires_on, status')
+    .eq('email', order.customer_email.toLowerCase())
+    .is('replaced_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const cert = certData as Pick<ResaleCertificate, 'id' | 'state' | 'permit_number' | 'expires_on' | 'status'> | null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -199,6 +211,33 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
                 </span>
               ) : (
                 '—'
+              )}
+            </dd>
+            <dt className="text-gray-500">Resale cert</dt>
+            <dd className="col-span-2 text-gray-900">
+              {cert ? (
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  <span>
+                    {cert.state} <span className="font-mono">{cert.permit_number}</span>
+                    {cert.expires_on ? `, expires ${cert.expires_on}` : ''}
+                  </span>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${certStatusClasses(cert)}`}>
+                    {certStatusLabel(cert)}
+                  </span>
+                  <a
+                    href={`/admin/api/resale-certificates/${cert.id}/file`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-red-600 hover:text-red-700 underline"
+                  >
+                    View
+                  </a>
+                  {order.ship_state && order.ship_state.trim().toUpperCase() !== cert.state && (
+                    <span className="text-xs text-amber-700">Ships to {order.ship_state}, not {cert.state}</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-gray-500">None on file</span>
               )}
             </dd>
             <dt className="text-gray-500">PO number</dt>
