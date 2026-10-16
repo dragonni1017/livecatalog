@@ -10,6 +10,14 @@ export function productUrl(productId: string): string {
   return `${SITE}/product/${encodeURIComponent(productId)}`
 }
 
+/** Query marker on line-card QR links; the product page tags its view event with it (TrackView). */
+export const QR_SOURCE = 'qr'
+
+/** What a printed line-card QR code links to: the product page, tagged as a QR scan. */
+export function qrProductUrl(productId: string): string {
+  return `${productUrl(productId)}?src=${QR_SOURCE}`
+}
+
 /**
  * One "M x y h1 v1 h-1 z" square per dark module, in a size×size grid with no
  * quiet zone (the caller leaves white space around it). Error correction M

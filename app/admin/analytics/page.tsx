@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
+import { summarizeFunnel, type FunnelEvent, type FunnelStep, type QrSummary } from '@/lib/funnel'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,34 +51,26 @@ function topCounts<K extends string>(keys: (K | null)[], limit: number): { key: 
 const FUNNEL_PAGE = 1000 // PostgREST's default max rows per request
 const FUNNEL_ROW_CAP = 200_000
 
-interface FunnelRow {
-  visitor_id: string
-  type: string
-}
-
-interface FunnelStep {
-  label: string
-  visitors: number
-}
+const NO_QR: QrSummary = { scans: 0, visitors: 0, addedToCart: 0, openedCart: 0, submittedQuote: 0 }
 
 async function loadFunnel(
   db: ReturnType<typeof getAdminClient>,
   since: string | null,
-): Promise<{ steps: FunnelStep[]; trackingSince: string | null; truncated: boolean; error: boolean }> {
-  const rows: FunnelRow[] = []
+): Promise<{ steps: FunnelStep[]; qr: QrSummary; trackingSince: string | null; truncated: boolean; error: boolean }> {
+  const rows: FunnelEvent[] = []
   let truncated = false
   for (let from = 0; ; from += FUNNEL_PAGE) {
     let q = db
       .from('analytics_events')
-      .select('visitor_id, type')
+      .select('visitor_id, type, source')
       .not('visitor_id', 'is', null)
       .order('id', { ascending: true })
       .range(from, from + FUNNEL_PAGE - 1)
     if (since) q = q.gte('created_at', since)
     const { data, error } = await q
-    // Before 0056 the column doesn't exist and this errors; report "not set up".
-    if (error) return { steps: [], trackingSince: null, truncated: false, error: true }
-    rows.push(...((data ?? []) as FunnelRow[]))
+    // Before 0056/0062 a column doesn't exist and this errors; report "not set up".
+    if (error) return { steps: [], qr: NO_QR, trackingSince: null, truncated: false, error: true }
+    rows.push(...((data ?? []) as FunnelEvent[]))
     if (!data || data.length < FUNNEL_PAGE) break
     if (rows.length >= FUNNEL_ROW_CAP) {
       truncated = true
@@ -92,27 +85,10 @@ async function loadFunnel(
     .order('created_at', { ascending: true })
     .limit(1)
 
-  const all = new Set<string>()
-  const byType = new Map<string, Set<string>>()
-  for (const r of rows) {
-    all.add(r.visitor_id)
-    let s = byType.get(r.type)
-    if (!s) byType.set(r.type, (s = new Set()))
-    s.add(r.visitor_id)
-  }
-  const count = (t: string) => byType.get(t)?.size ?? 0
-
+  const { steps, qr } = summarizeFunnel(rows)
   return {
-    // Step 1 is every tracked visitor, not only those who viewed or searched,
-    // so someone who went straight to Quick Order still counts as a visitor.
-    // Later steps are each counted on their own, not as a strict subset of
-    // the step before (a reorder skips "added to cart" via the product page).
-    steps: [
-      { label: 'Visited (viewed, searched or used the cart)', visitors: all.size },
-      { label: 'Added to cart', visitors: count('add_to_cart') },
-      { label: 'Opened cart', visitors: count('cart_view') },
-      { label: 'Submitted a quote', visitors: count('quote_submitted') },
-    ],
+    steps,
+    qr,
     trackingSince: (first?.[0] as { created_at: string } | undefined)?.created_at ?? null,
     truncated,
     error: false,
@@ -499,6 +475,25 @@ export default async function AdminAnalyticsPage({
               (includes rep-placed orders and any made before tracking started).
               {funnel.truncated && ' Showing the first 200,000 events only.'}
             </p>
+          )}
+          {!funnel.error && (
+            <div className="border-t border-gray-100 px-4 py-3" data-qr-summary>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">From printed line cards (QR)</p>
+              {funnel.qr.scans === 0 ? (
+                <p className="mt-1 text-sm text-gray-500">
+                  No QR scans in this period. Line cards printed with &quot;QR codes&quot; on link here.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-700">
+                  <span className="font-semibold text-gray-900">{funnel.qr.scans.toLocaleString()}</span> scan{funnel.qr.scans === 1 ? '' : 's'} by{' '}
+                  <span className="font-semibold text-gray-900">{funnel.qr.visitors.toLocaleString()}</span> visitor{funnel.qr.visitors === 1 ? '' : 's'}
+                  {' · '}
+                  {funnel.qr.addedToCart} added to cart · {funnel.qr.openedCart} opened cart ·{' '}
+                  <span className="font-semibold text-gray-900">{funnel.qr.submittedQuote}</span> submitted a quote
+                  <span className="text-gray-400"> ({pct(funnel.qr.submittedQuote, funnel.qr.visitors)} of scanners)</span>
+                </p>
+              )}
+            </div>
           )}
         </section>
 

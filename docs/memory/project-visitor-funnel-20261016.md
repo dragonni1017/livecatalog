@@ -34,3 +34,19 @@ with no cart signal and no way to link one visitor's events.
 **How to apply:** after a migration the user reports running, verify it in
 the live project before merging code that depends on it. See
 [[project-api-route-auth-audit-20261001]] for the track route's rate limit.
+
+**QR scan tracking (later 2026-10-16, migration 0062 `analytics_events.source`).**
+Line-card QR codes link to `/product/<id>?src=qr` (`lib/qr.ts qrProductUrl`).
+`TrackView` sends that view with `source: 'qr'`, then strips `src` from the
+address bar so a copied link doesn't count as a scan. `/api/track`
+whitelists sources (only `qr`; anything else is stored as null).
+`lib/funnel.ts summarizeFunnel` (pure, tested) feeds the "From printed line
+cards (QR)" row on /admin/analytics.
+- **Bug caught in a real browser:** one scan logged **two** views (`qr` +
+  untagged). The effect re-ran on the cleaned URL (React's dev
+  double-invoke, or any remount). Fixed by also setting the plain
+  `tracked_view:<id>` session key when a scan is recorded. Re-verified in
+  Chrome: one scan gives exactly one `qr` event. Unit tests can't see this
+  (no DOM env in vitest), so re-check in a browser if TrackView changes.
+- 0062 was applied BEFORE the code that writes `source`, since a missing
+  column fails all tracking silently.

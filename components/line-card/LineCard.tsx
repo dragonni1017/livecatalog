@@ -6,7 +6,7 @@ import type { Category } from '@/lib/types'
 import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/lib/line-card'
 import { applyTierDiscount } from '@/lib/order-rules'
 import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
-import { productUrl, qrPath } from '@/lib/qr'
+import { qrProductUrl, qrPath } from '@/lib/qr'
 import { loadCollectionProductIds } from '@/lib/collections'
 
 // Printable product line card: a photo grid for reps and trade shows, saved
@@ -49,7 +49,7 @@ function formatPrice(cents: number): string {
 
 /** Scannable link to the product page; ~0.5in square when printed. */
 function ProductQr({ productId }: { productId: string }) {
-  const url = productUrl(productId)
+  const url = qrProductUrl(productId) // tagged ?src=qr so scans show on /admin/analytics
   const { size, d } = qrPath(url)
   return (
     <svg

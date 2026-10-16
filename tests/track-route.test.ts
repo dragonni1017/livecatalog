@@ -75,3 +75,34 @@ describe('/api/track', () => {
     expect(results[60]).toEqual({ ok: true, skipped: true })
   })
 })
+
+// ── What actually gets inserted (non-mock mode, DB stubbed) ──────────────────
+describe('/api/track insert payload', () => {
+  it('stores a known source and drops anything else', async () => {
+    const inserted: Record<string, unknown>[] = []
+    vi.resetModules()
+    vi.doMock('../lib/supabase', () => ({
+      getAdminClient: () => ({
+        from: () => ({
+          insert: async (row: Record<string, unknown>) => {
+            inserted.push(row)
+            return { error: null }
+          },
+        }),
+      }),
+    }))
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
+    const { POST: livePost } = await import('../app/api/track/route')
+    const post = (body: unknown, ip: string) =>
+      livePost(new NextRequest('http://x/api/track', { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', 'x-forwarded-for': ip } }))
+
+    await post({ type: 'view', productId: 'prod-00001', visitorId: VID, source: 'qr' }, '198.51.100.1')
+    await post({ type: 'view', productId: 'prod-00001', visitorId: VID, source: 'email' }, '198.51.100.2')
+    await post({ type: 'view', productId: 'prod-00001', visitorId: VID, source: "qr'; drop table x" }, '198.51.100.3')
+    await post({ type: 'view', productId: 'prod-00001', visitorId: VID }, '198.51.100.4')
+
+    expect(inserted.map((r) => r.source)).toEqual(['qr', null, null, null])
+    expect(inserted[0]).toMatchObject({ type: 'view', product_id: 'prod-00001', visitor_id: VID, source: 'qr' })
+    vi.doUnmock('../lib/supabase')
+  })
+})

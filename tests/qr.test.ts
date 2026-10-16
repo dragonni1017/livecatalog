@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import jsQR from 'jsqr'
-import { productUrl, qrPath } from '../lib/qr'
+import { productUrl, qrPath, qrProductUrl } from '../lib/qr'
 
 // Decodes the exact path data the line card prints, so this proves the
 // printed code scans to the right URL, not just that an <svg> appeared.
@@ -31,15 +31,24 @@ describe('productUrl', () => {
   })
 })
 
+describe('qrProductUrl', () => {
+  it('is the product page tagged as a QR scan', () => {
+    expect(qrProductUrl('prod-00042')).toBe('https://lyusa.app/product/prod-00042?src=qr')
+  })
+})
+
 describe('qrPath', () => {
-  it('scans back to the exact product URL', () => {
+  it('scans back to the exact tagged URL the line card prints', () => {
     for (const id of ['prod-00001', 'prod-03171', 'prod-99999']) {
-      const url = productUrl(id)
+      const url = qrProductUrl(id)
       expect(decode(qrPath(url))).toBe(url)
     }
   })
+  it('an untagged product URL also decodes', () => {
+    expect(decode(qrPath(productUrl('prod-00001')))).toBe(productUrl('prod-00001'))
+  })
   it('stays a small code (≤ 33 modules) so it prints legibly at half an inch', () => {
-    expect(qrPath(productUrl('prod-00001')).size).toBeLessThanOrEqual(33)
+    expect(qrPath(qrProductUrl('prod-99999')).size).toBeLessThanOrEqual(33)
   })
   it('only emits unit squares inside the grid', () => {
     const { size, d } = qrPath(productUrl('prod-00001'))

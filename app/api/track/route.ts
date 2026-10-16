@@ -19,6 +19,9 @@ const FUNNEL_TYPES = new Set(['add_to_cart', 'cart_view', 'quote_submitted'])
 // lib/track.ts sends a UUID, or a short fallback id where crypto.randomUUID
 // is missing. Anything else is dropped to null rather than rejecting the event.
 const VISITOR_ID = /^[A-Za-z0-9-]{8,64}$/
+// Known traffic sources only (migration 0062); anything else is stored as null.
+// 'qr' = a product view opened from a printed line-card QR code (?src=qr).
+const SOURCES = new Set(['qr'])
 
 // POST /api/track — record a public analytics event (product view, search,
 // or a funnel step). Public + unauthenticated by design; inserts go through
@@ -39,6 +42,8 @@ export async function POST(request: NextRequest) {
     const visitorId = typeof body.visitorId === 'string' && VISITOR_ID.test(body.visitorId)
       ? body.visitorId
       : null
+
+    const source = typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : null
 
     let productId: string | null = null
     let term: string | null = null
@@ -79,6 +84,7 @@ export async function POST(request: NextRequest) {
       product_id: productId,
       term: insertTerm,
       visitor_id: visitorId,
+      source,
     })
     if (error) {
       // Table may not exist yet (migration 0003 not run) — swallow, never 500 the public site.
