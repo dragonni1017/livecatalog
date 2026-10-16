@@ -11,6 +11,8 @@ function formatPrice(cents: number) {
 import type { OrderStatus } from '@/lib/types'
 import LogoutButton from './LogoutButton'
 import ResaleCertificateCard, { type CustomerCertificate } from './ResaleCertificateCard'
+import AddressBookCard from './AddressBookCard'
+import { ADDRESS_FIELDS, type CustomerAddress } from '@/lib/customer-addresses'
 
 function statusBadge(status: OrderStatus) {
   switch (status) {
@@ -75,6 +77,14 @@ export default async function AccountPage() {
     .limit(1)
     .maybeSingle()
 
+  // Same scoping and order as GET /api/account/addresses.
+  const { data: addresses } = await db
+    .from('customer_addresses')
+    .select(ADDRESS_FIELDS)
+    .eq('user_id', user.id)
+    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: true })
+
   return (
     <div className="mx-auto max-w-3xl">
       {/* Back link */}
@@ -136,6 +146,8 @@ export default async function AccountPage() {
           <LogoutButton />
         </div>
       </div>
+
+      <AddressBookCard initial={(addresses ?? []) as CustomerAddress[]} />
 
       <ResaleCertificateCard initial={(certificate as CustomerCertificate | null) ?? null} />
 

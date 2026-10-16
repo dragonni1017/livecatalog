@@ -6,6 +6,7 @@ import { useCart, formatPrice } from '@/lib/cart-context'
 import { resolveCdnImage } from '@/lib/image'
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
 import { track } from '@/lib/track'
+import { addressSummary, sameAddress, type AddressInput, type CustomerAddress } from '@/lib/customer-addresses'
 import type { CartItem, CheckoutContact } from '@/lib/types'
 
 interface SavedContact {
@@ -245,6 +246,57 @@ export default function CartPage() {
     }
   }, [])
 
+  // Signed-in buyers' saved ship-to addresses (migration 0058). null = guest
+  // or not loaded, so the picker and "save" checkbox don't show. A 401 is the
+  // normal guest case, not an error.
+  const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[] | null>(null)
+  const [saveToBook, setSaveToBook] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/account/addresses')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { addresses: CustomerAddress[] } | null) => {
+        if (cancelled || !data) return
+        setSavedAddresses(data.addresses)
+        // The saved default wins over the last-order address from localStorage.
+        const def = data.addresses.find((a) => a.is_default)
+        if (def) {
+          setContact((c) => ({
+            ...c,
+            shipAddress1: def.address1,
+            shipAddress2: def.address2 ?? '',
+            shipCity: def.city,
+            shipState: def.state,
+            shipZip: def.zip,
+          }))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const typedAddress: AddressInput = {
+    label: null,
+    address1: contact.shipAddress1 ?? '',
+    address2: contact.shipAddress2 || null,
+    city: contact.shipCity ?? '',
+    state: contact.shipState ?? '',
+    zip: contact.shipZip ?? '',
+  }
+  // Which saved address the fields currently hold, if any. Derived rather than
+  // stored, so typing over a picked address simply un-selects it.
+  const matchedAddressId = savedAddresses?.find((a) => sameAddress(a, typedAddress))?.id ?? ''
+  const addressComplete = !!(typedAddress.address1.trim() && typedAddress.city.trim() && typedAddress.state.trim() && typedAddress.zip.trim())
+  const canSaveAddress = savedAddresses !== null && addressComplete && !matchedAddressId
+
+  function pickSavedAddress(id: string) {
+    const a = savedAddresses?.find((x) => x.id === id)
+    if (!a) return
+    setContact({ ...contact, shipAddress1: a.address1, shipAddress2: a.address2 ?? '', shipCity: a.city, shipState: a.state, shipZip: a.zip })
+  }
+
   const belowMinimum = !meetsOrderMinimum(subtotalCents)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -284,6 +336,16 @@ export default function CartPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.')
+      if (canSaveAddress && saveToBook) {
+        // Best-effort: the order is already in, so a failure here only means
+        // the address isn't saved for next time.
+        fetch('/api/account/addresses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(typedAddress),
+          keepalive: true,
+        }).catch(() => {})
+      }
       try {
         localStorage.setItem(LS_CONTACT_KEY, JSON.stringify({
           name: contact.name,
@@ -513,6 +575,32 @@ export default function CartPage() {
               </div>
               <Field label="CC sales rep (email)" type="email" value={contact.ccEmail ?? ''} onChange={(v) => setContact({ ...contact, ccEmail: v })} />
               <Field label="PO number" value={contact.poNumber ?? ''} onChange={(v) => setContact({ ...contact, poNumber: v })} />
+              {savedAddresses && savedAddresses.length > 0 && (
+                <div>
+                  <label htmlFor="savedAddress" className="mb-1 block text-xs font-medium text-gray-600">
+                    Ship to a saved address
+                  </label>
+                  <select
+                    id="savedAddress"
+                    value={matchedAddressId}
+                    onChange={(e) => pickSavedAddress(e.target.value)}
+                    className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  >
+                    <option value="" disabled>
+                      {addressComplete ? 'A different address (typed below)' : 'Choose an address…'}
+                    </option>
+                    {savedAddresses.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {addressSummary(a)}
+                        {a.is_default ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Manage addresses on <Link href="/account" className="underline hover:text-gray-600">your account</Link>.
+                  </p>
+                </div>
+              )}
               <Field
                 label="Ship to — address *"
                 value={contact.shipAddress1 ?? ''}
@@ -529,6 +617,17 @@ export default function CartPage() {
                 <Field label="State *" value={contact.shipState ?? ''} onChange={(v) => setContact({ ...contact, shipState: v })} required />
                 <Field label="ZIP *" value={contact.shipZip ?? ''} onChange={(v) => setContact({ ...contact, shipZip: v })} required />
               </div>
+              {canSaveAddress && (
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={saveToBook}
+                    onChange={(e) => setSaveToBook(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                  />
+                  Save this address to my address book
+                </label>
+              )}
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
                 <textarea
