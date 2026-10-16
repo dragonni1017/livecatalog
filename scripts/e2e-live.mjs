@@ -184,8 +184,8 @@ try {
   check('no QR codes unless asked', count(x.text, 'data-qr-url="') === 0)
   x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&qr=1`)
   const qrUrls = [...x.text.matchAll(/data-qr-url="([^"]+)"/g)].map((m) => m[1])
-  const expectedUrls = new Set(visible.map((p) => `https://lyusa.app/product/${p.id}`))
-  check(`qr=1 puts one QR per card, each linking to that product (${visible.length})`, qrUrls.length === visible.length && qrUrls.every((u) => expectedUrls.has(u)) && new Set(qrUrls).size === qrUrls.length, `${qrUrls.length} codes`)
+  const expectedUrls = new Set(visible.map((p) => `https://lyusa.app/product/${p.id}?src=qr`))
+  check(`qr=1 puts one QR per card, each linking to that product, tagged ?src=qr (${visible.length})`, qrUrls.length === visible.length && qrUrls.every((u) => expectedUrls.has(u)) && new Set(qrUrls).size === qrUrls.length, `${qrUrls.length} codes`)
   const sample = await fetch(qrUrls[0], { redirect: 'manual' })
   check('a QR target URL is a live page on the site', sample.status < 400, `${qrUrls[0]} -> ${sample.status}`)
 
@@ -277,6 +277,11 @@ try {
   }
   const { data: events } = await admin.from('analytics_events').select('type').eq('visitor_id', visitorId)
   check('all three funnel steps stored with the visitor id', new Set((events ?? []).map((e) => e.type)).size === 3, JSON.stringify(events))
+  const { data: someProduct } = await admin.from('products').select('id').eq('is_active', true).eq('manually_hidden', false).limit(1).single()
+  await fetch(`${HOST}/api/track`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', productId: someProduct.id, visitorId, source: 'qr' }) })
+  await fetch(`${HOST}/api/track`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', productId: someProduct.id, visitorId, source: 'billboard' }) })
+  const { data: views } = await admin.from('analytics_events').select('source').eq('visitor_id', visitorId).eq('type', 'view').order('id')
+  check('a QR scan is stored with source qr; an unknown source is dropped', JSON.stringify((views ?? []).map((v) => v.source)) === '["qr",null]', JSON.stringify(views))
 } catch (e) {
   failures++
   console.log(`\nERROR ${e.message}`)

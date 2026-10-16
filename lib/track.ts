@@ -9,7 +9,7 @@
 const VISITOR_KEY = 'lyu_vid'
 
 export type TrackEvent =
-  | { type: 'view'; productId: string }
+  | { type: 'view'; productId: string; source?: 'qr' }
   | { type: 'search'; term: string }
   | { type: 'search_no_results'; query: string }
   | { type: 'add_to_cart' }
