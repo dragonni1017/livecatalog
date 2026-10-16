@@ -10,6 +10,7 @@ function formatPrice(cents: number) {
 }
 import type { OrderStatus } from '@/lib/types'
 import LogoutButton from './LogoutButton'
+import ResaleCertificateCard, { type CustomerCertificate } from './ResaleCertificateCard'
 
 function statusBadge(status: OrderStatus) {
   switch (status) {
@@ -63,6 +64,16 @@ export default async function AccountPage() {
     .limit(20)
 
   const orderList = orders ?? []
+
+  // Same fields and scoping as GET /api/account/resale-certificate.
+  const { data: certificate } = await db
+    .from('resale_certificates')
+    .select('id, file_name, state, permit_number, expires_on, status, review_notes, created_at')
+    .eq('user_id', user.id)
+    .is('replaced_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -125,6 +136,8 @@ export default async function AccountPage() {
           <LogoutButton />
         </div>
       </div>
+
+      <ResaleCertificateCard initial={(certificate as CustomerCertificate | null) ?? null} />
 
       {/* Orders card */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

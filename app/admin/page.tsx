@@ -8,6 +8,7 @@ export default async function AdminDashboard() {
   let qbPending = 0
   let creditPending = 0
   let stagedShipments = 0
+  let certPending = 0
   try {
     const db = getAdminClient()
     const { count } = await db
@@ -24,6 +25,13 @@ export default async function AdminDashboard() {
       .select('id')
       .eq('status', 'pending')
     creditPending = creditRows?.length ?? 0
+
+    const { data: certRows } = await db
+      .from('resale_certificates')
+      .select('id')
+      .eq('status', 'pending')
+      .is('replaced_at', null)
+    certPending = certRows?.length ?? 0
 
     const { data: stagedRows } = await db
       .from('shipments')
@@ -189,6 +197,33 @@ export default async function AdminDashboard() {
               {creditPending > 0 && (
                 <p className="mt-1.5 text-xs font-medium text-amber-700">
                   {creditPending} application{creditPending !== 1 ? 's' : ''} awaiting review
+                </p>
+              )}
+            </div>
+            <svg
+              className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+
+          <Link
+            href="/admin/resale-certificates"
+            className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+          >
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                Resale Certificates
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                View and verify the resale / tax-exempt certificates customers upload
+              </p>
+              {certPending > 0 && (
+                <p className="mt-1.5 text-xs font-medium text-amber-700">
+                  {certPending} certificate{certPending !== 1 ? 's' : ''} awaiting review
                 </p>
               )}
             </div>

@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**105 items completed** (98 shipped-feature bullets + 7 checked-off backlog/design items).
+**106 items completed** (99 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -47,6 +47,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
   causes and their fixes**
 - ✅ `/account` — profile details + order history (matched by email)
 - ✅ `/account/settings` — edit profile
+- ✅ Resale / tax-exempt certificate upload on `/account` (2026-10-16): private bucket, reviewed on `/admin/resale-certificates`, badge on the admin order detail page (migration 0057)
 
 ### Admin Dashboard
 - ✅ Password-protected admin at `/admin` (single shared `ADMIN_PASSWORD` env var)
