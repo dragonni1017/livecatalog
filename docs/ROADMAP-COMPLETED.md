@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**115 items completed** (108 shipped-feature bullets + 7 checked-off backlog/design items).
+**116 items completed** (109 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -72,6 +72,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Priced line cards and price lists (2026-10-16): "Prices at" catalog / an active tier / a customer profile, on the line card (admin + rep) and `/admin/price-list`, using the same `applyTierDiscount` math as orders
 - ✅ QR codes on line cards (2026-10-16): optional `qr=1`, one vector QR per card linking to `https://lyusa.app/product/<id>`; a test decodes the printed path back to the URL
 - ✅ QR scan tracking (2026-10-16): line-card QR links carry `?src=qr`; the product page tags that view `source=qr` (migration 0062) and cleans the URL; `/admin/analytics` shows scans, scanners and their add-to-cart / cart / quote follow-through
+- ✅ Rep dashboard (2026-10-16): `/rep/quotes` (a rep's own quotes, this-month / open / converted totals) and `/admin/reps` rebuilt (one row per rep account, date range, open-quote value, last quote, unlinked legacy names listed apart); shared rule in `lib/rep-attribution.ts`
 - ✅ Import page — drag-and-drop Excel, diff preview, one-click confirm
 - ✅ Import history log (`/admin/imports`)
 - ✅ Sync page — manual Erply sync trigger + status (`/admin/sync`)
