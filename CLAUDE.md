@@ -5,8 +5,10 @@ quote-request ordering flow; admin keys approved orders into QuickBooks Desktop.
 
 ## Stack & commands
 
-- xlsx import/export already uses the `xlsx` npm package — reuse it, don't
-  reach for a different library or re-derive parsing logic.
+- xlsx import/export already uses the `xlsx` package — reuse it, don't
+  reach for a different library or re-derive parsing logic. It's SheetJS
+  0.20.3 installed from `cdn.sheetjs.com` (see package.json), NOT npm: npm
+  stopped at the vulnerable 0.18.5, so never `npm install xlsx` by name.
 - Tests: `npm test` (vitest, offline unit tests in `tests/`) runs in CI with
   typecheck + lint on every PR. `E2E_LIVE=1 npm run test:e2e` is the opt-in
   live check against the real Supabase project (needs a dev server on :3456).
