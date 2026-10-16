@@ -59,10 +59,15 @@ async function cleanupUser(id) {
   await admin.auth.admin.deleteUser(id)
 }
 
+async function cleanupCustomerProfiles() {
+  await admin.from('customers').delete().like('email', `${PREFIX}%@example.com`)
+}
+
 async function sweepLeftovers() {
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const stale = (data?.users ?? []).filter((u) => u.email?.startsWith(PREFIX) && u.email.endsWith('@example.com'))
   for (const u of stale) await cleanupUser(u.id)
+  await cleanupCustomerProfiles()
   await admin.from('analytics_events').delete().like('visitor_id', `${PREFIX}%`)
   return stale.length
 }
@@ -172,6 +177,36 @@ try {
   x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&hideprices=1`)
   check('hide prices removes every price', count(x.text, 'class="text-sm font-bold">$') === 0)
 
+  // ── Priced line cards and customer pricing ───────────────────────────────
+  section('Pricing (line card, price list, cart)')
+  // The exact function an order uses (Node runs the .ts directly).
+  const { applyTierDiscount } = await import('../lib/order-rules.ts')
+  const prices = (html) => [...html.matchAll(/class="text-sm font-bold">\$([0-9.]+)</g)].map((m) => Math.round(Number(m[1]) * 100))
+  const { data: tier } = await admin.from('price_tiers').select('code, label, discount_percent').eq('active', true).gt('discount_percent', 0).order('display_order').limit(1).single()
+  const catalogPrices = prices((await rep.call('GET', `/rep/line-card?cat=${cat.slug}`)).text)
+  x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&price=tier:${tier.code}`)
+  const tierPrices = prices(x.text)
+  check(
+    `${tier.label} tier card = applyTierDiscount(catalog, ${Number(tier.discount_percent)}) on every product`,
+    tierPrices.length === catalogPrices.length && tierPrices.length > 0 && tierPrices.every((p, i) => p === applyTierDiscount(catalogPrices[i], Number(tier.discount_percent))),
+    `${tierPrices.length} vs ${catalogPrices.length}`,
+  )
+  check('the header says what it is priced at', x.text.includes(`Prices for ${tier.label} tier`))
+  x = await rep.call('GET', `/rep/line-card?cat=${cat.slug}&price=tier:not_a_tier`)
+  check('an unknown tier falls back to catalog price', JSON.stringify(prices(x.text)) === JSON.stringify(catalogPrices))
+
+  // A customer profile with a FLAT discount: the cart preview, the priced line
+  // card and the order rule must all agree (the cart used to ignore it).
+  const { data: prof, error: profErr } = await admin.from('customers').insert({ email: a.email, name: 'E2E Flat', discount_percent: 15 }).select('id').single()
+  if (profErr) throw profErr
+  const { data: product } = await admin.from('products').select('id, price_cents').eq('category_id', cat.id).eq('is_active', true).eq('manually_hidden', false).gt('price_cents', 0).is('volume_tiers', null).limit(1).single()
+  x = await a.call('POST', '/api/cart/reprice', { items: [{ productId: product.id, qty: 1 }] })
+  check('cart shows a flat-discount customer their price', x.json?.prices?.[product.id] === applyTierDiscount(product.price_cents, 15), `${x.json?.prices?.[product.id]} vs ${applyTierDiscount(product.price_cents, 15)}`)
+  x = await b.call('POST', '/api/cart/reprice', { items: [{ productId: product.id, qty: 1 }] })
+  check("another customer doesn't get that discount", x.json?.prices?.[product.id] === product.price_cents)
+  x = await rep.call('GET', `/rep/line-card?skus=${encodeURIComponent((await admin.from('products').select('sku').eq('id', product.id).single()).data.sku)}&price=customer:${prof.id}`)
+  check('a customer-priced line card matches the cart', prices(x.text)[0] === applyTierDiscount(product.price_cents, 15) && x.text.includes('E2E Flat (15% off)'))
+
   // ── Funnel tracking ──────────────────────────────────────────────────────
   section('Funnel tracking')
   for (const type of ['add_to_cart', 'cart_view', 'quote_submitted']) {
@@ -184,6 +219,7 @@ try {
   console.log(`\nERROR ${e.message}`)
 } finally {
   for (const id of users) await cleanupUser(id)
+  await cleanupCustomerProfiles()
   await admin.from('analytics_events').delete().like('visitor_id', `${PREFIX}%`)
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const left = (data?.users ?? []).filter((u) => u.email?.startsWith(PREFIX)).length

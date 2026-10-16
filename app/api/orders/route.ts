@@ -6,6 +6,7 @@ import { notifyReps, notifyCustomer } from '@/lib/order-emails'
 import { applyTierDiscount, isSignedInAsOrderEmail } from '@/lib/order-rules'
 import { buildLineItems, insertOrder } from '@/lib/order-submission'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
+import { resolveCustomerPricing } from '@/lib/customer-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,27 +88,10 @@ export async function POST(request: NextRequest) {
     // switcher (2b), not the customer's email.
     const orderEmail = contact.email.trim().toLowerCase()
     if (!appliedTierCode && isSignedInAsOrderEmail(sessionUser?.email, orderEmail)) {
-      const { data: customer } = await db
-        .from('customers')
-        .select('discount_percent, price_tier_code')
-        .eq('email', orderEmail)
-        .maybeSingle()
-
-      if (customer?.price_tier_code) {
-        const { data: tier } = await db
-          .from('price_tiers')
-          .select('code, discount_percent, active')
-          .eq('code', customer.price_tier_code)
-          .maybeSingle()
-        if (tier?.active) {
-          discountPct = Number(tier.discount_percent)
-          appliedTierCode = tier.code
-        }
-      }
-
-      if (!appliedTierCode) {
-        discountPct = customer?.discount_percent ? Number(customer.discount_percent) : 0
-      }
+      // Same rule as the cart preview and priced price lists (lib/customer-pricing.ts).
+      const pricing = await resolveCustomerPricing(db, orderEmail)
+      discountPct = pricing.discountPct
+      if (pricing.tierCode) appliedTierCode = pricing.tierCode
     }
 
     // Rep-only per-line price override ("Custom price for this order" on

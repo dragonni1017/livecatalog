@@ -4,6 +4,8 @@ import { resolveCdnImage } from '@/lib/image'
 import PrintButton from '@/components/admin/PrintButton'
 import type { Category } from '@/lib/types'
 import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/lib/line-card'
+import { applyTierDiscount } from '@/lib/order-rules'
+import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
 
 // Printable product line card: a photo grid for reps and trade shows, saved
 // with the browser's "Save as PDF" like /admin/price-list. Shared by
@@ -101,7 +103,14 @@ export default async function LineCard({
   const cols = first(params.cols) === '3' ? 3 : 4
   const title = first(params.title).trim().slice(0, 80) || 'Wholesale Line Card'
 
-  const products = await loadProducts(chosenCats.map((c) => c.id), skus, inStockOnly)
+  const priceParam = first(params.price)
+  const [products, priceScope, priceOptions] = await Promise.all([
+    loadProducts(chosenCats.map((c) => c.id), skus, inStockOnly),
+    resolvePriceScope(db, priceParam),
+    loadPriceOptions(db),
+  ])
+  // Same per-unit math as an order (applyTierDiscount, quarter-rounded).
+  const unitPrice = (cents: number) => applyTierDiscount(cents, priceScope.discountPct)
   const notFound = skus.length > 0
     ? skus.filter((s) => !products.some((p) => p.sku.toUpperCase() === s.toUpperCase()))
     : []
@@ -158,6 +167,26 @@ export default async function LineCard({
               <input id="lc-title" name="title" maxLength={80} defaultValue={first(params.title)} placeholder="Wholesale Line Card" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             </div>
             <label className="flex items-center gap-2 text-sm text-gray-700">
+              Prices at
+              <select name="price" defaultValue={priceParam} className="max-w-[18rem] rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="">Catalog price</option>
+                {priceOptions.tiers.length > 0 && (
+                  <optgroup label="Price tier">
+                    {priceOptions.tiers.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {priceOptions.customers.length > 0 && (
+                  <optgroup label="Customer">
+                    {priceOptions.customers.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" name="hideprices" value="1" defaultChecked={hidePrices} className="h-4 w-4 rounded border-gray-300 text-red-600" />
               Hide prices
             </label>
@@ -203,7 +232,15 @@ export default async function LineCard({
               <h1 className="text-xl font-bold">L &amp; Y USA — {title}</h1>
               <p className="text-xs text-gray-600">626-552-4120 · www.ly-usa.com · {today}</p>
             </div>
-            <p className="text-xs text-gray-500">{total} items{hidePrices ? '' : ' · wholesale prices, subject to change'}</p>
+            <p className="text-right text-xs text-gray-500">
+              {total} items
+              {!hidePrices && (
+                <>
+                  <br />
+                  {priceScope.label ? `Prices for ${priceScope.label}` : 'Catalog prices'} · per unit, subject to change
+                </>
+              )}
+            </p>
           </header>
 
           {groups.map((g, gi) => (
@@ -231,7 +268,7 @@ export default async function LineCard({
                       {spec && <p className="mt-0.5 text-[10px] leading-snug text-gray-500">{spec}</p>}
                       <div className="mt-auto flex items-end justify-between pt-1">
                         <span className="font-mono text-[10px] text-gray-500">{p.sku}</span>
-                        {!hidePrices && <span className="text-sm font-bold">{formatPrice(p.price_cents)}</span>}
+                        {!hidePrices && <span className="text-sm font-bold">{formatPrice(unitPrice(p.price_cents))}</span>}
                       </div>
                     </div>
                   )
