@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**119 items completed** (112 shipped-feature bullets + 7 checked-off backlog/design items).
+**120 items completed** (113 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -76,6 +76,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ Customer order portal additions (2026-10-16): order page shows customer, ship-to, PO and notes plus a Print / Save as PDF quote layout (site chrome hidden in print); per-order Reorder on `/my-orders`
 - ✅ Resale certificate expiry emails (2026-10-16): nightly, once per certificate — a reminder at ≤30 days and an expired notice within 30 days of expiry; stamped only after a successful send; shown on `/admin/resale-certificates` and in sync run history (migration 0063)
 - ✅ US state picker (2026-10-16): ship-to state is a picker in the cart and address book (`lib/us-states.ts`), orders store the two-letter code, existing free-text values cleaned (Fl/Tx/Texas/Nv)
+- ✅ Promo codes (2026-10-16): `/admin/promotions` (0064); percent off with date window, collection/category scope, minimum order and usage cap; each line gets the better of the buyer's usual price and the code, never stacked (`lib/promotions.ts`); use claimed atomically before the order saves; shown on cart, order pages and the QuickBooks memo
 - ✅ Import page — drag-and-drop Excel, diff preview, one-click confirm
 - ✅ Import history log (`/admin/imports`)
 - ✅ Sync page — manual Erply sync trigger + status (`/admin/sync`)

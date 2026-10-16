@@ -149,6 +149,9 @@ export interface OrderRequest {
   rep_user_id: string | null
   applied_tier_code: string | null
   applied_tier_discount_percent: number | null
+  // Promo code used and the extra savings it gave (migration 0064, lib/promotions.ts).
+  promo_code?: string | null
+  promo_discount_cents?: number | null
   // Ship-to address — see migration 0034_order_ship_address.sql. Sent to
   // QuickBooks as the Sales Order's ShipAddress.
   ship_address1: string | null

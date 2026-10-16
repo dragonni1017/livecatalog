@@ -5,6 +5,7 @@ import { buildLineItems } from '@/lib/order-submission'
 import { applyTierDiscount } from '@/lib/order-rules'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 import { resolveCustomerPricing } from '@/lib/customer-pricing'
+import { loadPromotion, priceWithPromotion } from '@/lib/promotions'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,7 +71,37 @@ export async function POST(request: NextRequest) {
     for (const li of built.lineItems) {
       prices[li.product_id] = applyTierDiscount(li.unit_price_cents, discountPct)
     }
-    return NextResponse.json({ prices })
+
+    // Optional promo code: the same better-of rule and function as the real
+    // charge (lib/promotions.ts), reported as a separate saving so the cart's
+    // per-item prices stay as they are. `customPrice` lines (a rep's hand
+    // price) are excluded here for display; the order route re-verifies.
+    let promo: { code: string; applied: boolean; discountCents: number; percentOff?: number; reason?: string } | undefined
+    if (typeof body.promoCode === 'string' && body.promoCode.trim()) {
+      const custom = new Set(
+        (Array.isArray(body.items) ? body.items : [])
+          .filter((i: { customPrice?: unknown; productId?: unknown }) => i?.customPrice === true && typeof i.productId === 'string')
+          .map((i: { productId: string }) => i.productId),
+      )
+      const loaded = await loadPromotion(db, body.promoCode, built.lineItems.map((li) => li.product_id))
+      const code = String(body.promoCode).trim().toUpperCase()
+      if (!loaded.promotion) {
+        promo = { code, applied: false, discountCents: 0, reason: loaded.reason }
+      } else {
+        const r = priceWithPromotion(
+          built.lineItems.map((li) => ({ product_id: li.product_id, base_total_cents: li.line_total_cents, overridden: custom.has(li.product_id) })),
+          { tierPct: discountPct, promo: loaded.promotion, eligible: (id) => loaded.eligible.has(id) },
+        )
+        promo = {
+          code: loaded.promotion.code,
+          applied: r.applied,
+          discountCents: r.promoDiscountCents,
+          percentOff: Number(loaded.promotion.percent_off),
+          reason: r.reason,
+        }
+      }
+    }
+    return NextResponse.json(promo ? { prices, promo } : { prices })
   } catch (err) {
     console.error('[cart/reprice] error:', err)
     return NextResponse.json({ error: 'Reprice failed' }, { status: 500 })

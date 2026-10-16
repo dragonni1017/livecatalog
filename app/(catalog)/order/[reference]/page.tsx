@@ -99,7 +99,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
   const { data: order } = await db
     .from('order_requests')
     .select(
-      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id, ship_address1, ship_address2, ship_city, ship_state, ship_zip',
+      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id, ship_address1, ship_address2, ship_city, ship_state, ship_zip, promo_code, promo_discount_cents',
     )
     .eq('reference_code', reference.toUpperCase())
     .single()
@@ -282,6 +282,16 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
             ))}
           </tbody>
           <tfoot>
+            {order.promo_code && (
+              <tr className="border-t border-gray-200 bg-gray-50">
+                <td colSpan={5} className="px-4 pt-3 text-right text-sm text-green-700">
+                  Promo {order.promo_code} savings (included in the line totals above)
+                </td>
+                <td className="px-4 pt-3 text-right text-sm text-green-700">
+                  −{formatPrice(order.promo_discount_cents ?? 0)}
+                </td>
+              </tr>
+            )}
             <tr className="border-t border-gray-200 bg-gray-50">
               <td colSpan={5} className="px-4 py-3 text-right text-sm font-medium text-gray-600">
                 Subtotal

@@ -196,6 +196,17 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
             <dd className="col-span-2 text-gray-900">{order.customer_company || '—'}</dd>
             <dt className="text-gray-500">Placed by (rep)</dt>
             <dd className="col-span-2 text-gray-900">{order.placed_by_rep || '—'}</dd>
+            <dt className="text-gray-500">Promo code</dt>
+            <dd className="col-span-2 text-gray-900">
+              {order.promo_code ? (
+                <span>
+                  <span className="font-mono font-semibold">{order.promo_code}</span>
+                  <span className="ml-2 text-xs text-green-700">saved {formatPrice(order.promo_discount_cents ?? 0)} (already in line totals)</span>
+                </span>
+              ) : (
+                '—'
+              )}
+            </dd>
             <dt className="text-gray-500">Price tier</dt>
             <dd className="col-span-2 text-gray-900">
               {order.applied_tier_code ? (
