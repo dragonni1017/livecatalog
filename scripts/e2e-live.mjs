@@ -63,11 +63,16 @@ async function cleanupCustomerProfiles() {
   await admin.from('customers').delete().like('email', `${PREFIX}%@example.com`)
 }
 
+async function cleanupCollections() {
+  await admin.from('collections').delete().like('slug', `${PREFIX}%`) // product links cascade
+}
+
 async function sweepLeftovers() {
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const stale = (data?.users ?? []).filter((u) => u.email?.startsWith(PREFIX) && u.email.endsWith('@example.com'))
   for (const u of stale) await cleanupUser(u.id)
   await cleanupCustomerProfiles()
+  await cleanupCollections()
   await admin.from('analytics_events').delete().like('visitor_id', `${PREFIX}%`)
   return stale.length
 }
@@ -214,6 +219,47 @@ try {
   x = await rep.call('GET', `/rep/line-card?skus=${encodeURIComponent((await admin.from('products').select('sku').eq('id', product.id).single()).data.sku)}&price=customer:${prof.id}`)
   check('a customer-priced line card matches the cart', prices(x.text)[0] === applyTierDiscount(product.price_cents, 15) && x.text.includes('E2E Flat (15% off)'))
 
+  // ── Collections ──────────────────────────────────────────────────────────
+  section('Collections')
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const yesterday = new Date(Date.parse(today + 'T12:00:00Z') - 864e5).toISOString().slice(0, 10)
+  const { data: shown } = await admin.from('products').select('id, sku').eq('is_active', true).eq('manually_hidden', false).gt('price_cents', 0).order('id', { ascending: false }).limit(2)
+  const { data: hiddenP } = await admin.from('products').select('id, sku').eq('manually_hidden', true).limit(1).single()
+  const slug = `${PREFIX}${stamp}`
+  const { data: coll, error: collErr } = await admin.from('collections').insert({ slug, name: 'E2E Test Collection', description: 'e2e' }).select('id').single()
+  if (collErr) throw collErr
+  // Order: second visible, hidden, first visible. Expect the page to show [shown[1], shown[0]].
+  await admin.from('collection_products').insert([
+    { collection_id: coll.id, product_id: shown[1].id, position: 0 },
+    { collection_id: coll.id, product_id: hiddenP.id, position: 1 },
+    { collection_id: coll.id, product_id: shown[0].id, position: 2 },
+  ])
+  const page = async () => {
+    const res = await fetch(`${HOST}/collections/${slug}`)
+    return { status: res.status, html: await res.text() }
+  }
+  const firstAt = (html, id) => html.indexOf(`href="/product/${id}"`)
+  let pg = await page()
+  check('a live collection page loads for a guest', pg.status === 200 && pg.html.includes('E2E Test Collection'), `got ${pg.status}`)
+  check('it shows the visible products in the chosen order', firstAt(pg.html, shown[1].id) > -1 && firstAt(pg.html, shown[0].id) > firstAt(pg.html, shown[1].id))
+  check('a hidden product in the collection is not shown', firstAt(pg.html, hiddenP.id) === -1)
+  let home = await (await fetch(`${HOST}/`)).text()
+  check('the live collection is in the catalog menu', home.includes(`href="/collections/${slug}"`))
+  x = await rep.call('GET', `/rep/line-card?collection=${slug}`)
+  check('line card ?collection= prints its visible products', count(x.text, 'class="flex break-inside-avoid flex-col') === 2 && x.text.includes('E2E Test Collection'))
+
+  await admin.from('collections').update({ ends_on: yesterday }).eq('id', coll.id)
+  pg = await page()
+  home = await (await fetch(`${HOST}/`)).text()
+  check('after its end date it 404s and leaves the menu', pg.status === 404 && !home.includes(`href="/collections/${slug}"`), `got ${pg.status}`)
+  await admin.from('collections').update({ ends_on: null, starts_on: today }).eq('id', coll.id)
+  check('a window starting today is live', (await page()).status === 200)
+  await admin.from('collections').update({ is_active: false }).eq('id', coll.id)
+  check('switched off, it 404s', (await page()).status === 404)
+  check('an unknown or malformed slug 404s', (await fetch(`${HOST}/collections/nope-${stamp}`)).status === 404 && (await fetch(`${HOST}/collections/..%2Fadmin`)).status === 404)
+  const { data: anonColl } = await anon.from('collections').select('id')
+  check('anon key reads 0 collection rows (server-read only)', (anonColl ?? []).length === 0)
+
   // ── Funnel tracking ──────────────────────────────────────────────────────
   section('Funnel tracking')
   for (const type of ['add_to_cart', 'cart_view', 'quote_submitted']) {
@@ -227,6 +273,7 @@ try {
 } finally {
   for (const id of users) await cleanupUser(id)
   await cleanupCustomerProfiles()
+  await cleanupCollections()
   await admin.from('analytics_events').delete().like('visitor_id', `${PREFIX}%`)
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const left = (data?.users ?? []).filter((u) => u.email?.startsWith(PREFIX)).length

@@ -4,7 +4,7 @@ Split out from `docs/ROADMAP.md` on 2026-07-02.
 Companion file: `docs/ROADMAP-COMPLETED.md` (everything already shipped).
 
 **No open items in the backlog.** 3 design items awaiting design input, 2
-blocked-on-external-input items, 5 items on your side, and 14 unscoped
+blocked-on-external-input items, 5 items on your side, and 13 unscoped
 brainstorm ideas below. (The custom domain shipped as `lyusa.app`, so it moved
 to `docs/ROADMAP-COMPLETED.md` on 2026-10-01.) (Volume pricing, cross-sell, credit
 applications, and packing slips — previously listed as "Recommended Next" —
@@ -55,7 +55,6 @@ Future Brainstorm below.
 **Catalog & browsing**
 - Filter by brand / material / other product attributes (price range already shipped)
 - Product comparison (side-by-side spec view)
-- Curated/seasonal collections
 
 **Ordering & quotes**
 - Manager approval step (rep → manager → admin)

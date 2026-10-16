@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
-import { supabase } from '@/lib/supabase'
+import { getAdminClient, supabase } from '@/lib/supabase'
+import { loadLiveCollections } from '@/lib/collections'
 
 const BASE = 'https://lyusa.app'
 
@@ -15,6 +16,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { data: categories } = await supabase.from('categories').select('slug')
   for (const c of categories ?? []) {
     entries.push({ url: `${BASE}/?category=${c.slug}`, changeFrequency: 'weekly', priority: 0.6 })
+  }
+
+  // Live curated/seasonal collections (server-read only table, hence the admin client).
+  for (const c of await loadLiveCollections(getAdminClient())) {
+    entries.push({ url: `${BASE}/collections/${c.slug}`, changeFrequency: 'weekly', priority: 0.7 })
   }
 
   // Every publicly visible product. PostgREST caps a select at 1000 rows, so

@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -14,8 +15,9 @@ export default async function BestSellersPage() {
   const thirtyDaysAgo = daysAgoIso(30)
   const db = getAdminClient()
 
-  const [{ data: categories }, { data: viewEvents }] = await Promise.all([
+  const [{ data: categories }, collections, { data: viewEvents }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
+    loadLiveCollections(db),
     db
       .from('analytics_events')
       .select('product_id')
@@ -76,7 +78,7 @@ export default async function BestSellersPage() {
               </div>
             </>
           }>
-            <CategoryNav categories={categories ?? []} />
+            <CategoryNav categories={categories ?? []} collections={collections} />
           </Suspense>
         </div>
       </aside>

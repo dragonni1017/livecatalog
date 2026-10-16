@@ -7,6 +7,7 @@ import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/l
 import { applyTierDiscount } from '@/lib/order-rules'
 import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
 import { productUrl, qrPath } from '@/lib/qr'
+import { loadCollectionProductIds } from '@/lib/collections'
 
 // Printable product line card: a photo grid for reps and trade shows, saved
 // with the browser's "Save as PDF" like /admin/price-list. Shared by
@@ -16,6 +17,7 @@ import { productUrl, qrPath } from '@/lib/qr'
 // Everything comes from GET params, so a configured card is a shareable URL:
 //   cat=<slug> (repeatable) · skus=<list> · hideprices=1 · instock=1 · cols=3|4 · title=<text>
 //   price=tier:<code>|customer:<uuid> · qr=1 (QR code per card → its product page)
+//   collection=<slug> (its products in order; used when no skus are pasted)
 
 export type LineCardParams = Record<string, string | string[] | undefined>
 
@@ -118,7 +120,20 @@ export default async function LineCard({
   const catSlugs = all(params.cat)
   const chosenCats = categories.filter((c) => catSlugs.includes(c.slug))
   const skuRaw = first(params.skus)
-  const skus = parseSkuList(skuRaw)
+  const pastedSkus = parseSkuList(skuRaw)
+
+  // A collection (lib/collections.ts) is just an ordered SKU list here, so SKU
+  // mode does the rest. Any status: printing an upcoming season ahead is fine.
+  const collectionSlug = first(params.collection)
+  const { data: allCollections } = await db.from('collections').select('id, slug, name').order('display_order').order('name')
+  const collection = !pastedSkus.length ? ((allCollections ?? []) as { id: string; slug: string; name: string }[]).find((c) => c.slug === collectionSlug) ?? null : null
+  let skus = pastedSkus
+  if (collection) {
+    const ids = await loadCollectionProductIds(db, collection.id)
+    const { data: rows } = ids.length ? await db.from('products').select('id, sku').in('id', ids) : { data: [] }
+    const skuById = new Map(((rows ?? []) as { id: string; sku: string }[]).map((r) => [r.id, r.sku]))
+    skus = ids.map((id) => skuById.get(id)).filter((s): s is string => !!s)
+  }
   const hidePrices = first(params.hideprices) === '1'
   const inStockOnly = first(params.instock) === '1'
   const showQr = first(params.qr) === '1'
@@ -142,14 +157,14 @@ export default async function LineCard({
   let groups: { name: string | null; items: CardProduct[] }[]
   if (skus.length > 0) {
     const bySku = new Map(products.map((p) => [p.sku.toUpperCase(), p]))
-    groups = [{ name: null, items: skus.map((s) => bySku.get(s.toUpperCase())).filter((p): p is CardProduct => !!p) }]
+    groups = [{ name: collection?.name ?? null, items: skus.map((s) => bySku.get(s.toUpperCase())).filter((p): p is CardProduct => !!p) }]
   } else {
     groups = chosenCats
       .map((c) => ({ name: c.name, items: products.filter((p) => p.category_id === c.id) }))
       .filter((g) => g.items.length > 0)
   }
   const total = groups.reduce((n, g) => n + g.items.length, 0)
-  const hasSelection = chosenCats.length > 0 || skus.length > 0
+  const hasSelection = chosenCats.length > 0 || skus.length > 0 || !!collection
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
   return (
@@ -183,6 +198,18 @@ export default async function LineCard({
             </label>
             <textarea id="lc-skus" name="skus" rows={2} defaultValue={skuRaw} className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm" placeholder="F287957, F287984, D751067" />
           </div>
+          {(allCollections ?? []).length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Or a collection</span>
+              <select name="collection" defaultValue={collection?.slug ?? ''} className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="">—</option>
+                {((allCollections ?? []) as { slug: string; name: string }[]).map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.name}</option>
+                ))}
+              </select>
+              <span className="text-xs text-gray-400">(used when no SKUs are pasted)</span>
+            </label>
+          )}
           <div className="flex flex-wrap items-end gap-4">
             <div className="min-w-[16rem] flex-1">
               <label htmlFor="lc-title" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Title</label>
