@@ -30,3 +30,13 @@ type: reference
 wrote and deleted a throwaway live-check script for every feature.
 **How to apply:** check `tests/` before saying something is untested, and
 extend the suite or `e2e-live.mjs` instead of writing one-off checks.
+
+**Branch protection on `main` (since 2026-10-16):** the CI job `check`, from
+the GitHub Actions app (app_id 15368), must pass before anything lands on
+`main`. Direct pushes are rejected too ("Required status check "check" is
+expected"), so every change goes through a PR. `enforce_admins` is on, so the
+owner can't bypass it either. Force-push and deletion of `main` are blocked.
+There's no review requirement (one developer can't approve their own PR) and
+no "up to date" requirement, so merges don't need a rebase first. A
+`gh pr merge` fails while `check` is still pending: wait for it, then merge.
+To change the rule: `gh api repos/dragonni1017/livecatalog/branches/main/protection`.
