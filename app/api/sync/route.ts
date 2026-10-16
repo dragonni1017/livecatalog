@@ -1,14 +1,20 @@
 /**
  * GET /api/sync
  *
- * Called by Vercel Cron every 30 minutes.  Pulls the full product + inventory
- * list from Erply and upserts it into Supabase.
+ * Called by Vercel Cron once a day at 08:00 UTC (vercel.json; Hobby allows
+ * daily crons only). Live against real Erply since ~2026-09-23. Pulls the
+ * full product + inventory list from Erply and upserts it into Supabase.
  *
  * Security: requires  Authorization: Bearer {CRON_SECRET}  header.
  * Vercel Cron sends this automatically when CRON_SECRET is set in env vars.
  *
- * Stub mode: works without Erply credentials — returns demo data so the
- * cron infrastructure can be tested before Erply is configured.
+ * Without Erply credentials it skips the product sync entirely (a stub sync
+ * would deactivate the catalog) and only runs the low-stock/abandoned-cart
+ * checks.
+ *
+ * Every run (ok / partial / error / skipped) is recorded in sync_runs
+ * (lib/sync-runs.ts) and shown on /admin/sync: Hobby keeps runtime logs for
+ * one hour, so a 1 AM run's output is otherwise gone by morning.
  */
 
 import { hasBearerSecret } from '@/lib/request-auth'
@@ -17,6 +23,7 @@ import { getErplyProducts, getErplyStock, isConfigured, syncPriceCents } from '@
 import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/product-sync'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
+import { recordSyncRun } from '@/lib/sync-runs'
 
 // Default Vercel function timeout (10s) isn't enough for the batched
 // adjust_stock() calls a full-catalog stock sync makes (see
@@ -62,6 +69,17 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       console.error('[sync] low-stock check failed (non-fatal):', err)
     }
+    try {
+      const { getAdminClient } = await import('@/lib/supabase')
+      await recordSyncRun(getAdminClient(), {
+        source: 'cron',
+        startedAt: Date.now(),
+        skippedReason: 'Erply not configured',
+        details: { lowStock, abandonedCarts },
+      })
+    } catch {
+      // history is best-effort
+    }
     return NextResponse.json({
       ok: true,
       skipped: true,
@@ -73,6 +91,9 @@ export async function GET(request: NextRequest) {
   }
 
   const startedAt = Date.now()
+  // Outside the try so the failure path below can still record the run.
+  const { getAdminClient } = await import('@/lib/supabase')
+  const db = getAdminClient()
 
   try {
     // 1. Pull products from Erply
@@ -95,8 +116,6 @@ export async function GET(request: NextRequest) {
     }))
 
     // 3. Upsert into Supabase
-    const { getAdminClient } = await import('@/lib/supabase')
-    const db = getAdminClient()
     // Erply's images aren't accessible yet and its inventory reads 0 across the
     // board (see docs/ERPLY-INTEGRATION-STATUS-HANDOFF.md) — don't let a real
     // sync null out working Cloudinary images or zero out real stock counts.
@@ -148,6 +167,7 @@ export async function GET(request: NextRequest) {
 
     const elapsed = Date.now() - startedAt
     console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length} stockSync:${JSON.stringify(stockSync)}`)
+    await recordSyncRun(db, { source: 'cron', startedAt, result, details: { stockSync, lowStock, abandonedCarts } })
 
     return NextResponse.json({
       ok: true,
@@ -160,6 +180,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     console.error('[sync] Failed:', err)
+    await recordSyncRun(db, { source: 'cron', startedAt, failure: err })
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 },
