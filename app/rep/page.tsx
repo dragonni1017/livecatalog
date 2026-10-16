@@ -35,6 +35,12 @@ export default async function RepHomePage() {
               Browse catalog
             </Link>
             <Link
+              href="/rep/line-card"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Line card PDF
+            </Link>
+            <Link
               href="/rep/2fa-setup"
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >

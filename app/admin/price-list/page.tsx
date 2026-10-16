@@ -74,6 +74,9 @@ export default async function PriceListPage({ searchParams }: PriceListPageProps
               Apply
             </button>
           </form>
+          <Link href="/admin/line-card" className="text-sm text-gray-500 underline hover:text-gray-700">
+            Photo line card
+          </Link>
           <PrintButton />
         </div>
       </div>
