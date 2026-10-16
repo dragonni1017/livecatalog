@@ -7,15 +7,18 @@ import { Category } from '@/lib/types'
 interface CategoryNavProps {
   categories: Category[]
   activeSlug?: string
+  /** Live curated/seasonal collections (lib/collections.ts loadLiveCollections). */
+  collections?: { slug: string; name: string }[]
 }
 
-export default function CategoryNav({ categories, activeSlug }: CategoryNavProps) {
+export default function CategoryNav({ categories, activeSlug, collections = [] }: CategoryNavProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
 
   const isNewArrivals = pathname === '/new-arrivals'
   const isBestSellers = pathname === '/best-sellers'
+  const activeCollection = pathname.startsWith('/collections/') ? pathname.slice('/collections/'.length) : null
 
   function handleCategoryClick(slug: string | null) {
     const params = new URLSearchParams(searchParams.toString())
@@ -32,7 +35,7 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
     window.scrollTo({ top: 0 })
   }
 
-  const allActive = !activeSlug && !isNewArrivals && !isBestSellers
+  const allActive = !activeSlug && !isNewArrivals && !isBestSellers && !activeCollection
 
   return (
     <>
@@ -63,6 +66,20 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
         >
           Best Sellers
         </Link>
+
+        {collections.map((c) => (
+          <Link
+            key={c.slug}
+            href={`/collections/${c.slug}`}
+            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeCollection === c.slug
+                ? 'bg-red-600 text-white'
+                : 'bg-white text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-600'
+            }`}
+          >
+            {c.name}
+          </Link>
+        ))}
 
         <button
           onClick={() => handleCategoryClick(null)}
@@ -116,6 +133,20 @@ export default function CategoryNav({ categories, activeSlug }: CategoryNavProps
         >
           Best Sellers
         </Link>
+
+        {collections.map((c) => (
+          <Link
+            key={c.slug}
+            href={`/collections/${c.slug}`}
+            className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+              activeCollection === c.slug
+                ? 'bg-red-50 text-red-700'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+          >
+            {c.name}
+          </Link>
+        ))}
 
         <button
           onClick={() => handleCategoryClick(null)}

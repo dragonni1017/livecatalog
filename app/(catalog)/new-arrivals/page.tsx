@@ -3,6 +3,7 @@ import { supabase, getAdminClient } from '@/lib/supabase'
 import { latestArrivalBySku, NEW_ARRIVAL_DAYS, newArrivalsSinceMs, type ShipmentLineRow, type ShipmentRow } from '@/lib/new-arrivals'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -29,8 +30,9 @@ export default async function NewArrivalsPage() {
   const arrivedAt = latestArrivalBySku((shipments ?? []) as ShipmentRow[], (lines ?? []) as ShipmentLineRow[], sinceMs)
   const skus = [...arrivedAt.keys()].slice(0, 500)
 
-  const [{ data: categories }, { data }] = await Promise.all([
+  const [{ data: categories }, collections, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
+    loadLiveCollections(db),
     skus.length
       ? supabase
           .from('products')
@@ -71,7 +73,7 @@ export default async function NewArrivalsPage() {
               </div>
             </>
           }>
-            <CategoryNav categories={categories ?? []} />
+            <CategoryNav categories={categories ?? []} collections={collections} />
           </Suspense>
         </div>
       </aside>

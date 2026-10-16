@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { getAdminClient, supabase } from '@/lib/supabase'
+import { loadLiveCollections } from '@/lib/collections'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import CatalogControls from '@/components/catalog/CatalogControls'
@@ -49,7 +50,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
   const pageStart = (currentPage - 1) * pageSize
 
-  const { data: categoriesData } = await supabase.from('categories').select('*').order('name')
+  const [{ data: categoriesData }, collections] = await Promise.all([
+    supabase.from('categories').select('*').order('name'),
+    loadLiveCollections(getAdminClient()),
+  ])
   const categories = (categoriesData ?? []) as Category[]
 
   // Build product query
@@ -179,7 +183,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
               </div>
             </>
           }>
-            <CategoryNav categories={categories} activeSlug={activeCategory} />
+            <CategoryNav categories={categories} activeSlug={activeCategory} collections={collections} />
           </Suspense>
         </div>
       </aside>
