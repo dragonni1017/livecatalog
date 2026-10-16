@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**107 items completed** (100 shipped-feature bullets + 7 checked-off backlog/design items).
+**108 items completed** (101 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -65,6 +65,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ QuickBooks "entered" toggle per order (manual QB Desktop workflow)
 - ✅ Sales rep attribution + PO number fields on orders
 - ✅ Printable wholesale price list (`/admin/price-list`) — filterable by category
+- ✅ Photo line card (`/admin/line-card`, `/rep/line-card`, 2026-10-16): printable photo grid by categories or a pasted SKU list, prices on/off, in-stock only, 3 or 4 per row, custom title; saved with the browser's Save as PDF; only visible, priced products
 - ✅ Import page — drag-and-drop Excel, diff preview, one-click confirm
 - ✅ Import history log (`/admin/imports`)
 - ✅ Sync page — manual Erply sync trigger + status (`/admin/sync`)
