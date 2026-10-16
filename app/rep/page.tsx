@@ -35,6 +35,12 @@ export default async function RepHomePage() {
               Browse catalog
             </Link>
             <Link
+              href="/rep/quotes"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              My quotes
+            </Link>
+            <Link
               href="/rep/line-card"
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
