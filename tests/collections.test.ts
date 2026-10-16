@@ -1,6 +1,46 @@
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { isLive, notLiveReason, parseCollectionInput, slugify, todayPacific } from '../lib/collections'
+import { buildStripCards, isLive, notLiveReason, parseCollectionInput, slugify, todayPacific } from '../lib/collections'
+
+describe('buildStripCards', () => {
+  const cols = [
+    { id: 'c1', slug: 'valentine', name: 'Valentine', cover_image_url: null },
+    { id: 'c2', slug: 'graduation', name: 'Graduation', cover_image_url: 'https://img/cover.jpg' },
+    { id: 'c3', slug: 'empty', name: 'All hidden', cover_image_url: null },
+  ]
+  const links = [
+    { collection_id: 'c1', product_id: 'p3', position: 2 },
+    { collection_id: 'c1', product_id: 'p1', position: 0 },
+    { collection_id: 'c1', product_id: 'hidden', position: 1 },
+    { collection_id: 'c1', product_id: 'p4', position: 3 },
+    { collection_id: 'c1', product_id: 'p5', position: 4 },
+    { collection_id: 'c1', product_id: 'p6', position: 5 },
+    { collection_id: 'c2', product_id: 'p1', position: 0 },
+    { collection_id: 'c3', product_id: 'hidden', position: 0 },
+  ]
+  const visible = [
+    { id: 'p1', image_url: 'https://img/1.jpg' },
+    { id: 'p3', image_url: 'https://img/3.jpg' },
+    { id: 'p4', image_url: null },
+    { id: 'p5', image_url: 'https://img/5.jpg' },
+    { id: 'p6', image_url: 'https://img/6.jpg' },
+  ]
+  const cards = buildStripCards(cols, links, visible)
+
+  it('keeps collection order and skips one with no visible products', () => {
+    expect(cards.map((c) => c.slug)).toEqual(['valentine', 'graduation'])
+  })
+  it('counts only visible products', () => {
+    expect(cards[0].productCount).toBe(5)
+  })
+  it('mosaic uses the first photos by position, skips missing images, max 4', () => {
+    expect(cards[0].mosaic).toEqual(['https://img/1.jpg', 'https://img/3.jpg', 'https://img/5.jpg', 'https://img/6.jpg'])
+  })
+  it('passes the cover through when set', () => {
+    expect(cards[1].cover).toBe('https://img/cover.jpg')
+    expect(cards[0].cover).toBeNull()
+  })
+})
 
 describe('todayPacific', () => {
   it('uses the Los Angeles date, not UTC', () => {
@@ -45,7 +85,9 @@ describe('slugify', () => {
 describe('parseCollectionInput', () => {
   it('derives the slug from the name and defaults to active', () => {
     const r = parseCollectionInput({ name: 'Graduation' })
-    expect(r).toEqual({ value: { slug: 'graduation', name: 'Graduation', description: null, is_active: true, starts_on: null, ends_on: null, display_order: 0 } })
+    expect(r).toEqual({
+      value: { slug: 'graduation', name: 'Graduation', description: null, is_active: true, starts_on: null, ends_on: null, display_order: 0, cover_image_url: null },
+    })
   })
   it('rejects bad input', () => {
     expect(parseCollectionInput({})).toHaveProperty('error')
@@ -55,6 +97,15 @@ describe('parseCollectionInput', () => {
     expect(parseCollectionInput({ name: 'A', starts_on: '2027-02-14', ends_on: '2027-02-01' })).toHaveProperty('error')
     expect(parseCollectionInput({ name: 'A', starts_on: 'Feb 1' })).toHaveProperty('error')
     expect(parseCollectionInput({ name: 'A', display_order: 1.5 })).toHaveProperty('error')
+  })
+  it('accepts only an https cover image link', () => {
+    const ok = parseCollectionInput({ name: 'A', cover_image_url: ' https://x.supabase.co/storage/v1/object/public/product-images/a.jpg ' })
+    expect('value' in ok && ok.value.cover_image_url).toBe('https://x.supabase.co/storage/v1/object/public/product-images/a.jpg')
+    for (const bad of ['http://x/a.jpg', 'javascript:alert(1)', 'https://x/a.jpg" onerror="x', '//x/a.jpg', `https://x/${'a'.repeat(1000)}`]) {
+      expect(parseCollectionInput({ name: 'A', cover_image_url: bad }), bad).toHaveProperty('error')
+    }
+    const none = parseCollectionInput({ name: 'A', cover_image_url: '' })
+    expect('value' in none && none.value.cover_image_url).toBeNull()
   })
   it('treats empty dates as open-ended', () => {
     const r = parseCollectionInput({ name: 'A', starts_on: '', ends_on: '' })

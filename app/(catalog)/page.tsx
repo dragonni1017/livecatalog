@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { getAdminClient, supabase } from '@/lib/supabase'
-import { loadLiveCollections } from '@/lib/collections'
+import { loadCollectionStrip, loadLiveCollections } from '@/lib/collections'
+import CollectionStrip from '@/components/catalog/CollectionStrip'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import CatalogControls from '@/components/catalog/CatalogControls'
@@ -50,9 +51,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const currentPage = Math.max(1, parseInt(pageParam ?? '1') || 1)
   const pageStart = (currentPage - 1) * pageSize
 
-  const [{ data: categoriesData }, collections] = await Promise.all([
+  // The collection strip only shows on the plain landing view: no search,
+  // category, filter, sort or later page, so it doesn't crowd browsing.
+  const isLandingView =
+    !q && !category && !sortParam && !instock && !minPrice && !maxPrice && !soldBy && !caseSize && currentPage === 1
+  const [{ data: categoriesData }, collections, stripCards] = await Promise.all([
     supabase.from('categories').select('*').order('name'),
     loadLiveCollections(getAdminClient()),
+    isLandingView ? loadCollectionStrip(getAdminClient()) : Promise.resolve([]),
   ])
   const categories = (categoriesData ?? []) as Category[]
 
@@ -189,6 +195,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       </aside>
 
       <div className="flex-1 min-w-0">
+        <CollectionStrip cards={stripCards} />
+
         {/* Price range filter form */}
         <form method="get" className="mb-3 flex flex-wrap items-center gap-3">
           {q && <input type="hidden" name="q" value={q} />}

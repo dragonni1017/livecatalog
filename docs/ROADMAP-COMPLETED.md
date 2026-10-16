@@ -3,7 +3,7 @@
 Split out from `docs/ROADMAP.md` on 2026-07-02. Everything below is shipped/done.
 Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 
-**112 items completed** (105 shipped-feature bullets + 7 checked-off backlog/design items).
+**113 items completed** (106 shipped-feature bullets + 7 checked-off backlog/design items).
 
 ---
 
@@ -21,6 +21,7 @@ Companion file: `docs/ROADMAP-OPEN.md` (everything not yet done).
 - ✅ L&Y USA logo branding on header, product, and cart pages
 - ✅ Sitemap + robots.txt
 - ✅ Curated/seasonal collections (2026-10-16): `/collections/<slug>` pages, listed in the catalog menu while live (optional Pacific-time date window), managed at `/admin/collections` by pasting SKUs; printable via the line card (migration 0059)
+- ✅ Homepage collection strip (2026-10-16): "Shop collections" cards on the landing view (cover image or a 2×2 product-photo mosaic), optional cover upload per collection (migration 0060)
 
 ### Cart & Ordering
 - ✅ Add to cart (product cards + detail page), persistent via localStorage
