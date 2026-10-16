@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getErplyProducts, isConfigured, syncPriceCents, type ErplySyncProduct } from '@/lib/erply'
 import { previewSync, syncToSupabase, type SyncProduct } from '@/lib/product-sync'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
+import { recordSyncRun } from '@/lib/sync-runs'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,9 @@ export async function GET() {
 // Refuses to run unless Erply is configured: a stub-mode sync would deactivate
 // the entire catalog (see /api/sync guard + cron-stub-wipe history).
 export async function POST() {
+  // Set once the real run starts, so the failure path can record it (sync_runs).
+  let startedAt = Date.now()
+  let runDb: ReturnType<typeof import('@/lib/supabase').getAdminClient> | null = null
   try {
     if (!isConfigured()) {
       return NextResponse.json(
@@ -65,6 +69,8 @@ export async function POST() {
 
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
+    startedAt = Date.now()
+    runDb = db
     const products = toSyncProducts(await getErplyProducts())
     // Same guard as /api/sync — Erply's images/stock aren't trustworthy yet.
     const result = await syncToSupabase(products, db, {
@@ -75,9 +81,11 @@ export async function POST() {
       // (edited in /admin/cleanup), so this button can't overwrite them.
       skipFields: ['image_url', 'stock_qty', 'category', 'description'],
     })
+    await recordSyncRun(db, { source: 'manual', startedAt, result })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     console.error('[admin/sync POST] run failed:', err)
+    if (runDb) await recordSyncRun(runDb, { source: 'manual', startedAt, failure: err })
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Sync failed' }, { status: 500 })
   }
 }

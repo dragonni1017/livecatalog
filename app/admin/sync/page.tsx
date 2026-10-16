@@ -1,11 +1,19 @@
 import Link from 'next/link'
 import { isConfigured } from '@/lib/erply'
 import SyncControls from '@/components/admin/SyncControls'
+import { getAdminClient } from '@/lib/supabase'
+import type { SyncRunRow } from '@/lib/sync-runs'
+import SyncRunHistory from './SyncRunHistory'
 
 export const dynamic = 'force-dynamic'
 
-export default function AdminSyncPage() {
+export default async function AdminSyncPage() {
   const configured = isConfigured()
+  const { data: runs, error: runsError } = await getAdminClient()
+    .from('sync_runs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(30)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -16,8 +24,8 @@ export default function AdminSyncPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Erply Sync</h1>
           <p className="text-sm text-gray-500">
-            Pull products + stock from Erply into the catalog. The cron runs daily automatically once
-            configured; use this page to preview changes or trigger a sync on demand.
+            Pull products + stock from Erply into the catalog. The sync runs automatically every night
+            (1 AM Pacific); use this page to check recent runs, preview changes or sync on demand.
           </p>
         </div>
 
@@ -35,6 +43,8 @@ export default function AdminSyncPage() {
         </div>
 
         <SyncControls configured={configured} />
+
+        <SyncRunHistory runs={(runs ?? []) as (SyncRunRow & { id: number })[]} loadFailed={!!runsError} />
       </div>
     </div>
   )
