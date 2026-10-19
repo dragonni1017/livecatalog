@@ -5,7 +5,9 @@ import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
-export const dynamic = 'force-dynamic'
+// Cache the rendered page for 5 minutes (ISR), like the product page. It has
+// no per-visitor state; the ranking and stock can be up to 5 min stale.
+export const revalidate = 300
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
