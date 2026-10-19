@@ -134,14 +134,8 @@ async function fetchPhoto(url: string): Promise<Buffer> {
 
 async function main() {
   const outDir = path.join(ROOT, 'data', 'lyusa', 'batches', name)
-  if (fs.existsSync(outDir)) {
-    console.error(`${outDir} already exists. Pick another name or delete it first.`)
-    process.exit(1)
-  }
-  if (!fs.existsSync(templatePath)) {
-    console.error(`Template not found: ${templatePath}`)
-    process.exit(1)
-  }
+  if (fs.existsSync(outDir)) throw new Error(`${outDir} already exists. Pick another name or delete it first.`)
+  if (!fs.existsSync(templatePath)) throw new Error(`Template not found: ${templatePath}`)
 
   const tplRows = readCsv(templatePath) as TemplateRow[]
   const header = Object.keys(tplRows[0])
@@ -249,7 +243,9 @@ async function main() {
   console.log(`\nNot marked sent. After sending: npm run lyusa:mark-sent -- ${name}`)
 }
 
+// exitCode, not process.exit(): exiting while fetch's sockets are still
+// closing aborts Node on Windows (libuv "UV_HANDLE_CLOSING" assertion).
 main().catch((err) => {
   console.error(err instanceof Error ? err.message : err)
-  process.exit(1)
+  process.exitCode = 1
 })

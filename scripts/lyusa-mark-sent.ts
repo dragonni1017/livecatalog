@@ -92,7 +92,9 @@ async function main() {
   console.log(`Recorded ${rows.length} SKUs.`)
 }
 
+// exitCode, not process.exit(): exiting while fetch's sockets are still
+// closing aborts Node on Windows (libuv "UV_HANDLE_CLOSING" assertion).
 main().catch((err) => {
   console.error(err instanceof Error ? err.message : err)
-  process.exit(1)
+  process.exitCode = 1
 })
