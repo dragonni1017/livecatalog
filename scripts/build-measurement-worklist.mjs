@@ -1,5 +1,13 @@
 // build-measurement-worklist.mjs
 // Run with: node scripts/build-measurement-worklist.mjs
+//           node scripts/build-measurement-worklist.mjs --skus=data/lyusa/batches/<name>/<name>-needs-attention.csv
+//           node scripts/build-measurement-worklist.mjs --skus=<file> --out=<file.xlsx>
+//
+// --skus=<csv|xlsx> limits the worklist to the SKUs in that file's "SKU" (or
+// "Item#") column, e.g. the products held out of a LYUSA batch for missing
+// case weights. Same sheets and columns, so import-measurement-worklist.mjs
+// reads it back unchanged. Writes data/measurement-worklist-<file name>.xlsx
+// unless --out says otherwise, so the full worklist isn't overwritten.
 //
 // Read-only. Builds the "what still needs physically measuring" worklist for
 // warehouse bin capacity planning, as a fill-in-able xlsx.
@@ -39,7 +47,8 @@
 // applied (so hand-entered values are respected and the list shrinks as work
 // gets done), and falls back to reading Erply/Woo directly before then.
 //
-// Writes: data/measurement-worklist.xlsx. Writes nothing to any system.
+// Writes: data/measurement-worklist.xlsx (or the --skus / --out path above).
+// Writes nothing to any system.
 
 import fs from 'fs'
 import path from 'path'
@@ -79,6 +88,19 @@ if (missingEnv.length > 0) {
 }
 
 const supabase = createClient(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+const skusArg = process.argv.find((a) => a.startsWith('--skus='))?.slice('--skus='.length)
+const outArg = process.argv.find((a) => a.startsWith('--out='))?.slice('--out='.length)
+
+// SKUs from the --skus file's "SKU" or "Item#" column, upper-cased for matching.
+function readSkuList(file) {
+  if (!fs.existsSync(file)) throw new Error(`--skus file not found: ${file}`)
+  const wb = XLSX.readFile(file, { raw: true })
+  const list = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' })
+  const col = ['SKU', 'Item#'].find((c) => list.length && c in list[0])
+  if (!col) throw new Error(`--skus file needs a "SKU" or "Item#" column: ${file}`)
+  return new Set(list.map((r) => String(r[col]).trim().toUpperCase()).filter(Boolean))
+}
 
 function measurement(value) {
   if (value === null || value === undefined || value === '') return null
@@ -241,17 +263,30 @@ async function fetchCatalog(withMeasurements) {
 }
 
 async function main() {
+  const skuList = skusArg ? readSkuList(skusArg) : null
   const applied = await migrationApplied()
   console.log(applied
     ? 'Migration 0045 applied -- reading measurements from Supabase.'
     : 'Migration 0045 not applied yet -- reading measurements from Erply/Woo instead.')
 
-  const [catalog, erply, woo] = await Promise.all([
+  const [fullCatalog, erply, woo] = await Promise.all([
     fetchCatalog(applied),
     applied ? Promise.resolve(new Map()) : fetchErply(),
     applied ? Promise.resolve(new Map()) : fetchWoo(),
   ])
-  console.log(`${catalog.length} active products.`)
+  console.log(`${fullCatalog.length} active products.`)
+  const catalog = skuList
+    ? fullCatalog.filter((p) => skuList.has(p.sku.trim().toUpperCase()))
+    : fullCatalog
+  // Listed SKUs that aren't active products can't be measured into anything;
+  // say so rather than dropping them silently.
+  const notActive = skuList
+    ? [...skuList].filter((s) => !catalog.some((p) => p.sku.trim().toUpperCase() === s))
+    : []
+  if (skuList) {
+    console.log(`--skus: ${skuList.size} SKUs listed, ${catalog.length} active` +
+      (notActive.length ? `, ${notActive.length} not active/not found: ${notActive.slice(0, 10).join(', ')}${notActive.length > 10 ? ', ...' : ''}` : ''))
+  }
 
   const CASE_FIELDS = ['case_length_in', 'case_width_in', 'case_height_in', 'case_weight_lb']
 
@@ -321,7 +356,11 @@ async function main() {
   }
 
   const summary = [
-    { Metric: 'Active products', Count: catalog.length },
+    ...(skuList ? [
+      { Metric: `SKU list: ${path.basename(skusArg)}`, Count: skuList.size },
+      { Metric: 'Listed but not active / not found', Count: notActive.length },
+    ] : []),
+    { Metric: skuList ? 'Active products in list' : 'Active products', Count: catalog.length },
     { Metric: 'Have full case measurements', Count: rows.filter((r) => r.hasCase).length },
     { Metric: 'Implausible - need recheck', Count: bad.length },
     { Metric: 'Need case measurements (visible)', Count: visibleNeedCase.length },
@@ -336,9 +375,12 @@ async function main() {
 
   console.table(summary.filter((s) => s.Count !== ''))
 
-  const outDir = path.join(ROOT, 'data')
-  fs.mkdirSync(outDir, { recursive: true })
-  const outPath = path.join(outDir, 'measurement-worklist.xlsx')
+  const outPath = outArg
+    ? path.resolve(outArg)
+    : skuList
+      ? path.join(ROOT, 'data', `measurement-worklist-${path.basename(skusArg).replace(/\.[^.]+$/, '')}.xlsx`)
+      : path.join(ROOT, 'data', 'measurement-worklist.xlsx')
+  fs.mkdirSync(path.dirname(outPath), { recursive: true })
   XLSX.writeFile(wb, outPath)
   console.log(`\nWrote -> ${outPath}`)
 }
