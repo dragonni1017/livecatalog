@@ -6,7 +6,9 @@ import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
-export const dynamic = 'force-dynamic'
+// Cache the rendered page for 5 minutes (ISR), like the product page. It has
+// no per-visitor state; a newly applied shipment shows up within 5 min.
+export const revalidate = 300
 
 // Arrival dates come from receiving (products.arrived_at), not
 // products.created_at (which is the import date). See lib/new-arrivals.ts.
