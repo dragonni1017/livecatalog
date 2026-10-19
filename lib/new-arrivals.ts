@@ -6,46 +6,13 @@
 // that left /new-arrivals empty: 0 of 1,185 visible products fell inside 30
 // days. Receiving only started 2026-09-23, so arrivals before then aren't
 // known.
+//
+// The date lives on products.arrived_at, kept current by triggers
+// (migration 0055, latest_arrival_for_sku): the latest applied shipment that
+// received the SKU. Staged or abandoned shipments and zero-qty lines never
+// count.
 
 export const NEW_ARRIVAL_DAYS = 30
-
-export interface ShipmentRow {
-  id: string
-  status: string
-  applied_at: string | null
-}
-
-export interface ShipmentLineRow {
-  shipment_id: string
-  sku: string
-  qty_received: number
-}
-
-/**
- * SKU -> most recent arrival (ISO) among APPLIED shipments on or after
- * `sinceMs`. Lines that received nothing are ignored. A staged or abandoned
- * shipment never counts, since nothing physically arrived through it.
- */
-export function latestArrivalBySku(
-  shipments: ShipmentRow[],
-  lines: ShipmentLineRow[],
-  sinceMs: number,
-): Map<string, string> {
-  const appliedAt = new Map<string, string>()
-  for (const s of shipments) {
-    if (s.status !== 'applied' || !s.applied_at) continue
-    const t = Date.parse(s.applied_at)
-    if (Number.isFinite(t) && t >= sinceMs) appliedAt.set(s.id, s.applied_at)
-  }
-  const bySku = new Map<string, string>()
-  for (const l of lines) {
-    const at = appliedAt.get(l.shipment_id)
-    if (!at || !(l.qty_received > 0)) continue
-    const prev = bySku.get(l.sku)
-    if (!prev || Date.parse(at) > Date.parse(prev)) bySku.set(l.sku, at)
-  }
-  return bySku
-}
 
 /** Start of the new-arrivals window, in ms. A helper, so render stays pure. */
 export function newArrivalsSinceMs(now: number = Date.now()): number {

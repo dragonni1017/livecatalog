@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { supabase, getAdminClient } from '@/lib/supabase'
-import { latestArrivalBySku, NEW_ARRIVAL_DAYS, newArrivalsSinceMs, type ShipmentLineRow, type ShipmentRow } from '@/lib/new-arrivals'
+import { NEW_ARRIVAL_DAYS, newArrivalsSinceMs } from '@/lib/new-arrivals'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadLiveCollections } from '@/lib/collections'
@@ -8,49 +8,31 @@ import { Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-// Arrival dates come from receiving, not products.created_at (which is the
-// import date). See lib/new-arrivals.ts.
+// Arrival dates come from receiving (products.arrived_at), not
+// products.created_at (which is the import date). See lib/new-arrivals.ts.
 export default async function NewArrivalsPage() {
-  const sinceMs = newArrivalsSinceMs()
+  const since = new Date(newArrivalsSinceMs()).toISOString()
 
-  // shipments / shipment_lines are service-role only (RLS, no public policy),
-  // so they're read with the admin client here on the server. Only SKUs
-  // leave this step; the products themselves come from the public client
-  // with the usual visibility filters.
-  const db = getAdminClient()
-  const { data: shipments } = await db
-    .from('shipments')
-    .select('id, status, applied_at')
-    .eq('status', 'applied')
-    .gte('applied_at', new Date(sinceMs).toISOString())
-  const shipmentIds = (shipments ?? []).map((s) => s.id as string)
-  const { data: lines } = shipmentIds.length
-    ? await db.from('shipment_lines').select('shipment_id, sku, qty_received').in('shipment_id', shipmentIds)
-    : { data: [] }
-  const arrivedAt = latestArrivalBySku((shipments ?? []) as ShipmentRow[], (lines ?? []) as ShipmentLineRow[], sinceMs)
-  const skus = [...arrivedAt.keys()].slice(0, 500)
-
+  // One round trip: products.arrived_at is kept current from receiving by
+  // triggers (migration 0055), so the page no longer reads shipments and
+  // shipment_lines first.
   const [{ data: categories }, collections, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
-    loadLiveCollections(db),
-    skus.length
-      ? supabase
-          .from('products')
-          .select(
-            'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
-          )
-          .eq('is_active', true)
-          .eq('manually_hidden', false)
-          .in('sku', skus)
-      : Promise.resolve({ data: [] }),
+    loadLiveCollections(getAdminClient()),
+    supabase
+      .from('products')
+      .select(
+        'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
+      )
+      .eq('is_active', true)
+      .eq('manually_hidden', false)
+      .gte('arrived_at', since)
+      // Most recent arrival first, then by name within one delivery.
+      .order('arrived_at', { ascending: false })
+      .order('name')
+      .limit(500),
   ])
-
-  // Most recent arrival first, then by name within one delivery.
-  const products = ((data ?? []) as unknown as Product[]).sort(
-    (a, b) =>
-      Date.parse(arrivedAt.get(b.sku) ?? '') - Date.parse(arrivedAt.get(a.sku) ?? '') ||
-      a.name.localeCompare(b.name),
-  )
+  const products = (data ?? []) as unknown as Product[]
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
