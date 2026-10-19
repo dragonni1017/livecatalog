@@ -14,6 +14,7 @@ import OrderReplyForm from '@/components/catalog/OrderReplyForm'
 import type { OrderStatus } from '@/lib/types'
 import { getSessionUser } from '@/lib/auth-server'
 import { canAccessOrder } from '@/lib/order-access'
+import { orderTaxLine, TAX_ESTIMATE_NOTE } from '@/lib/sales-tax'
 
 interface PageProps {
   params: Promise<{ reference: string }>
@@ -99,7 +100,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
   const { data: order } = await db
     .from('order_requests')
     .select(
-      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id, ship_address1, ship_address2, ship_city, ship_state, ship_zip, promo_code, promo_discount_cents',
+      'id, reference_code, status, customer_name, customer_email, customer_phone, customer_company, subtotal_cents, notes, placed_by_rep, po_number, created_at, entered_in_qb, access_token, rep_user_id, ship_address1, ship_address2, ship_city, ship_state, ship_zip, promo_code, promo_discount_cents, tax_state, tax_rate_percent, tax_estimate_cents, tax_exempt_reason',
     )
     .eq('reference_code', reference.toUpperCase())
     .single()
@@ -300,6 +301,27 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
                 {formatPrice(order.subtotal_cents)}
               </td>
             </tr>
+            {(() => {
+              const taxLine = orderTaxLine(order)
+              if (!taxLine) return null
+              return (
+                <>
+                  <tr className="bg-gray-50">
+                    <td colSpan={5} className="px-4 pb-1 text-right text-sm text-gray-600">{taxLine.label}</td>
+                    <td className="px-4 pb-1 text-right text-sm text-gray-700">{formatPrice(taxLine.cents)}</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td colSpan={5} className="px-4 pb-3 text-right text-sm font-medium text-gray-600">
+                      Estimated total
+                      <div className="text-xs font-normal text-gray-500">{TAX_ESTIMATE_NOTE}</div>
+                    </td>
+                    <td className="px-4 pb-3 text-right text-base font-bold text-gray-900">
+                      {formatPrice(order.subtotal_cents + taxLine.cents)}
+                    </td>
+                  </tr>
+                </>
+              )
+            })()}
           </tfoot>
         </table>
       </div>

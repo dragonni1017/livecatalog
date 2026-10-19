@@ -8,6 +8,7 @@ import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
 import { track } from '@/lib/track'
 import { addressSummary, sameAddress, type AddressInput, type CustomerAddress } from '@/lib/customer-addresses'
 import { normalizeUsState } from '@/lib/us-states'
+import { TAX_ESTIMATE_NOTE, type TaxEstimate } from '@/lib/sales-tax'
 import StateSelect from '@/components/catalog/StateSelect'
 import type { CartItem, CheckoutContact } from '@/lib/types'
 
@@ -335,6 +336,40 @@ export default function CartPage() {
   const promoDiscount = promo?.applied ? promo.discountCents : 0
   const estimatedTotal = subtotalCents - promoDiscount
 
+  // ── Estimated sales tax (lib/sales-tax.ts) ─────────────────────────────────
+  // Shown once a ship-to state is picked. Display only: the order route
+  // recomputes and saves its own estimate, and QuickBooks charges the real
+  // tax. Nothing shows for a state where tax isn't collected.
+  // Each result is kept with the inputs it was computed for and only shown
+  // while those still match, so a stale estimate never sits under a new total.
+  const [taxResult, setTaxResult] = useState<{ key: string; tax: TaxEstimate | null } | null>(null)
+  const taxState = contact.shipState?.trim() ?? ''
+  const taxEmail = contact.email.trim()
+  const taxKey = `${taxState}|${estimatedTotal}|${taxEmail.toLowerCase()}`
+  useEffect(() => {
+    if (!hydrated || !taxState || estimatedTotal <= 0) return
+    let cancelled = false
+    const t = setTimeout(() => {
+      fetch('/api/cart/tax-estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipState: taxState, subtotalCents: estimatedTotal, email: taxEmail || undefined }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!cancelled) setTaxResult({ key: taxKey, tax: data?.tax ?? null })
+        })
+        .catch(() => {})
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [hydrated, taxState, taxEmail, estimatedTotal, taxKey])
+  const tax = taxState && estimatedTotal > 0 && taxResult?.key === taxKey ? taxResult.tax : null
+  const taxCents = tax && !tax.exemptReason ? tax.taxCents : 0
+  const showTax = !!tax && tax.exemptReason !== 'not_collected'
+
   const belowMinimum = !meetsOrderMinimum(estimatedTotal)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -570,22 +605,42 @@ export default function CartPage() {
           <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-600">Subtotal</span>
-              <span className={promoDiscount ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(subtotalCents)}</span>
+              <span className={promoDiscount || showTax ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(subtotalCents)}</span>
             </div>
             {promoDiscount > 0 && promo && (
-              <>
-                <div className="mb-1 flex items-center justify-between text-sm text-green-700">
+              <div className="mb-1 flex items-center justify-between text-sm text-green-700">
+                <span>
+                  Promo {promo.code}
+                  {promo.percentOff ? ` (${promo.percentOff}% off eligible items)` : ''}
+                </span>
+                <span className="ml-2 whitespace-nowrap">−{formatPrice(promoDiscount)}</span>
+              </div>
+            )}
+            {showTax && tax && (
+              <div className="mb-1 text-sm text-gray-700">
+                <div className="flex items-center justify-between">
                   <span>
-                    Promo {promo.code}
-                    {promo.percentOff ? ` (${promo.percentOff}% off eligible items)` : ''}
+                    {tax.exemptReason === 'resale_certificate'
+                      ? `Sales tax: exempt (resale certificate, ${tax.state})`
+                      : `Estimated sales tax (${tax.state} ${tax.ratePercent}%)`}
                   </span>
-                  <span className="ml-2 whitespace-nowrap">−{formatPrice(promoDiscount)}</span>
+                  <span className="ml-2 whitespace-nowrap">{formatPrice(taxCents)}</span>
                 </div>
-                <div className="mb-2 flex items-center justify-between">
+                {tax.certificatePending && (
+                  <p className="mt-0.5 text-xs text-amber-700">
+                    Your resale certificate is pending review. Tax comes off once it&apos;s verified.
+                  </p>
+                )}
+              </div>
+            )}
+            {(promoDiscount > 0 || showTax) && (
+              <div className="mb-2">
+                <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Estimated total</span>
-                  <span className="text-lg font-bold text-gray-900">{formatPrice(estimatedTotal)}</span>
+                  <span className="text-lg font-bold text-gray-900">{formatPrice(estimatedTotal + taxCents)}</span>
                 </div>
-              </>
+                {showTax && <p className="text-xs text-gray-500">{TAX_ESTIMATE_NOTE}</p>}
+              </div>
             )}
             <div className="mb-4">
               {promoCode ? (

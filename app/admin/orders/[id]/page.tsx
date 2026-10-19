@@ -6,6 +6,7 @@ import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 import { certStatusClasses, certStatusLabel, type ResaleCertificate } from '@/lib/resale-certificates'
+import { orderTaxLine } from '@/lib/sales-tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +77,7 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
     .limit(1)
     .maybeSingle()
   const cert = certData as Pick<ResaleCertificate, 'id' | 'state' | 'permit_number' | 'expires_on' | 'status'> | null
+  const taxLine = orderTaxLine(order)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -314,6 +316,21 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
                 <td colSpan={4} className="px-5 py-3 text-right text-sm font-semibold text-gray-600">Subtotal</td>
                 <td className="px-5 py-3 text-right text-base font-bold text-gray-900">{formatPrice(order.subtotal_cents)}</td>
               </tr>
+              {taxLine && (
+                <>
+                  <tr>
+                    <td colSpan={4} className="px-5 pb-1 text-right text-sm text-gray-600">{taxLine.label}</td>
+                    <td className="px-5 pb-1 text-right text-sm text-gray-700">{formatPrice(taxLine.cents)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={4} className="px-5 pb-3 text-right text-sm font-semibold text-gray-600">
+                      Estimated total
+                      <div className="text-xs font-normal text-gray-500">Estimate only. QuickBooks charges the real tax; none is sent to it.</div>
+                    </td>
+                    <td className="px-5 pb-3 text-right text-base font-bold text-gray-900">{formatPrice(order.subtotal_cents + taxLine.cents)}</td>
+                  </tr>
+                </>
+              )}
             </tfoot>
           </table>
         </section>

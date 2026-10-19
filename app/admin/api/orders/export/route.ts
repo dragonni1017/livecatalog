@@ -24,6 +24,8 @@ interface ExportOrder {
   placed_by_rep: string | null
   po_number: string | null
   subtotal_cents: number
+  tax_estimate_cents: number | null
+  tax_exempt_reason: string | null
   order_items: ExportItem[]
 }
 
@@ -44,7 +46,7 @@ export async function GET() {
     const { data, error } = await db
       .from('order_requests')
       .select(
-        'reference_code, created_at, status, entered_in_qb, customer_name, customer_company, customer_email, customer_phone, placed_by_rep, po_number, subtotal_cents, order_items(sku, name, qty, unit_price_cents, line_total_cents)',
+        'reference_code, created_at, status, entered_in_qb, customer_name, customer_company, customer_email, customer_phone, placed_by_rep, po_number, subtotal_cents, tax_estimate_cents, tax_exempt_reason, order_items(sku, name, qty, unit_price_cents, line_total_cents)',
       )
       .order('created_at', { ascending: false })
       .limit(1000)
@@ -54,6 +56,8 @@ export async function GET() {
     const headers = [
       'Reference', 'Date', 'Status', 'Entered in QB', 'Customer', 'Company', 'Email', 'Phone',
       'Rep', 'PO #', 'SKU', 'Item', 'Qty', 'Unit Price', 'Line Total', 'Order Subtotal',
+      // Estimate only (lib/sales-tax.ts); blank = none saved, "exempt" = resale certificate.
+      'Est. Sales Tax',
     ]
     const rows: string[] = [headers.join(',')]
 
@@ -80,6 +84,11 @@ export async function GET() {
           it ? dollars(it.unit_price_cents) : '',
           it ? dollars(it.line_total_cents) : '',
           dollars(o.subtotal_cents),
+          o.tax_exempt_reason === 'resale_certificate'
+            ? 'exempt'
+            : o.tax_estimate_cents != null && o.tax_exempt_reason !== 'not_collected'
+              ? dollars(o.tax_estimate_cents)
+              : '',
         ]
         rows.push(line.map(csvCell).join(','))
       }

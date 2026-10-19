@@ -8,6 +8,8 @@ import { buildLineItems, insertOrder } from '@/lib/order-submission'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 import { resolveCustomerPricing } from '@/lib/customer-pricing'
 import { loadPromotion, priceWithPromotion } from '@/lib/promotions'
+import { estimateSalesTax, loadTaxInputs, taxColumns } from '@/lib/sales-tax'
+import { todayPacific } from '@/lib/collections'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,6 +150,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: minErr.error }, { status: minErr.status })
     }
 
+    // ── 3b. Estimated sales tax (lib/sales-tax.ts) ─────────────────────────────
+    // Recomputed here, never taken from the cart. Only an estimate for the
+    // quote: QuickBooks charges the real tax on the invoice. A resale
+    // certificate counts only for a buyer signed in as the order email, or a
+    // rep pricing for that customer, never for a guest's typed email.
+    const certEmail = isRep || isSignedInAsOrderEmail(sessionUser?.email, orderEmail) ? orderEmail : null
+    const taxInputs = await loadTaxInputs(db, certEmail)
+    const tax = estimateSalesTax({ shipState: contact.shipState, subtotalCents, ...taxInputs, today: todayPacific() })
+
     // Take one use of the code atomically (usage cap). Given back below if the
     // order insert fails.
     if (promoApplied) {
@@ -174,14 +185,18 @@ export async function POST(request: NextRequest) {
     if (!inserted.ok && promoApplied) {
       await db.rpc('release_promotion_use', { p_id: promo!.id })
     }
-    if (inserted.ok && promoApplied) {
+    if (inserted.ok) {
       // Recorded after the insert (insert_order's RPC signature is unchanged).
-      // Best-effort: the prices are already final either way.
-      const { error: promoErr } = await db
+      // Best-effort: the prices are already final either way, and an order
+      // without a saved estimate just shows no tax line.
+      const { error: extrasErr } = await db
         .from('order_requests')
-        .update({ promo_code: promo!.code, promo_discount_cents: pricing.promoDiscountCents })
+        .update({
+          ...taxColumns(tax),
+          ...(promoApplied ? { promo_code: promo!.code, promo_discount_cents: pricing.promoDiscountCents } : {}),
+        })
         .eq('id', inserted.orderId)
-      if (promoErr) console.error('[orders] could not record promo on order:', promoErr.message)
+      if (extrasErr) console.error('[orders] could not record promo/tax on order:', extrasErr.message)
     }
     if (!inserted.ok) {
       return NextResponse.json({ error: inserted.error }, { status: inserted.status })
@@ -208,8 +223,8 @@ export async function POST(request: NextRequest) {
       .is('order_placed_at', null)
 
     await Promise.allSettled([
-      notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct }),
-      notifyCustomer({ referenceCode, accessToken, contact, lineItems, subtotalCents }),
+      notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct, tax: taxColumns(tax) }),
+      notifyCustomer({ referenceCode, accessToken, contact, lineItems, subtotalCents, tax: taxColumns(tax) }),
     ]).then((results) => {
       const labels = ['rep notification', 'customer confirmation']
       results.forEach((r, i) => {

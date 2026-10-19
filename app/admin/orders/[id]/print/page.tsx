@@ -4,6 +4,7 @@ import { getAdminClient } from '@/lib/supabase'
 import PrintButton from '@/components/admin/PrintButton'
 import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
+import { orderTaxLine, TAX_ESTIMATE_NOTE } from '@/lib/sales-tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,7 @@ export default async function SalesOrderPrintPage({ params }: PrintPageProps) {
     .order('sku')
   const items = (itemData ?? []) as OrderItemRecord[]
   const totalUnits = items.reduce((sum, it) => sum + it.qty, 0)
+  const taxLine = orderTaxLine(order)
 
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-gray-900 print:max-w-none print:p-0">
@@ -131,6 +133,20 @@ export default async function SalesOrderPrintPage({ params }: PrintPageProps) {
             <td className="py-2 pr-3 text-right text-sm font-semibold text-gray-600">Subtotal</td>
             <td className="py-2 text-right text-base font-bold">{formatPrice(order.subtotal_cents)}</td>
           </tr>
+          {taxLine && (
+            <>
+              <tr>
+                <td colSpan={4} className="pb-1 pr-3 text-right text-sm text-gray-600">{taxLine.label}</td>
+                <td className="pb-1 text-right text-sm">{formatPrice(taxLine.cents)}</td>
+              </tr>
+              <tr>
+                <td colSpan={4} className="pb-2 pr-3 text-right text-sm font-semibold text-gray-600">
+                  Estimated total <span className="text-xs font-normal text-gray-500">({TAX_ESTIMATE_NOTE})</span>
+                </td>
+                <td className="pb-2 text-right text-base font-bold">{formatPrice(order.subtotal_cents + taxLine.cents)}</td>
+              </tr>
+            </>
+          )}
         </tfoot>
       </table>
 

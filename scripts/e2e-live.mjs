@@ -43,6 +43,7 @@ const password = `T!${crypto.randomUUID()}`
 const visitorId = `${PREFIX}${crypto.randomUUID()}`.slice(0, 64)
 
 let failures = 0
+let createdPrRate = false // sales tax section's temporary PR rate, removed in finally
 const section = (name) => console.log(`\n${name}`)
 const check = (name, ok, extra = '') => {
   if (!ok) failures++
@@ -74,6 +75,7 @@ async function sweepLeftovers() {
   await cleanupCustomerProfiles()
   await cleanupCollections()
   await admin.from('analytics_events').delete().like('visitor_id', `${PREFIX}%`)
+  await admin.from('sales_tax_states').delete().eq('state', 'PR').eq('updated_by', 'e2e')
   return stale.length
 }
 
@@ -278,6 +280,50 @@ try {
   const { data: anonColl } = await anon.from('collections').select('id')
   check('anon key reads 0 collection rows (server-read only)', (anonColl ?? []).length === 0)
 
+  // ── Sales tax estimate (lib/sales-tax.ts, migration 0066) ─────────────────
+  // Uses Puerto Rico, which no order has ever shipped to, and only if nobody
+  // has set a real PR rate. The temporary rate is removed in `finally`.
+  section('Sales tax estimate')
+  const { data: realPr } = await admin.from('sales_tax_states').select('state').eq('state', 'PR').maybeSingle()
+  if (realPr) {
+    check('PR has a real rate set; skipped so it is not overwritten', true)
+  } else {
+    const estimate = async (who, body) => {
+      const res = who
+        ? await who.call('POST', '/api/cart/tax-estimate', body)
+        : await fetch(`${HOST}/api/cart/tax-estimate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, json: await r.json() }))
+      return res.json?.tax ?? null
+    }
+    let t = await estimate(null, { shipState: 'PR', subtotalCents: 10_000 })
+    check('no rate set: not collected, $0', t?.exemptReason === 'not_collected' && t.taxCents === 0, JSON.stringify(t))
+
+    createdPrRate = true
+    await admin.from('sales_tax_states').insert({ state: 'PR', rate_percent: 10, is_active: true, note: 'e2e test', updated_by: 'e2e' })
+    t = await estimate(null, { shipState: 'puerto rico', subtotalCents: 10_005 })
+    check('active rate: a guest is taxed, rounded half up (10% of $100.05 = $10.01)', t?.taxCents === 1001 && t.state === 'PR' && t.ratePercent === 10, JSON.stringify(t))
+
+    await admin.from('resale_certificates').insert([
+      { user_id: b.id, email: b.email, file_path: `${b.id}/${PREFIX}tax.pdf`, state: 'PR', permit_number: 'E2E-1', status: 'verified' },
+      { user_id: a.id, email: a.email, file_path: `${a.id}/${PREFIX}tax.pdf`, state: 'PR', permit_number: 'E2E-2', status: 'pending' },
+    ])
+    t = await estimate(b, { shipState: 'PR', subtotalCents: 10_000 })
+    check('signed in with a verified certificate for the state: exempt', t?.exemptReason === 'resale_certificate' && t.taxCents === 0, JSON.stringify(t))
+    t = await estimate(null, { shipState: 'PR', subtotalCents: 10_000, email: b.email })
+    check("a guest typing that customer's email is still taxed", t?.taxCents === 1000 && !t.exemptReason, JSON.stringify(t))
+    t = await estimate(a, { shipState: 'PR', subtotalCents: 10_000, email: b.email })
+    check("a customer typing someone else's email is still taxed", t?.taxCents === 1000 && !t.exemptReason, JSON.stringify(t))
+    t = await estimate(rep, { shipState: 'PR', subtotalCents: 10_000, email: b.email })
+    check('a rep pricing for that customer gets the exemption', t?.exemptReason === 'resale_certificate', JSON.stringify(t))
+    t = await estimate(a, { shipState: 'PR', subtotalCents: 10_000 })
+    check('a pending certificate is taxed and flagged', t?.taxCents === 1000 && t.certificatePending === true, JSON.stringify(t))
+    t = await estimate(b, { shipState: 'CA', subtotalCents: 10_000 })
+    check('a certificate for another state does not exempt', t?.exemptReason !== 'resale_certificate', JSON.stringify(t))
+    const bad = await fetch(`${HOST}/api/cart/tax-estimate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipState: 'PR', subtotalCents: -5 }) })
+    check('a negative subtotal is refused', bad.status === 400, `got ${bad.status}`)
+    const { data: anonRates } = await anon.from('sales_tax_states').select('state')
+    check('anon key reads 0 rate rows (server-read only)', (anonRates ?? []).length === 0)
+  }
+
   // ── Funnel tracking ──────────────────────────────────────────────────────
   section('Funnel tracking')
   for (const type of ['add_to_cart', 'cart_view', 'quote_submitted']) {
@@ -294,6 +340,7 @@ try {
   failures++
   console.log(`\nERROR ${e.message}`)
 } finally {
+  if (createdPrRate) await admin.from('sales_tax_states').delete().eq('state', 'PR').eq('updated_by', 'e2e')
   for (const id of users) await cleanupUser(id)
   await cleanupCustomerProfiles()
   await cleanupCollections()

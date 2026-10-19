@@ -14,7 +14,9 @@
 // A pending certificate for the state doesn't exempt; it's flagged so the
 // buyer can be told tax comes off once it's verified.
 
+import type { getAdminClient } from '@/lib/supabase'
 import { normalizeUsState, US_STATE_NAMES } from '@/lib/us-states'
+import { formatPriceCents } from '@/lib/order-rules'
 import type { ResaleCertificate } from '@/lib/resale-certificates'
 
 export const SALES_TAX_FIELDS = 'state, rate_percent, is_active, note, updated_at, updated_by'
@@ -105,4 +107,83 @@ export function parseSalesTaxInput(
   const note = typeof b.note === 'string' ? b.note.trim() : ''
   if (note.length > MAX_NOTE_CHARS) return { error: `Note can't be over ${MAX_NOTE_CHARS} characters.` }
   return { value: { state, rate_percent: rate, is_active: b.is_active !== false, note: note || null } }
+}
+
+// ── Loading and showing ──────────────────────────────────────────────────────
+
+/**
+ * Active rates plus the certificates of `certEmail`, for estimateSalesTax.
+ * Pass an email ONLY for a buyer signed in as the order email, or a rep
+ * pricing for that customer; never a guest's typed email, or anyone who knew
+ * a certified customer's address would get the exemption.
+ */
+export async function loadTaxInputs(
+  db: ReturnType<typeof getAdminClient>,
+  certEmail: string | null,
+): Promise<{ rates: Map<string, number>; certificates: TaxCertificate[] }> {
+  const [{ data: rateRows, error }, certs] = await Promise.all([
+    db.from('sales_tax_states').select('state, rate_percent, is_active').eq('is_active', true),
+    certEmail
+      ? db.from('resale_certificates').select('state, status, expires_on, replaced_at').eq('email', certEmail.trim().toLowerCase()).is('replaced_at', null)
+      : Promise.resolve({ data: [] as TaxCertificate[] }),
+  ])
+  // Missing table (0066 not applied) or a read error: estimate nothing rather
+  // than block a quote. The order still goes through without a tax line.
+  if (error) console.error('[sales-tax] rates read failed:', error.message)
+  return {
+    rates: activeRates((rateRows ?? []) as Pick<SalesTaxState, 'state' | 'rate_percent' | 'is_active'>[]),
+    certificates: (certs.data ?? []) as TaxCertificate[],
+  }
+}
+
+/** The order_requests snapshot columns (migration 0066) for an estimate. */
+export function taxColumns(e: TaxEstimate) {
+  return {
+    tax_state: e.state,
+    tax_rate_percent: e.ratePercent,
+    tax_estimate_cents: e.taxCents,
+    tax_exempt_reason: e.exemptReason,
+  }
+}
+
+export interface OrderTaxFields {
+  tax_state?: string | null
+  tax_rate_percent?: number | string | null
+  tax_estimate_cents?: number | null
+  tax_exempt_reason?: string | null
+}
+
+export const TAX_ESTIMATE_NOTE = 'Final sales tax is on your invoice.'
+
+/**
+ * The line to show under an order's subtotal, or null for none: orders from
+ * before 0066, and states where tax isn't collected, show nothing at all.
+ */
+export function orderTaxLine(o: OrderTaxFields): { label: string; cents: number } | null {
+  if (o.tax_estimate_cents == null || o.tax_exempt_reason === 'not_collected') return null
+  if (o.tax_exempt_reason === 'resale_certificate') {
+    return { label: `Sales tax: exempt (resale certificate${o.tax_state ? `, ${o.tax_state}` : ''})`, cents: 0 }
+  }
+  const rate = o.tax_rate_percent != null ? `${Number(o.tax_rate_percent)}%` : ''
+  return { label: `Estimated sales tax (${[o.tax_state, rate].filter(Boolean).join(' ')})`, cents: o.tax_estimate_cents }
+}
+
+/** Plain-text lines for emails and the QuickBooks memo, or [] for none. */
+export function taxTextLines(o: OrderTaxFields, subtotalCents: number): string[] {
+  const line = orderTaxLine(o)
+  if (!line) return []
+  if (line.cents === 0) return [line.label]
+  return [`${line.label}: ${formatPriceCents(line.cents)}`, `Estimated total: ${formatPriceCents(subtotalCents + line.cents)}`]
+}
+
+/**
+ * One line for the QuickBooks sales order memo, so whoever reviews it sees
+ * the app's estimate. Text only: never a tax line item, since QuickBooks
+ * applies its own tax and would charge it twice. Null when there's none.
+ */
+export function taxMemoLine(o: OrderTaxFields): string | null {
+  const line = orderTaxLine(o)
+  if (!line) return null
+  if (o.tax_exempt_reason === 'resale_certificate') return `Tax exempt: resale cert${o.tax_state ? ` ${o.tax_state}` : ''}`
+  return `Est. tax ${[o.tax_state, o.tax_rate_percent != null ? `${Number(o.tax_rate_percent)}%` : ''].filter(Boolean).join(' ')}: ${formatPriceCents(line.cents)} (app estimate)`
 }
