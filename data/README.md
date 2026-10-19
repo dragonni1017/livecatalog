@@ -14,6 +14,7 @@ regenerate.
 | `data/fix-logs/` | The plan and result record of each live change: `product-name-fixes-plan-*`, `product-name-fixes-applied-*-<date>`, `qb-product-create-applied-*`, `container-photos-uploaded-*`, `category-id-repair-backup-*`. |
 | `data/<topic>/` | Older per-job folders (`bows-pack-spec-fix/`, `plush-erply-import/`, `woo-tier-review/`, ...). Scripts write into these by fixed path, so leave them where they are. |
 | `data/images/` | Local photo dumps and image mapping CSVs. |
+| `data/lyusa/` | LYUSA item imports. `template.csv` is the 84-column layout (ALL21 v2). `batches/<name>/` holds one batch each: `<name>-products.csv`, `<name>-photos-partN.zip`, `<name>-needs-attention.csv`, `batch.json`. `reference/` has LYUSA's sample file and screenshots. See "LYUSA batches" below. |
 | `data/archive/<date>/` | Superseded copies. Nothing reads them. Safe to delete once you're sure. |
 
 ## After running a fix script
@@ -27,3 +28,16 @@ Plan and fix scripts (`scripts/plan-*.ts`, `scripts/fix-product-names.ts`,
    (each run overwrites them).
 3. When a dated worklist or plan is replaced by a newer one, move the old one
    into `archive/<today>/`.
+
+## LYUSA batches
+
+1. `npm run lyusa:batch` builds `data/lyusa/batches/<today>/` with every
+   visible product not yet recorded as sent: the CSV, photo zips (~16 MB
+   parts) and a needs-attention list. Check the needs-attention list first.
+2. Send the CSV and zips.
+3. `npm run lyusa:mark-sent -- <today>` records those SKUs in
+   `lyusa_submissions`, so the next batch leaves them out. Building a batch
+   never marks it sent on its own.
+
+`npm run lyusa:batch -- <name> --all` exports every visible product,
+whether sent or not. `--no-photos` skips the photo download.

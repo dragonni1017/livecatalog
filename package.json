@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:e2e": "node scripts/e2e-live.mjs"
+    "test:e2e": "node scripts/e2e-live.mjs",
+    "lyusa:batch": "node scripts/lyusa-batch.ts",
+    "lyusa:mark-sent": "node scripts/lyusa-mark-sent.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
