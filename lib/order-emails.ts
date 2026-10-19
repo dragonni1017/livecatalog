@@ -2,6 +2,15 @@ import { isSmtpConfigured, sendMail } from '@/lib/email'
 import { formatPriceCents } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 import { orderUrl } from '@/lib/order-access'
+import { TAX_ESTIMATE_NOTE, taxTextLines, type OrderTaxFields } from '@/lib/sales-tax'
+
+// "Estimated sales tax ...: $x\nEstimated total: $y\n" under the subtotal, or
+// nothing when tax isn't collected for the ship-to state.
+function taxBlock(tax: OrderTaxFields | undefined, subtotalCents: number, note: string | null): string {
+  const lines = tax ? taxTextLines(tax, subtotalCents) : []
+  if (!lines.length) return ''
+  return lines.join('\n') + '\n' + (note ? `(${note})\n` : '')
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -34,6 +43,8 @@ export async function notifyReps(args: {
   subtotalCents: number
   outOfStock: string[]
   discountPct?: number
+  /** Estimated sales tax snapshot (lib/sales-tax.ts taxColumns). */
+  tax?: OrderTaxFields
 }): Promise<void> {
   const to = process.env.SALES_ALERT_TO
   if (!isSmtpConfigured() || !to) {
@@ -41,7 +52,7 @@ export async function notifyReps(args: {
     return
   }
 
-  const { referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct } = args
+  const { referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct, tax } = args
   const who = contact.company?.trim() || contact.name.trim()
   const subject = `New order request ${referenceCode} — ${who} (${formatPriceCents(subtotalCents)})`
 
@@ -64,7 +75,9 @@ export async function notifyReps(args: {
     `Items\n${itemLines}\n\n` +
     `Subtotal: ${formatPriceCents(subtotalCents)}` +
     (discountPct ? ` (${discountPct}% customer discount applied)` : '') +
-    `\n\n` +
+    `\n` +
+    taxBlock(tax, subtotalCents, 'estimate only; QuickBooks charges the real tax') +
+    `\n` +
     (contact.notes?.trim() ? `Notes\n  ${contact.notes.trim()}\n\n` : '') +
     (outOfStock.length
       ? `⚠️ Stock warnings (confirm availability before quoting):\n${outOfStock.map((s) => `  ${s}`).join('\n')}\n\n`
@@ -131,13 +144,15 @@ export async function notifyCustomer(args: {
   contact: CheckoutContact
   lineItems: LineItem[]
   subtotalCents: number
+  /** Estimated sales tax snapshot (lib/sales-tax.ts taxColumns). */
+  tax?: OrderTaxFields
 }): Promise<void> {
   if (!isSmtpConfigured()) {
     console.log('[orders] SMTP not set — skipping customer confirmation')
     return
   }
 
-  const { referenceCode, accessToken, contact, lineItems, subtotalCents } = args
+  const { referenceCode, accessToken, contact, lineItems, subtotalCents, tax } = args
   const to = contact.email.trim()
   const subject = `We received your order request — ${referenceCode}`
 
@@ -150,7 +165,9 @@ export async function notifyCustomer(args: {
     `Thanks for your request — we've received it and a member of our team will be in touch shortly to confirm availability and next steps.\n\n` +
     `Your reference: ${referenceCode}\n\n` +
     `Items requested\n${itemLines}\n\n` +
-    `Subtotal: ${formatPriceCents(subtotalCents)}\n\n` +
+    `Subtotal: ${formatPriceCents(subtotalCents)}\n` +
+    taxBlock(tax, subtotalCents, TAX_ESTIMATE_NOTE) +
+    `\n` +
     `Track your order status: ${orderUrl(referenceCode, accessToken)}\n\n` +
     `This is a request, not a finalized order — pricing and availability are confirmed by our team before anything is charged.\n\n` +
     `If you have any questions, just reply to this email.\n\n` +

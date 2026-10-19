@@ -152,6 +152,12 @@ export interface OrderRequest {
   // Promo code used and the extra savings it gave (migration 0064, lib/promotions.ts).
   promo_code?: string | null
   promo_discount_cents?: number | null
+  // Estimated sales tax snapshot (migration 0066, lib/sales-tax.ts). An
+  // estimate only; QuickBooks charges the real tax. Null on older orders.
+  tax_state?: string | null
+  tax_rate_percent?: number | string | null
+  tax_estimate_cents?: number | null
+  tax_exempt_reason?: string | null
   // Ship-to address — see migration 0034_order_ship_address.sql. Sent to
   // QuickBooks as the Sales Order's ShipAddress.
   ship_address1: string | null

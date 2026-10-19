@@ -1,7 +1,9 @@
 # Sales tax by ship-to state: plan
 
-Status (2026-10-19): **phase 1 built** (migration 0066, `lib/sales-tax.ts`,
-`/admin/sales-tax`). Phases 2 and 3 not started.
+Status (2026-10-19): **phases 1 and 2 built** (migration 0066 applied,
+`lib/sales-tax.ts`, `/admin/sales-tax`, the estimate shown and saved on
+orders). Phase 3 not started. The rate table is still empty, so buyers see
+no tax until someone fills it in.
 
 ## Where things stand today
 
@@ -60,6 +62,9 @@ are already in the line totals):
    it's verified."
 
 Guests have no session and so no certificate. They get the plain estimate.
+A rep pricing an order for a customer gets that customer's exemption (the
+rep is signed in and trusted); a customer typing someone else's email
+doesn't.
 
 ## Build
 
@@ -86,18 +91,21 @@ Guests have no session and so no certificate. They get the plain estimate.
 
 ### Phase 2: show it
 
-- `/api/cart/reprice` returns the estimate for the ship-to state entered, and
-  the cart shows it under the subtotal once a state is chosen.
+- `/api/cart/tax-estimate` (a separate endpoint, not `/api/cart/reprice`)
+  returns the estimate for the ship-to state entered, and the cart shows it
+  under the subtotal once a state is chosen.
 - `/api/orders` calculates it again on the server (the cart value is never
   trusted, same as promo codes) and saves the four columns.
-- Shown with the subtotal on: the order page `/order/[reference]`,
-  `/my-orders`, the customer and rep emails, `/admin/orders/[id]` (plus
-  print, Excel and CSV export), and `/rep/quotes`.
+- Shown with the subtotal on: the order page `/order/[reference]`, the
+  customer and rep emails, `/admin/orders/[id]` (plus print, Excel and CSV
+  export). The list pages (`/my-orders`, `/rep/quotes`, the admin order list)
+  still show the subtotal only.
 - The QuickBooks sales order memo gets one more line for whoever reviews it:
-  `Est. tax CA 7.25%: $12.34` or `Tax exempt: resale cert CA`. It's still
-  **not** sent as a tax line.
-- The live e2e test checks that with no active rates, order totals are
-  unchanged.
+  `Est. tax CA 7.25%: $12.34 (app estimate)` or `Tax exempt: resale cert CA`.
+  It's still **not** sent as a tax line.
+- Tests: the order route test covers not collected / taxed / guest-with-
+  someone's-email / signed-in exempt. The live e2e covers the cart endpoint
+  with a temporary PR rate it removes afterwards.
 
 ### Phase 3: QuickBooks exemption (separate decision, not in this plan's scope)
 

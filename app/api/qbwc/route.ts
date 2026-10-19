@@ -6,6 +6,7 @@ import { ilikeExact } from '@/lib/order-access'
 import { safeEqual } from '@/lib/request-auth'
 import { isQbwcSessionLive } from '@/lib/qbwc-session'
 import { logAudit } from '@/lib/audit'
+import { taxMemoLine } from '@/lib/sales-tax'
 import {
   buildCustomerAddRq,
   buildCustomerFullQueryRq,
@@ -445,7 +446,7 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
 
   const { data: order, error: orderError } = await db
     .from('order_requests')
-    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, notes, promo_code, promo_discount_cents, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
+    .select('id, reference_code, customer_name, customer_company, customer_email, po_number, notes, promo_code, promo_discount_cents, tax_state, tax_rate_percent, tax_estimate_cents, tax_exempt_reason, ship_address1, ship_address2, ship_city, ship_state, ship_zip, ship_country')
     .eq('id', queueRow.order_id)
     .single()
   const { data: items, error: itemsError } = await db
@@ -559,9 +560,12 @@ async function handleSendRequestXML(db: Db, params: any): Promise<string> {
   const xml = buildSalesOrderAddRq({
     qbCustomerListId,
     // Promo line (0064) so whoever keys the order sees why line rates are lower.
+    // Tax line (0066) is the app's ESTIMATE, as memo text only: QuickBooks
+    // applies its own tax to the sales order, so no tax item is ever sent.
     memo: [
       order.reference_code,
       order.promo_code ? `Promo ${order.promo_code} (-$${((order.promo_discount_cents ?? 0) / 100).toFixed(2)})` : null,
+      taxMemoLine(order),
       order.notes || null,
     ]
       .filter(Boolean)

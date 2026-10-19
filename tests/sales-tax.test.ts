@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { activeRates, estimateSalesTax, parseSalesTaxInput, taxOn, type TaxCertificate } from '@/lib/sales-tax'
+import {
+  activeRates, estimateSalesTax, orderTaxLine, parseSalesTaxInput, taxColumns, taxMemoLine, taxOn, taxTextLines,
+  type TaxCertificate,
+} from '@/lib/sales-tax'
 
 const TODAY = '2026-10-19'
 const rates = activeRates([
@@ -80,5 +83,37 @@ describe('parseSalesTaxInput', () => {
     expect(parseSalesTaxInput({ state: 'CA', rate_percent: '-1' })).toHaveProperty('error')
     expect(parseSalesTaxInput({ state: 'CA', rate_percent: '21' })).toHaveProperty('error')
     expect(parseSalesTaxInput({ state: 'CA', rate_percent: '5', note: 'x'.repeat(201) })).toHaveProperty('error')
+  })
+})
+
+describe('orderTaxLine / taxTextLines / taxMemoLine', () => {
+  const taxed = { tax_state: 'CA', tax_rate_percent: '7.2500', tax_estimate_cents: 725, tax_exempt_reason: null }
+  const exempt = { tax_state: 'CA', tax_rate_percent: null, tax_estimate_cents: 0, tax_exempt_reason: 'resale_certificate' }
+  const notCollected = { tax_state: 'NV', tax_rate_percent: null, tax_estimate_cents: 0, tax_exempt_reason: 'not_collected' }
+  const legacy = { tax_state: null, tax_rate_percent: null, tax_estimate_cents: null, tax_exempt_reason: null }
+
+  it('labels a taxed order with state and rate', () => {
+    expect(orderTaxLine(taxed)).toEqual({ label: 'Estimated sales tax (CA 7.25%)', cents: 725 })
+    expect(taxTextLines(taxed, 10_000)).toEqual(['Estimated sales tax (CA 7.25%): $7.25', 'Estimated total: $107.25'])
+    expect(taxMemoLine(taxed)).toBe('Est. tax CA 7.25%: $7.25 (app estimate)')
+  })
+
+  it('labels an exempt order without an amount', () => {
+    expect(orderTaxLine(exempt)).toEqual({ label: 'Sales tax: exempt (resale certificate, CA)', cents: 0 })
+    expect(taxTextLines(exempt, 10_000)).toEqual(['Sales tax: exempt (resale certificate, CA)'])
+    expect(taxMemoLine(exempt)).toBe('Tax exempt: resale cert CA')
+  })
+
+  it('shows nothing for not-collected states and orders from before 0066', () => {
+    for (const o of [notCollected, legacy, {}]) {
+      expect(orderTaxLine(o)).toBeNull()
+      expect(taxTextLines(o, 10_000)).toEqual([])
+      expect(taxMemoLine(o)).toBeNull()
+    }
+  })
+
+  it('maps an estimate to the order columns', () => {
+    expect(taxColumns(est('CA'))).toEqual({ tax_state: 'CA', tax_rate_percent: 7.25, tax_estimate_cents: 725, tax_exempt_reason: null })
+    expect(taxColumns(est(null))).toEqual({ tax_state: null, tax_rate_percent: null, tax_estimate_cents: 0, tax_exempt_reason: 'not_collected' })
   })
 })

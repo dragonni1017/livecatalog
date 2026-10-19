@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { getAdminClient } from '@/lib/supabase'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
+import { orderTaxLine, TAX_ESTIMATE_NOTE } from '@/lib/sales-tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .eq('order_id', id)
       .order('sku')
     const items = (itemData ?? []) as OrderItemRecord[]
+    const taxLine = orderTaxLine(order)
 
     // Build the sheet as an array of rows (arrays). Header block, then a blank
     // row, then the line-item table with a subtotal.
@@ -53,6 +55,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       ...items.map((it) => [it.sku, it.name, dollars(it.unit_price_cents), it.qty, dollars(it.line_total_cents)]),
       [],
       ['', '', '', 'Subtotal', dollars(order.subtotal_cents)],
+      ...(taxLine
+        ? [
+            ['', '', '', taxLine.label, dollars(taxLine.cents)],
+            ['', '', '', 'Estimated total', dollars(order.subtotal_cents + taxLine.cents)],
+            ['', '', '', TAX_ESTIMATE_NOTE],
+          ]
+        : []),
     ]
 
     const ws = XLSX.utils.aoa_to_sheet(rows)

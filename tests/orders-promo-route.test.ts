@@ -14,9 +14,12 @@ const state = vi.hoisted(() => ({
   calls: [] as { kind: string; name?: string; args?: unknown }[],
   submitted: null as null | Record<string, unknown>,
   orderUpdates: [] as Record<string, unknown>[],
+  taxRates: [] as Record<string, unknown>[],
+  certs: [] as Record<string, unknown>[],
+  user: null as null | { email: string; app_metadata?: Record<string, unknown> },
 }))
 
-vi.mock('../lib/auth-server', () => ({ getSessionUser: async () => null }))
+vi.mock('../lib/auth-server', () => ({ getSessionUser: async () => state.user }))
 vi.mock('../lib/order-emails', () => ({ notifyReps: async () => {}, notifyCustomer: async () => {} }))
 vi.mock('../lib/supabase', () => {
   const products = [
@@ -25,7 +28,11 @@ vi.mock('../lib/supabase', () => {
   ]
   const from = (table: string) => {
     let rows: Record<string, unknown>[] =
-      table === 'products' ? products : table === 'promotions' ? state.promotions : []
+      table === 'products' ? products
+      : table === 'promotions' ? state.promotions
+      : table === 'sales_tax_states' ? state.taxRates
+      : table === 'resale_certificates' ? state.certs
+      : []
     let patch: Record<string, unknown> | null = null
     const b: Record<string, unknown> = {
       select: () => b,
@@ -80,6 +87,9 @@ beforeEach(() => {
   state.calls = []
   state.submitted = null
   state.orderUpdates = []
+  state.taxRates = []
+  state.certs = []
+  state.user = null
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -101,7 +111,7 @@ describe('POST /api/orders with a promo code', () => {
     expect(state.submitted?.p_subtotal_cents).toBe(expected)
     const items = state.submitted?.p_items as { line_total_cents: number }[]
     expect(items.map((i) => i.line_total_cents)).toEqual([applyTierDiscount(50_000, 10), applyTierDiscount(50_000, 10)])
-    expect(state.orderUpdates).toContainEqual({ promo_code: 'HOLIDAY10', promo_discount_cents: 100_000 - expected, id: 'order-1' })
+    expect(state.orderUpdates).toContainEqual(expect.objectContaining({ promo_code: 'HOLIDAY10', promo_discount_cents: 100_000 - expected, id: 'order-1' }))
   })
 
   it('unknown code: 400 and nothing saved or claimed', async () => {
@@ -142,5 +152,44 @@ describe('POST /api/orders with a promo code', () => {
     expect(state.submitted?.p_subtotal_cents).toBe(100_000)
     expect(state.calls.map((c) => c.name)).not.toContain('claim_promotion_use')
     expect(state.orderUpdates.filter((u) => 'promo_code' in u)).toEqual([])
+  })
+})
+
+// Estimated sales tax (lib/sales-tax.ts, migration 0066): recomputed and saved
+// by the route, never taken from the client, and a resale certificate only
+// counts for a buyer actually signed in as the order email.
+describe('POST /api/orders estimated sales tax', () => {
+  const saved = () => state.orderUpdates.find((u) => 'tax_exempt_reason' in u)
+  const TX_CERT = { email: 'buyer@example.com', state: 'TX', status: 'verified', expires_on: null, replaced_at: null }
+
+  it('no rates set up: saved as not collected, $0', async () => {
+    const res = await post(body())
+    expect(res.status).toBe(200)
+    expect(saved()).toMatchObject({ tax_state: 'TX', tax_estimate_cents: 0, tax_exempt_reason: 'not_collected', id: 'order-1' })
+  })
+
+  it('active rate: estimate on the post-pricing subtotal is saved', async () => {
+    state.taxRates = [{ state: 'TX', rate_percent: '6.2500', is_active: true }]
+    const res = await post(body({ promoCode: 'HOLIDAY10' }))
+    expect(res.status).toBe(200)
+    const subtotal = state.submitted?.p_subtotal_cents as number
+    expect(saved()).toMatchObject({
+      tax_state: 'TX', tax_rate_percent: 6.25, tax_estimate_cents: Math.round(subtotal * 0.0625), tax_exempt_reason: null, promo_code: 'HOLIDAY10',
+    })
+  })
+
+  it("a guest typing a certified customer's email is still taxed", async () => {
+    state.taxRates = [{ state: 'TX', rate_percent: 6.25, is_active: true }]
+    state.certs = [TX_CERT]
+    await post(body())
+    expect(saved()).toMatchObject({ tax_estimate_cents: 6250, tax_exempt_reason: null })
+  })
+
+  it('signed in as the order email with a verified certificate: exempt', async () => {
+    state.taxRates = [{ state: 'TX', rate_percent: 6.25, is_active: true }]
+    state.certs = [TX_CERT]
+    state.user = { email: 'Buyer@Example.com' }
+    await post(body())
+    expect(saved()).toMatchObject({ tax_estimate_cents: 0, tax_exempt_reason: 'resale_certificate' })
   })
 })
