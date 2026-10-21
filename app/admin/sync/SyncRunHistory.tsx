@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { syncHealth, uncategorizedFromDetails, type SyncRunRow } from '@/lib/sync-runs'
+import { stockDriftFromDetails, type StockDrift } from '@/lib/stock-drift'
 
 // Recent Erply sync runs (migration 0061). Server component; the page passes
 // the rows in.
@@ -23,6 +24,20 @@ function when(iso: string): string {
   })
 }
 
+function DriftList({ drift }: { drift: StockDrift }) {
+  return (
+    <ul className="mt-1 max-w-xl list-disc space-y-0.5 pl-4">
+      {drift.sample.map((d) => (
+        <li key={d.sku} className="tabular-nums">
+          <span className="font-mono">{d.sku}</span>: catalog {d.catalog.toLocaleString()}, Erply {d.erply.toLocaleString()}
+          {d.live ? '' : ' (hidden)'}
+        </li>
+      ))}
+      {drift.drifted > drift.sample.length && <li className="text-gray-400">…and {drift.drifted - drift.sample.length} more</li>}
+    </ul>
+  )
+}
+
 function subErrors(details: Record<string, unknown> | null): string[] {
   return Object.entries(details ?? {})
     .filter(([, v]) => !!v && typeof v === 'object' && 'error' in (v as object))
@@ -39,6 +54,11 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
     )
   }
   const health = syncHealth(runs)
+  // The newest nightly run's drift, surfaced above the table: the stock
+  // sync's 6-night oscillation (2026-10-21) ran a month because every run
+  // still read "ok". See lib/stock-drift.ts.
+  const latestCron = runs.filter((r) => r.source === 'cron').sort((a, b) => b.started_at.localeCompare(a.started_at))[0]
+  const latestDrift = latestCron ? stockDriftFromDetails(latestCron.details) : null
   const tone =
     health.level === 'ok'
       ? 'border-green-200 bg-green-50 text-green-800'
@@ -52,6 +72,20 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
       <p className={`mb-3 rounded-lg border px-4 py-2.5 text-sm ${tone}`} data-sync-health={health.level}>
         {health.message} The nightly run is at 1 AM Pacific.
       </p>
+      {latestDrift && latestDrift.drifted > 0 && (
+        <details className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900" data-stock-drift={latestDrift.drifted}>
+          <summary className="cursor-pointer">
+            After the last nightly run, {latestDrift.drifted.toLocaleString()} of {latestDrift.checked.toLocaleString()} counted
+            products&apos; stock didn&apos;t match Erply ({latestDrift.driftedLive.toLocaleString()} on the storefront).
+          </summary>
+          <DriftList drift={latestDrift} />
+          <p className="mt-2 text-xs text-amber-800">
+            A few are normal: an order the catalog has already taken off that Erply hasn&apos;t seen yet. Many, or the same
+            products swinging up and down from night to night, means the stock sync is wrong. Full list:{' '}
+            <code className="font-mono">node scripts/audit-stock-vs-erply.ts</code>.
+          </p>
+        </details>
+      )}
       {runs.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-sm">
@@ -71,6 +105,7 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
               {runs.map((r) => {
                 const problems = [...(r.message ? [r.message] : []), ...subErrors(r.details), ...(r.errors ?? []).map((e) => `${e.sku ?? `row ${e.row}`}: ${e.message}`)]
                 const uncategorized = uncategorizedFromDetails(r.details)
+                const drift = stockDriftFromDetails(r.details)
                 return (
                   <tr key={r.id} className="align-top">
                     <td className="whitespace-nowrap px-3 py-2 text-gray-700">{when(r.started_at)}</td>
@@ -115,6 +150,14 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
                             </Link>{' '}
                             tab, and add the group to lib/erply-category-aliases.ts so the next ones match.
                           </p>
+                        </details>
+                      )}
+                      {drift && drift.drifted > 0 && (
+                        <details className="mt-1 text-xs text-gray-600">
+                          <summary className="cursor-pointer text-amber-700">
+                            {drift.drifted} product{drift.drifted === 1 ? '' : 's'}&apos; stock off from Erply after this run
+                          </summary>
+                          <DriftList drift={drift} />
                         </details>
                       )}
                     </td>

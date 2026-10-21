@@ -24,6 +24,7 @@ import { syncToSupabase, syncStockFromErply, type SyncProduct } from '@/lib/prod
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
 import type { ImportResult } from '@/lib/types'
 import { recordSyncRun } from '@/lib/sync-runs'
+import { checkStockDrift } from '@/lib/stock-drift'
 import { checkCertificateReminders } from '@/lib/cert-reminders'
 
 /**
@@ -155,9 +156,20 @@ export async function GET(request: NextRequest) {
     // warehouse 2 ("Store LA") may be retail/in-store-only stock that
     // shouldn't be sold to wholesale catalog customers.
     let stockSync: unknown = { skipped: 'not run' }
+    let stockDrift: unknown = { skipped: 'not run' }
     try {
       const erplyStock = await getErplyStock(1)
       stockSync = await syncStockFromErply(erplyStock, db)
+      // 3c. Did the stock sync leave the catalog matching Erply? Read-only,
+      // from the stock already fetched; see lib/stock-drift.ts. A failure
+      // here is reported as skipped, not as an error: it's a health check,
+      // the run itself is unaffected.
+      try {
+        stockDrift = await checkStockDrift(erplyStock, db)
+      } catch (err) {
+        console.error('[sync] stock drift check failed (non-fatal):', err)
+        stockDrift = { skipped: `check failed: ${err instanceof Error ? err.message : String(err)}` }
+      }
     } catch (err) {
       console.error('[sync] stock sync failed (non-fatal to the rest of this run):', err)
       stockSync = { error: err instanceof Error ? err.message : String(err) }
@@ -184,7 +196,7 @@ export async function GET(request: NextRequest) {
 
     const elapsed = Date.now() - startedAt
     console.log(`[sync] Done in ${elapsed}ms — inserted:${result.inserted} updated:${result.updated} deactivated:${result.deactivated} errors:${result.errors.length} stockSync:${JSON.stringify(stockSync)}`)
-    await recordSyncRun(db, { source: 'cron', startedAt, result, details: { stockSync, lowStock, abandonedCarts, certReminders } })
+    await recordSyncRun(db, { source: 'cron', startedAt, result, details: { stockSync, stockDrift, lowStock, abandonedCarts, certReminders } })
 
     return NextResponse.json({
       ok: true,
