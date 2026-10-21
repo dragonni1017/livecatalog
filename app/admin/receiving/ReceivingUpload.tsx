@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import { isSkuHeaderCell } from '@/lib/packing-list'
 import { blockersForDelete, type ShipmentProgress } from '@/lib/receiving'
 import NewProductsPanel from './NewProductsPanel'
 
@@ -12,7 +13,7 @@ import NewProductsPanel from './NewProductsPanel'
 //
 // Every sheet is sent, not just the first: the supplier files put the line
 // items on whichever tab they feel like, and the server finds the one with a
-// 货号 column.
+// SKU column (货号, or `item` on some 2026 sheets).
 
 export interface ShipmentLine {
   id: string
@@ -218,12 +219,12 @@ export default function ReceivingUpload({
         rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: null }),
       }))
       // The header-row scan only looks at the first 10 rows, so a sheet with
-      // no 货号 near the top is not the line-item tab.
+      // no SKU header near the top is not the line-item tab.
       const candidate =
         sheets.find((s) =>
           (s.rows as unknown[][])
             .slice(0, 10)
-            .some((r) => Array.isArray(r) && r.some((c) => typeof c === 'string' && c.includes('货号'))),
+            .some((r) => Array.isArray(r) && r.some(isSkuHeaderCell)),
         ) ?? sheets[0]
 
       const res = await fetch('/admin/api/shipments', {
