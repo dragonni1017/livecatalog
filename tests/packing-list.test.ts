@@ -178,6 +178,50 @@ describe('parsePackingListSheet', () => {
   })
 })
 
+describe('parsePackingListSheet — pcs / CTN headers (EGSU9679727, ETD 0131)', () => {
+  // Header verbatim from the Arrival List: total pieces in 'pcs', cartons in
+  // 'CTN', pieces per case in 'pk/cs'. 48 x 50 = 2,400.
+  const HEADER_0131 = [null, '品名', '图片（一定要有图）', 'UPC(条码12位数字)', '产品规格尺寸（CM）', '货号', '材质', 'pk/cs', 'CTN', 'pcs', '长cm(外箱)', '宽cm(外箱)', '高cm(外箱)', '毛重KG（每包装箱）', '总量KG', '体积CBM']
+
+  it('reads pcs as the line total and CTN as cartons', () => {
+    const parsed = parsePackingListSheet([
+      HEADER_0131,
+      [1, 'Highland cow plush - 25cm', null, '737879103258', '25厘米', 'P273797-25cm', '兔绒', 48, 50, 2400, 60, 45, 45, 8.9, 445, 6.075],
+    ])
+    expect(parsed.problems).toEqual([])
+    expect(parsed.lines[0]).toMatchObject({ sku: 'P273797-25cm', qtyShipped: 2400, cartons: 50, piecesPerCase: 48 })
+  })
+
+  it('matches pcs only as the whole header, never a per-carton one', () => {
+    for (const label of ['pcs/ctn', 'PCS per carton', 'pcs/cs']) {
+      expect(() => parsePackingListSheet([['货号', label], ['P1', 24]])).toThrow(/Could not find a piece-count column/)
+    }
+    expect(parsePackingListSheet([['货号', ' PCS '], ['P1', 24]]).lines[0].qtyShipped).toBe(24)
+  })
+
+  it('reports rows with pieces but no SKU, and skips the totals row', () => {
+    const parsed = parsePackingListSheet([
+      HEADER_0131,
+      [1, 'Highland cow plush - 25cm', null, '737879103258', '25厘米', 'P273797-25cm', '兔绒', 48, 50, 2400, 60, 45, 45, 8.9, 445, 6.075],
+      [11, 'sample', null, '推车', null, null, null, 120, 3, 360],
+      [22, '红色＋灰色', null, null, null, null, null, 108, 1, 108],
+      [null, null, null, null, null, null, null, null, 54, 2868],
+      [null, '合计', null, null, null, null, null, null, 54, 2868],
+      [null, null, null, 'EGLV143555552536', null, null, null, null, null, 'EGSU9679727'],
+    ])
+    expect(parsed.lines).toHaveLength(1)
+    expect(parsed.problems).toEqual([
+      { where: 'row 3', problem: '360 pieces with no SKU ("sample") — not received' },
+      { where: 'row 4', problem: '108 pieces with no SKU ("红色＋灰色") — not received' },
+    ])
+  })
+
+  it('still prefers 总PCS and QTY over a bare pcs column', () => {
+    expect(parsePackingListSheet([['货号', 'pcs', '总PCS'], ['P1', 24, 900]]).lines[0].qtyShipped).toBe(900)
+    expect(parsePackingListSheet([['货号', 'pcs', 'QTY'], ['P1', 24, 900]]).lines[0].qtyShipped).toBe(900)
+  })
+})
+
 describe('isSkuHeaderCell', () => {
   it('accepts 货号 anywhere and `item` only as the whole header', () => {
     expect(isSkuHeaderCell('货号')).toBe(true)
