@@ -31,6 +31,7 @@ import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
+import { likelyCasePrice, median } from '../lib/price-check.ts'
 
 const require = createRequire(import.meta.url)
 const XLSX = require('xlsx')
@@ -82,11 +83,6 @@ const row = (p, extra) => ({
   Stock: p.stock_qty ?? '',
   ...extra,
 })
-const median = (xs) => {
-  const s = [...xs].sort((a, b) => a - b)
-  const m = s.length >> 1
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
-}
 
 // ── Category ────────────────────────────────────────────────────────────────
 const byCat = new Map()
@@ -94,10 +90,10 @@ for (const p of products) {
   if (!p.category_id) continue
   ;(byCat.get(p.category_id) ?? byCat.set(p.category_id, []).get(p.category_id)).push(p)
 }
-// "20/pk 60bx/cs" -> 60. A high price that comes back to roughly the category
-// median once divided by this was most likely typed as the whole case
-// (F286938: $180 = 60 boxes x $3, in a category whose median is $3).
-const boxesPerCase = (name) => Number(/(\d+)\s*bx\s*\/\s*cs/i.exec(name)?.[1]) || null
+// A high price that comes back to roughly the category median once divided
+// by the boxes per case was most likely typed as the whole case (F286938:
+// $180 = 60 boxes x $3). The rule is lib/price-check.ts, shared with
+// /admin/cleanup's "Case price?" tab.
 
 const categoryRows = []
 for (const [, ps] of byCat) {
@@ -106,15 +102,11 @@ for (const [, ps] of byCat) {
   for (const p of ps) {
     const ratio = p.price_cents / med
     if (ratio >= CATEGORY_FACTOR || ratio <= 1 / CATEGORY_FACTOR) {
-      const bx = boxesPerCase(p.name)
-      const perBox = bx && bx > 1 ? p.price_cents / bx : null
-      // Only for a big gap and a big case: dividing by a small box count lands
-      // near the median by chance (a $33 hair dryer / 20 bx is not a $1.65 one).
-      const casePrice = ratio >= 20 && bx >= 24 && perBox / med >= 0.5 && perBox / med <= 2
+      const casePrice = likelyCasePrice(p, med)
       categoryRows.push(row(p, {
         'Category median': dollars(med),
         'x median': Math.round(ratio * 100) / 100,
-        'Likely case price': casePrice ? `yes: $${dollars(p.price_cents)} / ${bx} bx = $${dollars(perBox)}` : '',
+        'Likely case price': casePrice ? `yes: $${dollars(p.price_cents)} / ${casePrice.boxes} bx = $${dollars(casePrice.perBoxCents)}` : '',
         Why: ratio >= 1 ? `${Math.round(ratio)}x the category median` : `1/${Math.round(1 / ratio)} of the category median`,
       }))
     }

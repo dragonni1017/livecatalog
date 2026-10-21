@@ -14,6 +14,7 @@ import CleanupNameFix from '@/components/admin/CleanupNameFix'
 import CleanupPricing, { type ReadyRow, type UnpricedRow } from '@/components/admin/CleanupPricing'
 import { fetchReceivingCohort, isReadyToShow, needsErplyPrice } from '@/lib/needs-pricing'
 import { fetchQbItemsBySku } from '@/lib/qb-item-directory'
+import { categoryMedians, describeCasePrice, likelyCasePrice } from '@/lib/price-check'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,8 +38,10 @@ const DISPLAY_PAGE_SIZE = 100
 
 // 'pricing' isn't a classifyProduct flag: "ready to show" depends on the
 // receiving cohort, which lives in shipment_lines, not on the product row.
-type CleanupTab = CleanupIssue | 'pricing'
-const CLEANUP_TABS: CleanupTab[] = [...CLEANUP_ISSUES, 'pricing']
+// Nor is 'case-price': it needs every product's price for the category
+// medians (lib/price-check.ts).
+type CleanupTab = CleanupIssue | 'pricing' | 'case-price'
+const CLEANUP_TABS: CleanupTab[] = [...CLEANUP_ISSUES, 'pricing', 'case-price']
 
 const TAB_LABELS: Record<CleanupTab, string> = {
   photo: 'Needs photo',
@@ -46,6 +49,7 @@ const TAB_LABELS: Record<CleanupTab, string> = {
   category: 'No category',
   description: 'No description',
   pricing: 'Needs pricing',
+  'case-price': 'Case price?',
 }
 
 interface CleanupDbRow {
@@ -145,7 +149,23 @@ export default async function AdminCleanupPage({
     )
   }
 
-  const counts: Record<CleanupTab, number> = { photo: 0, name: 0, category: 0, description: 0, pricing: 0 }
+  // Prices that look like a whole case's. Hidden ones count too: the receiving
+  // products waiting on the Needs pricing tab are hidden until unhidden there.
+  const medians = categoryMedians(activeRows)
+  const casePriceById = new Map<string, string>()
+  for (const row of activeRows) {
+    const flag = row.category_id ? likelyCasePrice(row, medians.get(row.category_id)) : null
+    if (flag) casePriceById.set(row.id, describeCasePrice(row.price_cents ?? 0, flag))
+  }
+
+  const counts: Record<CleanupTab, number> = {
+    photo: 0,
+    name: 0,
+    category: 0,
+    description: 0,
+    pricing: 0,
+    'case-price': casePriceById.size,
+  }
   for (const flags of flagsById.values()) {
     for (const key of CLEANUP_ISSUES) if (flags[key]) counts[key]++
   }
@@ -181,6 +201,7 @@ export default async function AdminCleanupPage({
       priceCents: r.price_cents ?? 0,
       stockQty: r.stock_qty ?? 0,
       thumb: resolveCdnImage(r.image_url, 56),
+      casePrice: casePriceById.get(r.id) ?? null,
     }))
     const unpricedShown = unpricedAll.filter(matchesTerm)
     // QuickBooks is a reference only -- the price still has to be entered in
@@ -209,7 +230,8 @@ export default async function AdminCleanupPage({
   }
 
   const filtered = activeRows.filter((row) => {
-    if (issue === 'pricing' || !flagsById.get(row.id)?.[issue]) return false
+    if (issue === 'pricing') return false
+    if (issue === 'case-price' ? !casePriceById.has(row.id) : !flagsById.get(row.id)?.[issue]) return false
     if (visibility === 'visible' && row.manually_hidden !== false) return false
     if (visibility === 'hidden' && row.manually_hidden !== true) return false
     if (!matchesTerm(row)) return false
@@ -337,6 +359,15 @@ export default async function AdminCleanupPage({
           </p>
         )}
 
+        {issue === 'case-price' && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            These prices are at least 20 times their category&apos;s median, and dividing by the boxes per case in
+            the name lands right on it, so they were most likely typed as the price of the whole case. Prices
+            are set in Erply, not here: correct it there, and the next sync (or Pull prices on the Needs pricing
+            tab) brings it over. If a price really is per case, the name should say so.
+          </p>
+        )}
+
         {issue === 'pricing' && <CleanupPricing ready={readyRows} unpriced={unpricedRows} />}
 
         {issue !== 'pricing' && (
@@ -398,6 +429,9 @@ export default async function AdminCleanupPage({
                             currentName={row.name}
                             suggestion={nameAudit?.suggestion ?? null}
                           />
+                        )}
+                        {issue === 'case-price' && (
+                          <span className="text-xs text-amber-800 tabular-nums">{casePriceById.get(row.id)}</span>
                         )}
                         {(issue === 'category' || issue === 'description') && (
                           <CleanupRowEditor
