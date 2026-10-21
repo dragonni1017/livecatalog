@@ -3,6 +3,7 @@ import { getAdminClient } from '@/lib/supabase'
 import { isConfigured as isErplyConfigured } from '@/lib/erply'
 import { loadShipmentProgress } from '@/lib/receiving-progress'
 import ReceivingUpload, { type Shipment } from './ReceivingUpload'
+import ContainerCheckPanel from './ContainerCheckPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,8 @@ export default async function ReceivingPage() {
       )}
 
       <ReceivingUpload initialShipments={(shipments ?? []) as Shipment[]} initialProgress={progress} />
+
+      <ContainerCheckPanel />
     </div>
   )
 }

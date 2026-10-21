@@ -549,6 +549,29 @@ export async function getErplyProductByCode(
 }
 
 /**
+ * Which of `codes` exist in Erply, active or not, as upper-cased codes. One
+ * getProducts per code, a few at a time; a record only counts when its code
+ * matches exactly, so a partial match can't pass. Used by the container check
+ * (lib/container-check.ts) for SKUs the catalog lacks: a product created
+ * archived wouldn't show in getErplyProducts' active-only walk.
+ */
+export async function findErplyCodes(codes: string[], concurrency = 4): Promise<Set<string>> {
+  const found = new Set<string>()
+  if (!isConfigured() || !codes.length) return found
+  const sessionKey = await getSessionKey()
+  const queue = [...codes]
+  const worker = async () => {
+    for (let code = queue.shift(); code !== undefined; code = queue.shift()) {
+      const data = await erplyPost<ErplyProduct>({ request: 'getProducts', sessionKey, code })
+      const k = code.trim().toUpperCase()
+      if (data.records?.some((r) => (r.code ?? '').trim().toUpperCase() === k)) found.add(k)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, codes.length) }, worker))
+  return found
+}
+
+/**
  * Renames one product. `saveProduct` with a productID updates that product in
  * place; `name` is honoured on this account (unlike `price` -- see
  * createErplyProduct). Sends exactly the two identifying params plus `name`,

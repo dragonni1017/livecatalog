@@ -35,3 +35,7 @@ are EGSU9777282 (32 missing: K229561–K229578, 4531-8..11, ...), EGSU1118334
   (PR #151) instead of vanishing. Recent ones worth a look before receiving:
   6,000 手机包 (phone bags) on EGHU9765009, and 底座 (bases) on several
   September containers.
+- The same check is on `/admin/receiving` ("Check recent containers", PR
+  #157): staff pick the OneDrive folder, the browser parses it, and
+  `/admin/api/shipments/check-containers` classifies the SKUs read-only.
+  The server can't read OneDrive, which is why the parse is client-side.
