@@ -14,8 +14,8 @@ missing from Erply too**, so the nightly sync has nothing to insert (its
 runs show 0 inserts, 0 errors, correctly). The newest product in Erply was
 T642260, created 2026-10-06; containers kept arriving after that.
 
-Only 7 of the 21 have a `shipments` row (the ones applied 2026-09-23 plus
-EGSU9509206). The other 14 were never staged, which is the whole gap: biggest
+Only 7 of the 21 have a `shipments` row (all 7 applied 2026-09-23).
+The other 14 were never staged, which is the whole gap: biggest
 are EGSU9777282 (32 missing: K229561–K229578, 4531-8..11, ...), EGSU1118334
 (26: G333213–G333236), EGHU9765009 (14).
 
