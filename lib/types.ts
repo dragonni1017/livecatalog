@@ -219,6 +219,8 @@ export interface ImportResult {
    * lib/erply-category-aliases.ts so the next ones match.
    */
   uncategorized?: { sku: string; category: string }[]
+  /** SKUs this run deactivated (not in the Erply feed). */
+  deactivatedSkus?: string[]
 }
 
 // One row classified against the current DB state

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSyncRunRow, MAX_STORED_ERRORS, recordSyncRun, syncHealth, uncategorizedFromDetails } from '../lib/sync-runs'
+import { buildSyncRunRow, deactivatedFromDetails, MAX_STORED_ERRORS, recordSyncRun, syncHealth, uncategorizedFromDetails } from '../lib/sync-runs'
 
 const T0 = Date.parse('2026-10-16T08:00:00Z')
 const ok = { inserted: 2, updated: 3215, deactivated: 0, errors: [] }
@@ -91,5 +91,18 @@ describe('recordSyncRun', () => {
     const db = { from: (t: string) => (t === 'sync_runs' ? { insert } : null) } as never
     await recordSyncRun(db, { source: 'manual', startedAt: T0, finishedAt: T0 + 1000, result: ok })
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ source: 'manual', status: 'ok', updated: 3215, duration_ms: 1000 }))
+  })
+})
+
+describe('deactivated SKUs in run details', () => {
+  it('stores which SKUs a run deactivated and reads them back', () => {
+    const run = buildSyncRunRow({ source: 'cron', startedAt: 0, result: { ...ok, deactivated: 2, deactivatedSkus: ['T641519', 'T641730'] } })
+    expect(run.status).toBe('ok')
+    expect(deactivatedFromDetails(run.details)).toEqual({ count: 2, sample: ['T641519', 'T641730'] })
+  })
+
+  it('stores nothing when none were deactivated, and ignores malformed jsonb', () => {
+    expect(buildSyncRunRow({ source: 'cron', startedAt: 0, result: ok }).details).toBeNull()
+    expect(deactivatedFromDetails({ deactivated: { count: 'x' } })).toBeNull()
   })
 })

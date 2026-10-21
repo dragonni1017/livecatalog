@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { syncHealth, uncategorizedFromDetails, type SyncRunRow } from '@/lib/sync-runs'
+import { deactivatedFromDetails, syncHealth, uncategorizedFromDetails, type SyncRunRow } from '@/lib/sync-runs'
 import { stockDriftFromDetails, type StockDrift } from '@/lib/stock-drift'
 
 // Recent Erply sync runs (migration 0061). Server component; the page passes
@@ -106,6 +106,7 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
                 const problems = [...(r.message ? [r.message] : []), ...subErrors(r.details), ...(r.errors ?? []).map((e) => `${e.sku ?? `row ${e.row}`}: ${e.message}`)]
                 const uncategorized = uncategorizedFromDetails(r.details)
                 const drift = stockDriftFromDetails(r.details)
+                const deactivatedList = deactivatedFromDetails(r.details)
                 return (
                   <tr key={r.id} className="align-top">
                     <td className="whitespace-nowrap px-3 py-2 text-gray-700">{when(r.started_at)}</td>
@@ -149,6 +150,17 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
                               No category
                             </Link>{' '}
                             tab, and add the group to lib/erply-category-aliases.ts so the next ones match.
+                          </p>
+                        </details>
+                      )}
+                      {deactivatedList && (
+                        <details className="mt-1 text-xs text-gray-600" data-sync-deactivated={deactivatedList.count}>
+                          <summary className="cursor-pointer text-gray-700">
+                            {deactivatedList.count} product{deactivatedList.count === 1 ? '' : 's'} deactivated (no longer in Erply)
+                          </summary>
+                          <p className="mt-1 max-w-xl break-words font-mono">
+                            {deactivatedList.sample.join(', ')}
+                            {deactivatedList.count > deactivatedList.sample.length && ` …and ${deactivatedList.count - deactivatedList.sample.length} more`}
                           </p>
                         </details>
                       )}

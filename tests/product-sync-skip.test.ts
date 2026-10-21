@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/low-stock-alert', () => ({ checkLowStockAndNotify: async () => {} }))
 vi.mock('../lib/back-in-stock-notify', () => ({ checkBackInStockAndNotify: async () => {} }))
 
-import { resolveCategories, syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
+import { planDeactivation, resolveCategories, syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
 
 /**
  * Minimal chainable stand-in for the supabase-js client: every builder method
@@ -177,5 +177,46 @@ describe('syncToSupabase uncategorized', () => {
       skipFields: ['image_url', 'stock_qty', 'category', 'description'],
     })
     expect(result.uncategorized).toEqual([{ sku: 'NEW1', category: 'Garden Tools' }])
+  })
+})
+
+describe('planDeactivation', () => {
+  const active = (skus: (string | null)[]) => skus.map((sku) => ({ sku }))
+
+  it('deactivates exactly the active SKUs missing from the feed, never a null SKU', () => {
+    expect(planDeactivation(active(['A', 'B', 'c', null]), ['A', 'C'])).toEqual({ skus: ['B', 'c'], refused: null })
+  })
+
+  // Real numbers from 2026-10-21: 3,361 active, 3,215 in Erply, 146 to go.
+  it('lets a normal night through', () => {
+    const skus = Array.from({ length: 3361 }, (_, i) => `S${i}`)
+    const plan = planDeactivation(active(skus), skus.slice(0, 3215))
+    expect(plan.refused).toBeNull()
+    expect(plan.skus).toHaveLength(146)
+  })
+
+  // The old NOT IN would have deactivated the whole catalog on a short feed.
+  it('refuses a run that would deactivate more than 10% of a real-sized catalog', () => {
+    const skus = Array.from({ length: 3361 }, (_, i) => `S${i}`)
+    const plan = planDeactivation(active(skus), skus.slice(0, 200))
+    expect(plan.skus).toEqual([])
+    expect(plan.refused).toMatch(/refused to deactivate 3161 of 3361 active products \(limit 336\)/)
+  })
+
+  it('always allows up to 20, so a small catalog is not stuck', () => {
+    const skus = Array.from({ length: 25 }, (_, i) => `S${i}`)
+    expect(planDeactivation(active(skus), skus.slice(0, 5)).refused).toBeNull()
+    expect(planDeactivation(active(skus), skus.slice(0, 4)).refused).not.toBeNull()
+  })
+})
+
+describe('syncToSupabase deactivation guard', () => {
+  it('deactivates nothing and reports why when the feed is implausibly short', async () => {
+    const existing = Array.from({ length: 300 }, (_, i) => `S${i}`)
+    const { db, updates } = fakeDb(existing)
+    const result = await syncToSupabase([product('S0')], db)
+    expect(updates.some((u) => u.is_active === false)).toBe(false)
+    expect(result.deactivated).toBe(0)
+    expect(result.errors.map((e) => e.message)).toEqual([expect.stringMatching(/^refused to deactivate 299 of 300/)])
   })
 })
