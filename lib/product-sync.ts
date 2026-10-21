@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ImportResult } from './types'
+import { matchExistingCategory, type ExistingCategory } from './category-slugs'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -46,8 +47,19 @@ export interface SyncProduct {
 }
 
 /**
- * Upsert category names and return a map of { name → id }.
- * Inserts new categories; returns existing ids for known ones.
+ * Resolve category names to existing category ids: { name → id }.
+ *
+ * MATCH ONLY -- never inserts, never updates. A name with no match is left
+ * out of the map, and syncToSupabase reports the products it affects as
+ * `uncategorized` instead of creating a category for them.
+ *
+ * Why not create it: categories are curated by hand (lib/erply-category-
+ * aliases.ts maps Erply groups onto them), and categories.id ('cat-NNN') and
+ * display_order are NOT NULL with no default -- so the old
+ * `upsert({ name, slug }, { onConflict: 'slug' })` could never insert. It
+ * failed, fell back to a slug lookup, and a product whose group matched
+ * nothing was inserted with NO category, silently. That is how 141 live
+ * products ended up uncategorized (fixed by hand 2026-10-20).
  */
 export async function resolveCategories(
   categoryNames: string[],
@@ -56,36 +68,13 @@ export async function resolveCategories(
   const unique = [...new Set(categoryNames.filter(Boolean))]
   const map: Record<string, string> = {}
 
-  // Look up by NAME first, not just slug. Several categories' stored slug
-  // is a leftover from before a rename (e.g. "Toys & Novelties" is stored
-  // with slug "plush-toys", from before the Plush category was split out)
-  // and no longer matches what this function's own slugification would
-  // generate from the current name -- matching by slug alone in that case
-  // finds no conflict and silently inserts a duplicate row with the same
-  // display name but a different id/slug.
-  const { data: existingByName } = await db.from('categories').select('id, name').in('name', unique)
-  const idByName = new Map((existingByName ?? []).map((c) => [c.name, c.id]))
+  // Name, then slug, then a renamed slug's successor: see matchExistingCategory.
+  const { data: existing } = await db.from('categories').select('id, name, slug')
+  const categories = (existing ?? []) as ExistingCategory[]
 
   for (const name of unique) {
-    const existingId = idByName.get(name)
-    if (existingId) {
-      map[name] = existingId
-      continue
-    }
-
-    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    const { data, error } = await db
-      .from('categories')
-      .upsert({ name, slug }, { onConflict: 'slug' })
-      .select('id')
-      .single()
-
-    if (error || !data) {
-      const { data: existing } = await db.from('categories').select('id').eq('slug', slug).single()
-      if (existing) map[name] = existing.id
-    } else {
-      map[name] = data.id
-    }
+    const match = matchExistingCategory(name, categories)
+    if (match) map[name] = match.id
   }
 
   return map
@@ -124,14 +113,13 @@ export async function previewSync(products: SyncProduct[], db: DB): Promise<Sync
   )
   const toDeactivate = activeRows.filter((r) => !incomingSet.has(r.sku))
 
-  // Category names not already present (by slug).
-  const { data: catRows } = await db.from('categories').select('slug')
-  const existingSlugs = new Set((catRows ?? []).map((c) => c.slug))
+  // Category names that match no category -- the same matching
+  // resolveCategories uses, so the preview can't disagree with the run.
+  // Products in these land uncategorized; nothing is created.
+  const { data: catRows } = await db.from('categories').select('id, name, slug')
+  const existingCats = (catRows ?? []) as ExistingCategory[]
   const incomingCats = [...new Set(products.map((p) => p.category_name).filter(Boolean))]
-  const newCategories = incomingCats.filter((name) => {
-    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    return !existingSlugs.has(slug)
-  })
+  const newCategories = incomingCats.filter((name) => !matchExistingCategory(name, existingCats))
 
   return {
     incoming: products.length,
@@ -205,6 +193,7 @@ export async function syncToSupabase(
   options: SyncOptions = {},
 ): Promise<ImportResult> {
   const errors: ImportResult['errors'] = []
+  const uncategorized: NonNullable<ImportResult['uncategorized']> = []
   const skip = new Set(options.skipFields ?? [])
   const keepWhenBlank = new Set(options.keepExistingWhenBlank ?? [])
 
@@ -245,6 +234,7 @@ export async function syncToSupabase(
     const isNewProduct = !existingSkus.has(p.sku)
     const setCategory = !skip.has('category') || isNewProduct
     const categoryId = setCategory ? categoryMap[p.category_name] ?? null : null
+    if (isNewProduct && setCategory && !categoryId) uncategorized.push({ sku: p.sku, category: p.category_name ?? '' })
     // A product arriving with no price must not go live: Erply cannot accept
     // a price over the API on this account (proven 2026-09-16), so everything
     // created from a received container lands at 0 and is priced by hand
@@ -361,7 +351,10 @@ export async function syncToSupabase(
     console.error('[back-in-stock] notify failed (non-fatal):', err)
   }
 
-  return { inserted, updated, deactivated, skipped: errors.length, errors }
+  if (uncategorized.length) {
+    console.warn(`[product-sync] ${uncategorized.length} new product(s) with no matching category: ${uncategorized.slice(0, 20).map((u) => `${u.sku} ("${u.category}")`).join(', ')}`)
+  }
+  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized }
 }
 
 export interface StockSyncResult {

@@ -30,13 +30,32 @@ interface RunInput {
   finishedAt?: number
   skippedReason?: string
   failure?: unknown
-  result?: { inserted: number; updated: number; deactivated: number; errors: { row?: number; sku?: string; message: string }[] }
+  result?: {
+    inserted: number
+    updated: number
+    deactivated: number
+    errors: { row?: number; sku?: string; message: string }[]
+    uncategorized?: { sku: string; category: string }[]
+  }
   /** Sub-results (stock sync, low-stock, abandoned carts); any with an `error` key makes the run partial. */
   details?: Record<string, unknown>
 }
 
 function hasSubError(details: Record<string, unknown> | undefined): boolean {
   return Object.values(details ?? {}).some((v) => !!v && typeof v === 'object' && 'error' in (v as object))
+}
+
+/**
+ * New products the sync inserted with no matching category (see
+ * resolveCategories in lib/product-sync.ts) ride along in details -- not as
+ * errors: the run itself worked, someone just needs to file them.
+ */
+function withUncategorized(
+  details: Record<string, unknown> | undefined,
+  uncategorized: { sku: string; category: string }[] | undefined,
+): Record<string, unknown> | null {
+  if (!uncategorized?.length) return details ?? null
+  return { ...details, uncategorized: { count: uncategorized.length, sample: uncategorized.slice(0, MAX_STORED_ERRORS) } }
 }
 
 /** Pure: what one run looked like. */
@@ -67,7 +86,7 @@ export function buildSyncRunRow(input: RunInput): SyncRunRow {
     deactivated: input.result?.deactivated ?? 0,
     error_count: errors.length,
     errors: errors.length ? errors.slice(0, MAX_STORED_ERRORS).map((e) => ({ sku: e.sku, row: e.row, message: String(e.message).slice(0, 500) })) : null,
-    details: input.details ?? null,
+    details: withUncategorized(input.details, input.result?.uncategorized),
     message: message ? message.slice(0, 1000) : null,
   }
 }

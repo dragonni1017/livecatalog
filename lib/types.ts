@@ -212,6 +212,13 @@ export interface ImportResult {
   deactivated: number
   skipped: number
   errors: { row: number; sku: string; message: string }[]
+  /**
+   * New products inserted with no category because their category name
+   * matched none (lib/category-slugs.ts matchExistingCategory). The sync
+   * never creates categories; these need one set by hand, or an alias in
+   * lib/erply-category-aliases.ts so the next ones match.
+   */
+  uncategorized?: { sku: string; category: string }[]
 }
 
 // One row classified against the current DB state

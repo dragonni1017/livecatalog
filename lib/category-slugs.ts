@@ -8,10 +8,8 @@
  * engines, the sitemap they indexed -- land on the right page instead of
  * "category not found".
  *
- * A renamed slug also matters to the sync: lib/product-sync.ts
- * resolveCategories falls back to an upsert ON CONFLICT (slug) for a name it
- * doesn't know, which would RENAME whichever category held that slug (an
- * unmapped Erply group "Christmas" would have relabelled Seasonal & Holiday).
+ * The sync uses the same table: matchExistingCategory sends an incoming
+ * name whose slug was renamed ("Christmas") to the renamed category.
  *
  * Never reuse an old slug below for a new category: the redirect only fires
  * when the old slug no longer exists, so reusing it silently ends the
@@ -39,4 +37,52 @@ export function resolveCategorySlug(slug: string, existingSlugs: Iterable<string
   if (known.has(slug)) return slug
   const renamed = RENAMED_CATEGORY_SLUGS[slug]
   return renamed && known.has(renamed) ? renamed : slug
+}
+
+/**
+ * The slug a NEW category gets from its name: "Seasonal & Holiday" ->
+ * "seasonal-holiday", "LED/Electronics" -> "led-electronics". Same shape as
+ * the slugs renamed above, so a category created by the sync matches the
+ * ones curated by hand.
+ */
+export function categorySlugFor(name: string): string {
+  return name.toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+export interface ExistingCategory {
+  id: string
+  name: string
+  slug: string
+}
+
+/**
+ * The existing category an incoming category NAME means, or null when it's
+ * genuinely new. Strongest match first:
+ *   1. the exact name
+ *   2. the name ignoring case and surrounding spaces ("keychains")
+ *   3. the slug the name would get -- either form, since slugs made before
+ *      2026-10-21 kept "&" as a double dash ("seasonal--holiday")
+ *   4. that slug's renamed successor ("Christmas" -> christmas -> the
+ *      seasonal-holiday category), so a renamed slug is never re-created
+ *      and the redirect for old links keeps working
+ *
+ * Read-only by design: the sync never creates or updates a category (see
+ * resolveCategories in lib/product-sync.ts); a null here means the product
+ * lands uncategorized and is reported, not that a category gets made.
+ */
+export function matchExistingCategory(name: string, categories: ExistingCategory[]): ExistingCategory | null {
+  const exact = categories.find((c) => c.name === name)
+  if (exact) return exact
+  const folded = name.trim().toLowerCase()
+  const byName = categories.find((c) => c.name.trim().toLowerCase() === folded)
+  if (byName) return byName
+  const legacySlug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+  for (const slug of new Set([categorySlugFor(name), legacySlug])) {
+    const bySlug = categories.find((c) => c.slug === slug)
+    if (bySlug) return bySlug
+    const renamed = RENAMED_CATEGORY_SLUGS[slug]
+    const successor = renamed ? categories.find((c) => c.slug === renamed) : undefined
+    if (successor) return successor
+  }
+  return null
 }

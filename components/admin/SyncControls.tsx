@@ -131,7 +131,7 @@ export default function SyncControls({ configured }: { configured: boolean }) {
 
           {preview.newCategories.length > 0 && (
             <p className="mt-4 text-xs text-gray-600">
-              <span className="font-semibold">New categories:</span> {preview.newCategories.join(', ')}
+              <span className="font-semibold">No matching category (new products in these land uncategorized):</span> {preview.newCategories.join(', ')}
             </p>
           )}
         </div>
