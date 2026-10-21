@@ -35,8 +35,8 @@ import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import { groupLinesBySku, parsePackingListSheet, type PackingListLine, type SheetRow } from '../lib/packing-list.ts'
-import { containerRefFromFileName } from '../lib/receiving.ts'
+import type { PackingListLine, SheetRow } from '../lib/packing-list.ts'
+import { bestLinesFromSheets, pickRecentContainers, type PickedContainer } from '../lib/container-check.ts'
 
 const require = createRequire(import.meta.url)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,50 +61,24 @@ const env = (k: string) => {
 if (!Number.isInteger(COUNT) || COUNT < 1) { console.error('--count must be a positive whole number'); process.exit(1) }
 if (!fs.existsSync(DIR)) { console.error(`No such folder: ${DIR} (pass --dir=)`); process.exit(1) }
 
-// ── Pick the containers ─────────────────────────────────────────────────────
-// File names start "2026-09 ETD 0914 976ctn <kind> ... Cntr#TLLU5419845 ...".
-// Sorted on year-month + ETD, newest first.
-const KINDS = [/Arrival List/i, /Original List/i]
-interface Container { ref: string; sortKey: string; etd: string; files: { name: string; kind: number }[] }
-const containers = new Map<string, Container>()
-for (const name of fs.readdirSync(DIR)) {
-  if (!/\.xlsx?$/i.test(name)) continue
-  const kind = KINDS.findIndex((re) => re.test(name))
-  const ref = containerRefFromFileName(name)
-  const m = /^(\d{4}-\d{2}) ETD (\d{4})/.exec(name)
-  if (kind < 0 || !ref || !m) continue
-  // ETD as a date: the prefix supplies the year, the ETD field month + day.
-  const etd = `${m[1].slice(0, 4)}-${m[2].slice(0, 2)}-${m[2].slice(2)}`
-  const c = containers.get(ref) ?? { ref, sortKey: `${m[1]}-${m[2]}`, etd, files: [] }
-  c.files.push({ name, kind })
-  containers.set(ref, c)
-}
-const recent = [...containers.values()].sort((a, b) => b.sortKey.localeCompare(a.sortKey)).slice(0, COUNT)
-console.log(`${containers.size} containers in ${DIR}; checking the newest ${recent.length}`)
+// ── Pick and parse the containers ──────────────────────────────────────────
+// Shared with the /admin/receiving container check (lib/container-check.ts):
+// newest first by year-month + ETD; per container the Arrival List, then the
+// Original List, and within a workbook the tab that parses to the most lines.
+const allNames = fs.readdirSync(DIR)
+const recent = pickRecentContainers(allNames, COUNT)
+console.log(`${allNames.length} files in ${DIR}; checking the newest ${recent.length} containers`)
 
-// ── Parse ───────────────────────────────────────────────────────────────────
-interface Parsed { c: Container; file: string | null; lines: PackingListLine[]; error: string | null }
+interface Parsed { c: PickedContainer; file: string | null; lines: PackingListLine[]; error: string | null }
 const parsed: Parsed[] = []
 for (const c of recent) {
-  c.files.sort((a, b) => a.kind - b.kind)
   let result: Parsed = { c, file: null, lines: [], error: 'no Arrival or Original List' }
-  for (const { name } of c.files) {
+  for (const name of c.files) {
     const wb = XLSX.readFile(path.join(DIR, name))
-    let best: PackingListLine[] | null = null
-    let error: string | null = null
-    // The line items sit on whichever tab the supplier chose; take the tab
-    // that parses to the most lines, as /admin/receiving would.
-    for (const sheetName of wb.SheetNames) {
-      try {
-        const rows: SheetRow[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null })
-        const lines = groupLinesBySku(parsePackingListSheet(rows).lines)
-        if (!best || lines.length > best.length) best = lines
-      } catch (e) {
-        error = (e as Error).message
-      }
-    }
-    result = best ? { c, file: name, lines: best, error: null } : { c, file: name, lines: [], error }
-    if (best) break
+    const sheets: SheetRow[][] = wb.SheetNames.map((s: string) => XLSX.utils.sheet_to_json(wb.Sheets[s], { header: 1, defval: null }))
+    const { lines, error } = bestLinesFromSheets(sheets)
+    result = { c, file: name, lines: lines ?? [], error }
+    if (lines) break
   }
   parsed.push(result)
 }
