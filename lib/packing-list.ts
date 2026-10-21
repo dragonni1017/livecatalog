@@ -66,6 +66,8 @@ const DIMENSION_AXES: Record<string, string> = {
 interface QtyAlternative {
   all: string[]
   not?: string[]
+  /** The header must BE the (single) substring, not merely contain it. */
+  exact?: true
 }
 
 // The piece-count column is the one header that genuinely changes between
@@ -74,6 +76,11 @@ interface QtyAlternative {
 //   '总PCS' — the 2026 supplier format, on both the Arrival List and the
 //             Original List (container EGSU9522424, 2026-08)
 //   'QTY'   — container EMCU8402359 (2023-11), English header
+//   'pcs'   — container EGSU9679727 (ETD 0131, 2026-02), beside 'pk/cs' and
+//             'CTN'; pk/cs x CTN = pcs on every line (48 x 50 = 2,400), so
+//             it is the line total. EXACT match only: a 'pcs/ctn' or
+//             'pcs per carton' header is a per-carton figure and must never
+//             pass for it.
 //
 // 总PCS is tried first, and 'qty' refuses any header containing '/cs',
 // because the 2026-08 arrival lists up to ETD 0803 carry BOTH 总PCS and an
@@ -89,6 +96,7 @@ interface QtyAlternative {
 const QTY_COLUMN_ALTERNATIVES: QtyAlternative[] = [
   { all: ['总pcs'] },
   { all: ['qty'], not: ['/cs'] },
+  { all: ['pcs'], exact: true },
 ]
 
 // SKU and piece count are the only required columns — checked individually
@@ -186,6 +194,7 @@ function findColAny(headerRow: SheetRow, alternatives: QtyAlternative[]): number
     for (const idx of findAllCols(headerRow, alt.all)) {
       const header = String(headerRow[idx]).toLowerCase()
       if (alt.not?.some((n) => header.includes(n))) continue
+      if (alt.exact && header.trim() !== alt.all[0].toLowerCase()) continue
       return idx
     }
   }
@@ -314,6 +323,8 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
     colIndex.sku = findExactCol(headerRow, 'item')
     if (colIndex.cartons < 0) colIndex.cartons = findExactCol(headerRow, 'cts')
   }
+  // EGSU9679727 (ETD 0131) heads cartons a bare 'CTN', with no 箱数.
+  if (colIndex.cartons < 0) colIndex.cartons = findExactCol(headerRow, 'ctn')
   const qtyAlternatives = itemFormat ? QTY_COLUMN_ALTERNATIVES.slice(0, 1) : QTY_COLUMN_ALTERNATIVES
   colIndex.qty = findColAny(headerRow, qtyAlternatives)
 
@@ -352,9 +363,27 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
     unitNote = `dimensions in ${lenU.unit}/${widU.unit}/${hgtU.unit}, weight in ${wgtU.unit}`
   }
 
-  const dataRows = rows.slice(headerRowIndex + 1).filter((r) => r && r[colIndex.sku])
   const lines: PackingListLine[] = []
   const problems: PackingListProblem[] = []
+
+  // A row with pieces and a description but no SKU can't be received, and
+  // used to vanish without a word. EGSU9679727 (ETD 0131) has four: two
+  // "sample" rows and two unlabelled colour mixes (红色＋灰色, 黑色＋棕), 6
+  // cartons / 580 pieces between them -- exactly the gap between the parsed
+  // lines and the sheet's own 668ctn total. Report them; don't guess a SKU.
+  // A totals row isn't reported: either it has no text, or it says so
+  // (合计 / 总计 / 小计 / "total", e.g. 2026-03 ETD 0220).
+  const TOTAL_LABEL = /^(合计|总计|小计|total)/i
+  rows.slice(headerRowIndex + 1).forEach((row, i) => {
+    if (!row || row[colIndex.sku]) return
+    const qty = row[colIndex.qty]
+    const label = row.find((cell, c) => c !== colIndex.qty && typeof cell === 'string' && cell.trim())
+    if (typeof qty === 'number' && qty > 0 && typeof label === 'string' && !TOTAL_LABEL.test(label.trim())) {
+      problems.push({ where: `row ${headerRowIndex + i + 2}`, problem: `${qty} pieces with no SKU (${JSON.stringify(label.trim())}) — not received` })
+    }
+  })
+
+  const dataRows = rows.slice(headerRowIndex + 1).filter((r) => r && r[colIndex.sku])
 
   for (const row of dataRows) {
     const sku = String(row[colIndex.sku]).trim()
