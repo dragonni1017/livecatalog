@@ -17,6 +17,13 @@ describe('buildSyncRunRow', () => {
     expect(r.error_count).toBe(120)
     expect(r.errors).toHaveLength(MAX_STORED_ERRORS)
   })
+  it('records uncategorized inserts in details without making the run partial', () => {
+    const uncategorized = [{ sku: 'G333213', category: 'Uncategorized' }, { sku: 'K229561', category: 'Phone Bags' }]
+    const r = buildSyncRunRow({ source: 'cron', startedAt: T0, result: { ...ok, uncategorized }, details: { stockSync: { changed: 3 } } })
+    expect(r.status).toBe('ok')
+    expect(r.details).toEqual({ stockSync: { changed: 3 }, uncategorized: { count: 2, sample: uncategorized } })
+    expect(buildSyncRunRow({ source: 'cron', startedAt: T0, result: { ...ok, uncategorized: [] } }).details).toBeNull()
+  })
   it('a failed sub-step (e.g. stock sync) makes it partial', () => {
     expect(buildSyncRunRow({ source: 'cron', startedAt: T0, result: ok, details: { stockSync: { error: 'timeout' } } }).status).toBe('partial')
   })

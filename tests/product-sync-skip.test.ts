@@ -4,14 +4,20 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/low-stock-alert', () => ({ checkLowStockAndNotify: async () => {} }))
 vi.mock('../lib/back-in-stock-notify', () => ({ checkBackInStockAndNotify: async () => {} }))
 
-import { syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
+import { resolveCategories, syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
 
 /**
  * Minimal chainable stand-in for the supabase-js client: every builder method
  * returns the builder, awaiting it resolves a canned result, and upserts are
  * recorded so the test can see exactly which keys each chunk carried.
  */
+const CATEGORIES = [
+  { id: 'cat-1', name: 'Toys', slug: 'toys' },
+  { id: 'cat-064', name: 'Seasonal & Holiday', slug: 'seasonal-holiday' },
+]
+
 function fakeDb(existingSkus: string[]) {
+  const categoryWrites: string[] = []
   const upserts: Record<string, unknown>[][] = []
   const updates: Record<string, unknown>[] = []
   const from = (table: string) => {
@@ -20,8 +26,8 @@ function fakeDb(existingSkus: string[]) {
       const has = (m: string) => calls.some(([name]) => name === m)
       const args = (m: string) => calls.find(([name]) => name === m)?.[1] ?? []
       if (table === 'categories') {
-        if (has('upsert')) return { data: { id: 'cat-new' }, error: null }
-        return { data: [{ id: 'cat-1', name: 'Toys' }], error: null }
+        if (has('upsert') || has('update') || has('insert')) categoryWrites.push(calls.map(([m]) => m).join('.'))
+        return { data: CATEGORIES, error: null }
       }
       if (table === 'products' && has('upsert')) {
         upserts.push(args('upsert')[0] as Record<string, unknown>[])
@@ -54,7 +60,7 @@ function fakeDb(existingSkus: string[]) {
     )
     return builder
   }
-  return { db: { from } as never, upserts, updates }
+  return { db: { from } as never, upserts, updates, categoryWrites }
 }
 
 const product = (sku: string): SyncProduct => ({
@@ -151,5 +157,25 @@ describe('syncToSupabase with the Excel import options', () => {
     const r = upserts.flat()[0]
     expect(r.stock_qty).toBe(0)
     expect(r.description).toBe('Erply text for NEW1')
+  })
+})
+
+describe('resolveCategories', () => {
+  it('matches existing categories and never writes one, even for an unknown name', async () => {
+    const { db, categoryWrites } = fakeDb([])
+    const map = await resolveCategories(['Toys', 'toys', 'Christmas', 'Garden Tools'], db)
+    expect(map).toEqual({ Toys: 'cat-1', toys: 'cat-1', Christmas: 'cat-064' })
+    expect(categoryWrites).toEqual([])
+  })
+})
+
+describe('syncToSupabase uncategorized', () => {
+  it('reports NEW products whose category matched nothing, not existing ones', async () => {
+    const { db } = fakeDb(['OLD1'])
+    const odd = (sku: string): SyncProduct => ({ ...product(sku), category_name: 'Garden Tools' })
+    const result = await syncToSupabase([odd('OLD1'), odd('NEW1'), product('NEW2')], db, {
+      skipFields: ['image_url', 'stock_qty', 'category', 'description'],
+    })
+    expect(result.uncategorized).toEqual([{ sku: 'NEW1', category: 'Garden Tools' }])
   })
 })
