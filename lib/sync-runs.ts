@@ -36,6 +36,7 @@ interface RunInput {
     deactivated: number
     errors: { row?: number; sku?: string; message: string }[]
     uncategorized?: { sku: string; category: string }[]
+    deactivatedSkus?: string[]
   }
   /** Sub-results (stock sync, low-stock, abandoned carts); any with an `error` key makes the run partial. */
   details?: Record<string, unknown>
@@ -56,6 +57,25 @@ function withUncategorized(
 ): Record<string, unknown> | null {
   if (!uncategorized?.length) return details ?? null
   return { ...details, uncategorized: { count: uncategorized.length, sample: uncategorized.slice(0, MAX_STORED_ERRORS) } }
+}
+
+/**
+ * Which SKUs a run deactivated (not in the Erply feed), so /admin/sync can
+ * say what left the catalog rather than just how many.
+ */
+function withDeactivated(details: Record<string, unknown> | null, skus: string[] | undefined): Record<string, unknown> | null {
+  if (!skus?.length) return details
+  return { ...details, deactivated: { count: skus.length, sample: skus.slice(0, MAX_STORED_DEACTIVATED) } }
+}
+
+/** Enough to cover the first run after the 2026-10-21 fix (146). */
+export const MAX_STORED_DEACTIVATED = 200
+
+/** Pure: the list withDeactivated stored; malformed jsonb reads as none. */
+export function deactivatedFromDetails(details: Record<string, unknown> | null): { count: number; sample: string[] } | null {
+  const d = details?.deactivated as { count?: unknown; sample?: unknown } | undefined
+  if (!d || typeof d.count !== 'number' || d.count <= 0 || !Array.isArray(d.sample)) return null
+  return { count: d.count, sample: d.sample.filter((x): x is string => typeof x === 'string') }
 }
 
 export interface UncategorizedSummary {
@@ -105,7 +125,7 @@ export function buildSyncRunRow(input: RunInput): SyncRunRow {
     deactivated: input.result?.deactivated ?? 0,
     error_count: errors.length,
     errors: errors.length ? errors.slice(0, MAX_STORED_ERRORS).map((e) => ({ sku: e.sku, row: e.row, message: String(e.message).slice(0, 500) })) : null,
-    details: withUncategorized(input.details, input.result?.uncategorized),
+    details: withDeactivated(withUncategorized(input.details, input.result?.uncategorized), input.result?.deactivatedSkus),
     message: message ? message.slice(0, 1000) : null,
   }
 }

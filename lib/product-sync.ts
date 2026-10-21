@@ -86,6 +86,8 @@ export interface SyncPreview {
   wouldUpdate: number
   wouldDeactivate: number
   deactivateSample: { sku: string; name: string }[]
+  /** Set when the real run would refuse to deactivate (planDeactivation). */
+  deactivateRefused: string | null
   newCategories: string[]
 }
 
@@ -107,11 +109,13 @@ export async function previewSync(products: SyncProduct[], db: DB): Promise<Sync
   const wouldInsert = incomingSkus.filter((s) => !existingSkus.has(s)).length
   const wouldUpdate = incomingSkus.filter((s) => existingSkus.has(s)).length
 
-  // Currently-active products whose SKU isn't in the incoming batch → would be deactivated.
+  // Currently-active products whose SKU isn't in the incoming batch → would be
+  // deactivated, by the same planDeactivation the real run uses.
   const activeRows = await selectAll<{ sku: string; name: string }>((from, to) =>
-    db.from('products').select('sku, name').eq('is_active', true).range(from, to),
+    db.from('products').select('sku, name').eq('is_active', true).order('sku').range(from, to),
   )
-  const toDeactivate = activeRows.filter((r) => !incomingSet.has(r.sku))
+  const plan = planDeactivation(activeRows, incomingSet)
+  const toDeactivate = activeRows.filter((r) => r.sku && !incomingSet.has(r.sku))
 
   // Category names that match no category -- the same matching
   // resolveCategories uses, so the preview can't disagree with the run.
@@ -126,6 +130,7 @@ export async function previewSync(products: SyncProduct[], db: DB): Promise<Sync
     wouldInsert,
     wouldUpdate,
     wouldDeactivate: toDeactivate.length,
+    deactivateRefused: plan.refused,
     deactivateSample: toDeactivate.slice(0, 20).map((r) => ({ sku: r.sku, name: r.name })),
     newCategories,
   }
@@ -321,18 +326,55 @@ export async function syncToSupabase(
   const inserted = successSkus.filter((s) => !existingSkus.has(s)).length
   const updated  = successSkus.filter((s) =>  existingSkus.has(s)).length
 
-  // 6. Deactivate products not in this batch
+  // 6. Deactivate products not in this batch.
+  //
+  // Worked out here and written by SKU in chunks. Until 2026-10-21 this was
+  // one UPDATE ... WHERE sku NOT IN (<every incoming SKU>), which never ran:
+  // ~3,200 SKUs made a 35 KB URL that PostgREST rejected with a 400, and the
+  // error was dropped, so every run reported 0 and 146 products not in Erply
+  // stayed active. Worse, it quoted each SKU in single quotes, which
+  // PostgREST takes as part of the value, so no SKU matched the list: a
+  // SHORT incoming batch (one that fit in a URL) would have deactivated the
+  // entire catalog. planDeactivation also refuses an implausibly large run.
   let deactivated = 0
+  const deactivatedSkus: string[] = []
   if (incomingSkus.length > 0 && options.deactivateMissing !== false) {
-    const skuList = incomingSkus.map((s) => `'${s.replace(/'/g, "''")}'`).join(',')
-    const { data: deactivatedRows, error } = await db
-      .from('products')
-      .update({ is_active: false, updated_at: now })
-      .eq('is_active', true)
-      .not('sku', 'in', `(${skuList})`)
-      .select('id')
-
-    if (!error && deactivatedRows) deactivated = deactivatedRows.length
+    const active: { sku: string | null }[] = []
+    let readError: string | null = null
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await db
+        .from('products')
+        .select('sku')
+        .eq('is_active', true)
+        .order('sku')
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) { readError = error.message; break }
+      const batch = (data ?? []) as { sku: string | null }[]
+      active.push(...batch)
+      if (batch.length < PAGE_SIZE) break
+    }
+    const plan = readError ? null : planDeactivation(active, incomingSkus)
+    if (readError) {
+      errors.push({ row: 0, sku: '', message: `deactivation skipped, could not read active products: ${readError}` })
+    } else if (plan!.refused) {
+      errors.push({ row: 0, sku: '', message: plan!.refused })
+    } else {
+      for (let i = 0; i < plan!.skus.length; i += DEACTIVATE_CHUNK) {
+        const chunk = plan!.skus.slice(i, i + DEACTIVATE_CHUNK)
+        const { data, error } = await db
+          .from('products')
+          .update({ is_active: false, updated_at: now })
+          .eq('is_active', true)
+          .in('sku', chunk)
+          .select('sku')
+        if (error) {
+          chunk.forEach((sku) => errors.push({ row: 0, sku, message: `could not deactivate: ${error.message}` }))
+          continue
+        }
+        for (const r of (data ?? []) as { sku: string }[]) deactivatedSkus.push(r.sku)
+      }
+      deactivated = deactivatedSkus.length
+    }
   }
 
   // 7. Low-stock reorder alerts — never let a notification failure fail the sync.
@@ -354,7 +396,41 @@ export async function syncToSupabase(
   if (uncategorized.length) {
     console.warn(`[product-sync] ${uncategorized.length} new product(s) with no matching category: ${uncategorized.slice(0, 20).map((u) => `${u.sku} ("${u.category}")`).join(', ')}`)
   }
-  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized }
+  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized, deactivatedSkus }
+}
+
+/**
+ * At most this share of active products may be deactivated in one run, once
+ * past DEACTIVATE_ALWAYS_OK. More than that means the incoming feed is short
+ * (Erply's page cap once truncated a fetch by ~30%), not that a tenth of the
+ * catalog was discontinued overnight.
+ */
+export const MAX_DEACTIVATE_FRACTION = 0.1
+/** Small runs always go through, so a small catalog isn't stuck. */
+export const DEACTIVATE_ALWAYS_OK = 20
+const DEACTIVATE_CHUNK = 200
+
+/**
+ * Pure: which active products a sync of `incomingSkus` deactivates, or why it
+ * refuses to. Exact SKU match, the same as the upsert's onConflict. A product
+ * with no SKU is never deactivated (the old NOT IN never matched a null).
+ */
+export function planDeactivation(
+  active: { sku: string | null }[],
+  incomingSkus: Iterable<string>,
+): { skus: string[]; refused: string | null } {
+  const incoming = new Set(incomingSkus)
+  const skus = active.map((r) => r.sku).filter((s): s is string => !!s && !incoming.has(s))
+  const limit = Math.max(DEACTIVATE_ALWAYS_OK, Math.floor(active.length * MAX_DEACTIVATE_FRACTION))
+  if (skus.length > limit) {
+    return {
+      skus: [],
+      refused:
+        `refused to deactivate ${skus.length} of ${active.length} active products (limit ${limit}): ` +
+        `the incoming feed of ${incoming.size} looks incomplete. Nothing was deactivated.`,
+    }
+  }
+  return { skus, refused: null }
 }
 
 export interface StockSyncResult {

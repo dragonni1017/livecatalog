@@ -9,6 +9,7 @@ interface Preview {
   wouldUpdate: number
   wouldDeactivate: number
   deactivateSample: { sku: string; name: string }[]
+  deactivateRefused: string | null
   newCategories: string[]
 }
 
@@ -109,6 +110,12 @@ export default function SyncControls({ configured }: { configured: boolean }) {
             <Stat label="Updated" value={preview.wouldUpdate} tone="amber" />
             <Stat label="Deactivated" value={preview.wouldDeactivate} tone={preview.wouldDeactivate > 0 ? 'red' : 'gray'} />
           </div>
+
+          {preview.deactivateRefused && (
+            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+              The sync would deactivate nothing: it {preview.deactivateRefused}
+            </p>
+          )}
 
           {preview.wouldDeactivate > 0 && (
             <div className="mt-4">
