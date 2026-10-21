@@ -20,6 +20,8 @@ export interface ReadyRow {
   priceCents: number
   stockQty: number
   thumb: string | null
+  /** Set when the price looks like a whole case's (lib/price-check.ts). */
+  casePrice: string | null
 }
 
 export interface UnpricedRow {
@@ -97,8 +99,14 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
     }
   }
 
+  // A likely case price is left out of "Unhide all": one click shouldn't put
+  // a $180 box of pens on the storefront. Its own Unhide button still works
+  // once someone has looked at it.
+  const bulkReady = ready.filter((r) => !r.casePrice)
+  const flaggedCount = ready.length - bulkReady.length
+
   function unhideAll() {
-    const skus = ready.slice(0, MAX_SKUS_PER_REQUEST).map((r) => r.sku)
+    const skus = bulkReady.slice(0, MAX_SKUS_PER_REQUEST).map((r) => r.sku)
     if (skus.length === 0) return
     const ok = window.confirm(
       `Put ${skus.length} product${skus.length === 1 ? '' : 's'} on the storefront? Customers will be able to order ${skus.length === 1 ? 'it' : 'them'} straight away.`,
@@ -144,7 +152,7 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
               other reason never appear here and stay hidden.
             </p>
           </div>
-          {ready.length > 0 && (
+          {bulkReady.length > 0 && (
             <button
               type="button"
               onClick={unhideAll}
@@ -153,10 +161,16 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
             >
               {busy === 'unhide:all'
                 ? 'Unhiding…'
-                : `Unhide all shown (${Math.min(ready.length, MAX_SKUS_PER_REQUEST)})`}
+                : `Unhide all shown (${Math.min(bulkReady.length, MAX_SKUS_PER_REQUEST)})`}
             </button>
           )}
         </div>
+        {flaggedCount > 0 && (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+            {flaggedCount} price{flaggedCount === 1 ? ' looks' : 's look'} like the price of a whole case, not one
+            unit. {flaggedCount === 1 ? 'It is' : 'They are'} left out of &ldquo;Unhide all&rdquo;. Check in Erply first.
+          </p>
+        )}
         {unhideError && <p className="mb-3 text-sm text-red-600">{unhideError}</p>}
         {unhideResult && (
           <div className="mb-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
@@ -204,7 +218,12 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
                     <Thumb src={r.thumb} />
                   </td>
                   <td className="px-4 py-3 text-gray-900">{r.name}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-900">{dollars(r.priceCents)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-gray-900">
+                    {dollars(r.priceCents)}
+                    {r.casePrice && (
+                      <div className="mt-1 max-w-56 text-left text-xs text-amber-800">Case price? {r.casePrice}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-700">{r.stockQty.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">
                     <button
