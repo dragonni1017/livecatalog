@@ -40,3 +40,10 @@ the placeholder never updates; 146 more aren't in Erply at all. 917 of the
 **How to apply:** a catalog/Erply stock gap that is a clean multiple of an
 Erply change is this bug's signature, not bad data -- check the SKU's
 `stock_adjustments` history for alternating ± rows before touching data.
+
+**Watched nightly since 2026-10-21 (PR after #155):** the cron records
+`details.stockDrift` (lib/stock-drift.ts) -- counted Erply SKUs whose catalog
+stock still differs after the sync -- and /admin/sync shows it above the run
+table. Baseline on 10-21, before the fix took effect: **82 of 2,025 (42
+live)**. The 10-22 run is transitional; from **10-23 it should be near 0**. If
+it isn't, the fix didn't take.
