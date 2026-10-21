@@ -474,7 +474,27 @@ export async function syncStockFromErply(
     })
   }
 
-  await db.from('erply_sync_state').update({ last_stock_sync_at: syncStartedAt }).eq('id', true)
+  // Anchor AFTER this run's adjust_stock() writes, never at its start.
+  //
+  // The next run's baseline is "stock_qty as of this anchor". Anchored at the
+  // start (as it was until 2026-10-21), the baseline excluded this run's own
+  // adjustments, so the next run saw the same Erply change again and applied
+  // it twice, then took it back twice: a 6-night cycle. FD400039 sat at a
+  // steady 2,800 in Erply while the catalog went 1,000 -> 2,800 -> 4,600 ->
+  // 2,800 -> 1,000 for a month; all 84 SKUs the sync touched since 09-25
+  // oscillated, K229486 (live) dropping to 0 every sixth night.
+  //
+  // adjustment created_at comes from the DATABASE clock, so take the later
+  // of our clock and the newest adjustment's timestamp -- clock skew must not
+  // leave one of this run's writes on the wrong side of the anchor.
+  const { data: newest } = await db
+    .from('stock_adjustments')
+    .select('created_at')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const anchor = new Date(Math.max(Date.now(), newest?.created_at ? Date.parse(newest.created_at) : 0)).toISOString()
+  await db.from('erply_sync_state').update({ last_stock_sync_at: anchor }).eq('id', true)
 
   return { processed: stock.length, changed, skippedNoMatch, skippedUncounted, errors }
 }
