@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSyncRunRow, MAX_STORED_ERRORS, recordSyncRun, syncHealth } from '../lib/sync-runs'
+import { buildSyncRunRow, MAX_STORED_ERRORS, recordSyncRun, syncHealth, uncategorizedFromDetails } from '../lib/sync-runs'
 
 const T0 = Date.parse('2026-10-16T08:00:00Z')
 const ok = { inserted: 2, updated: 3215, deactivated: 0, errors: [] }
@@ -33,6 +33,25 @@ describe('buildSyncRunRow', () => {
   })
   it('a skipped run says why', () => {
     expect(buildSyncRunRow({ source: 'cron', startedAt: T0, skippedReason: 'Erply not configured' })).toMatchObject({ status: 'skipped', message: 'Erply not configured' })
+  })
+})
+
+describe('uncategorizedFromDetails', () => {
+  it('reads back what buildSyncRunRow stored', () => {
+    const uncategorized = Array.from({ length: 70 }, (_, i) => ({ sku: `G${i}`, category: 'Garden' }))
+    const r = buildSyncRunRow({ source: 'cron', startedAt: T0, result: { ...ok, uncategorized } })
+    const u = uncategorizedFromDetails(r.details)
+    expect(u?.count).toBe(70)
+    expect(u?.sample).toHaveLength(MAX_STORED_ERRORS)
+    expect(u?.sample[0]).toEqual({ sku: 'G0', category: 'Garden' })
+  })
+  it('is null for runs without the key, and for malformed jsonb', () => {
+    expect(uncategorizedFromDetails(null)).toBeNull()
+    expect(uncategorizedFromDetails({ stockSync: { changed: 3 } })).toBeNull()
+    expect(uncategorizedFromDetails({ uncategorized: 'x' })).toBeNull()
+    expect(uncategorizedFromDetails({ uncategorized: { count: 0, sample: [] } })).toBeNull()
+    expect(uncategorizedFromDetails({ uncategorized: { count: 2, sample: [{ sku: 'A1' }, null, { nope: 1 }] } }))
+      .toEqual({ count: 2, sample: [{ sku: 'A1', category: '' }] })
   })
 })
 

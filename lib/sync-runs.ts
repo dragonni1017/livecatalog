@@ -58,6 +58,25 @@ function withUncategorized(
   return { ...details, uncategorized: { count: uncategorized.length, sample: uncategorized.slice(0, MAX_STORED_ERRORS) } }
 }
 
+export interface UncategorizedSummary {
+  count: number
+  sample: { sku: string; category: string }[]
+}
+
+/**
+ * Pure: the uncategorized list withUncategorized stored, read back from a
+ * run's details. details is jsonb, so anything malformed reads as none
+ * rather than breaking the history table.
+ */
+export function uncategorizedFromDetails(details: Record<string, unknown> | null): UncategorizedSummary | null {
+  const u = details?.uncategorized as { count?: unknown; sample?: unknown } | undefined
+  if (!u || typeof u.count !== 'number' || u.count <= 0 || !Array.isArray(u.sample)) return null
+  const sample = u.sample
+    .filter((s): s is { sku: string; category: unknown } => !!s && typeof s === 'object' && typeof (s as { sku?: unknown }).sku === 'string')
+    .map((s) => ({ sku: s.sku, category: typeof s.category === 'string' ? s.category : '' }))
+  return { count: u.count, sample }
+}
+
 /** Pure: what one run looked like. */
 export function buildSyncRunRow(input: RunInput): SyncRunRow {
   const finished = input.finishedAt ?? Date.now()

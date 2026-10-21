@@ -1,4 +1,5 @@
-import { syncHealth, type SyncRunRow } from '@/lib/sync-runs'
+import Link from 'next/link'
+import { syncHealth, uncategorizedFromDetails, type SyncRunRow } from '@/lib/sync-runs'
 
 // Recent Erply sync runs (migration 0061). Server component; the page passes
 // the rows in.
@@ -69,6 +70,7 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
             <tbody className="divide-y divide-gray-100">
               {runs.map((r) => {
                 const problems = [...(r.message ? [r.message] : []), ...subErrors(r.details), ...(r.errors ?? []).map((e) => `${e.sku ?? `row ${e.row}`}: ${e.message}`)]
+                const uncategorized = uncategorizedFromDetails(r.details)
                 return (
                   <tr key={r.id} className="align-top">
                     <td className="whitespace-nowrap px-3 py-2 text-gray-700">{when(r.started_at)}</td>
@@ -86,6 +88,33 @@ export default function SyncRunHistory({ runs, loadFailed }: { runs: Run[]; load
                               <li key={i} className="break-words">{p}</li>
                             ))}
                           </ul>
+                        </details>
+                      )}
+                      {/* Not an error -- the run worked -- but these products are
+                          on no category page until someone files them. */}
+                      {uncategorized && (
+                        <details className="mt-1 text-xs text-gray-600" data-sync-uncategorized={uncategorized.count}>
+                          <summary className="cursor-pointer text-amber-700">
+                            {uncategorized.count} new product{uncategorized.count === 1 ? '' : 's'} with no matching category
+                          </summary>
+                          <ul className="mt-1 max-w-xl list-disc space-y-0.5 pl-4">
+                            {uncategorized.sample.map((u) => (
+                              <li key={u.sku} className="break-words">
+                                <span className="font-mono">{u.sku}</span>
+                                {u.category ? <> (Erply group &ldquo;{u.category}&rdquo;)</> : ' (no Erply group)'}
+                              </li>
+                            ))}
+                            {uncategorized.count > uncategorized.sample.length && (
+                              <li className="text-gray-400">…and {uncategorized.count - uncategorized.sample.length} more</li>
+                            )}
+                          </ul>
+                          <p className="mt-1 max-w-xl text-gray-500">
+                            Set their category on the{' '}
+                            <Link href="/admin/cleanup?issue=category" className="text-red-700 underline">
+                              No category
+                            </Link>{' '}
+                            tab, and add the group to lib/erply-category-aliases.ts so the next ones match.
+                          </p>
                         </details>
                       )}
                     </td>
