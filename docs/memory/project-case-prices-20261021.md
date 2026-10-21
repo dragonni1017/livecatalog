@@ -1,6 +1,6 @@
 ---
 name: project-case-prices-20261021
-description: 2026-10-21 — 79 active products priced as a whole case (76 are 60bx/cs floral paper at $144-$240 vs ~$3/pk); 9 live, 68 hidden; /admin/cleanup "Case price?" tab + Needs pricing unhide-all skips them
+description: 2026-10-21 — 79 active products priced as a whole case (76 are 60bx/cs floral paper at $144-$240 vs ~$3/pk); 9 live, 70 hidden; /admin/cleanup "Case price?" tab + Needs pricing unhide-all skips them
 type: project
 ---
 
@@ -14,7 +14,7 @@ works) and `scripts/build-price-outlier-list.mjs`.
 76 are floral paper (`F286xxx`/`F287xxx`, "20/pk 60bx/cs") at $144-$240,
 in a category where 247 of the 323 60bx/cs papers sit at $3-$7 per pack, so
 it is a case price, not a convention. All are `unit_type = pc`. **68 are
-hidden**: harmless until someone unhides them in /admin/products, which
+hidden** (70 hidden in all, with F287409 and PF20200934-RD): harmless until someone unhides them in /admin/products, which
 would put a case price on the storefront. None are in the receiving cohort.
 The rest: H424183 ($43.25 = 30 bx x $1.44) and PF20200934-RD.
 
@@ -22,3 +22,4 @@ The rest: H424183 ($43.25 = 30 bx x $1.44) and PF20200934-RD.
 [[project-needs-pricing-tab-20261002]]); the handoff page lists the live 9.
 Medians come from visible products only, so a hidden batch of case prices
 can't raise its own category's median and hide itself.
+All 79 are on the handoff page (https://claude.ai/artifact/LprevcDwd5BgxcTszj9dew), the hidden 70 grouped by price.
