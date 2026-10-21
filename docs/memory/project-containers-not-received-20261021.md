@@ -29,5 +29,9 @@ are EGSU9777282 (32 missing: K229561–K229578, 4531-8..11, ...), EGSU1118334
   container staged, then stage the others — a line staged before its product
   exists stays `unmatched_sku` (see [[project-containers-20260917]]).
 - TLLU5419845 heads its SKU column `item`, not 货号; the parser accepts that
-  since PR #148. The two ETD 0131 (2026-02) lists still fail on their
-  piece-count header.
+  since PR #148. ETD 0131 (EGSU9679727) heads its total `pcs` and cartons
+  `CTN`, accepted since PR #151; all 206 2026 lists now parse.
+- Rows with pieces but no SKU are now listed in the staging "problems"
+  (PR #151) instead of vanishing. Recent ones worth a look before receiving:
+  6,000 手机包 (phone bags) on EGHU9765009, and 底座 (bases) on several
+  September containers.

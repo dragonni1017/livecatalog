@@ -3,6 +3,7 @@ import { getAdminClient } from '@/lib/supabase'
 import { resolveCdnImage } from '@/lib/image'
 import PrintButton from '@/components/admin/PrintButton'
 import type { Category } from '@/lib/types'
+import { resolveCategorySlug } from '@/lib/category-slugs'
 import { MAX_LINE_CARD_SKUS as MAX_SKUS, parseSkuList, splitPackSpec } from '@/lib/line-card'
 import { applyTierDiscount } from '@/lib/order-rules'
 import { loadPriceOptions, resolvePriceScope } from '@/lib/price-scope'
@@ -117,7 +118,8 @@ export default async function LineCard({
   const { data: catData } = await db.from('categories').select('*').order('display_order')
   const categories = (catData ?? []) as Category[]
 
-  const catSlugs = all(params.cat)
+  // Saved line-card links may name a category by a slug since renamed.
+  const catSlugs = all(params.cat).map((s) => resolveCategorySlug(s, categories.map((c) => c.slug)))
   const chosenCats = categories.filter((c) => catSlugs.includes(c.slug))
   const skuRaw = first(params.skus)
   const pastedSkus = parseSkuList(skuRaw)

@@ -8,6 +8,8 @@ import CategoryNav from '@/components/catalog/CategoryNav'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
 import { parseCaseSize, parseSoldBy } from '@/lib/catalog-filters'
+import { resolveCategorySlug } from '@/lib/category-slugs'
+import { permanentRedirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +70,18 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     .select('*, category:categories!products_category_id_fkey(*)', { count: 'exact' })
     .eq('is_active', true)
     .eq('manually_hidden', false)
+
+  // An old link to a renamed category (?category=christmas) moves to its
+  // current slug, keeping every other filter on the URL.
+  if (category) {
+    const current = resolveCategorySlug(category, categories.map((c) => c.slug))
+    if (current !== category) {
+      const params = new URLSearchParams()
+      for (const [k, v] of Object.entries(await searchParams)) if (typeof v === 'string') params.set(k, v)
+      params.set('category', current)
+      permanentRedirect(`/?${params.toString()}`)
+    }
+  }
 
   const categoryMatch = category ? categories.find(c => c.slug === category) : undefined
   const categoryNotFound = !!category && !categoryMatch
