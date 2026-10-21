@@ -3,6 +3,7 @@ import fs from 'fs'
 import { createRequire } from 'module'
 import {
   groupLinesBySku,
+  isSkuHeaderCell,
   normalizeBarcode,
   parsePackingListSheet,
   PackingListError,
@@ -147,6 +148,42 @@ describe('parsePackingListSheet', () => {
 
   it('throws when the header is found but every line below it is unusable', () => {
     expect(() => parsePackingListSheet(sheet([['F1', '1', 'n/a', 1, 1, 1, 1]]))).toThrow(/no usable line items/)
+  })
+
+  // Header verbatim from TLLU5419845 (ETD 0914): no 货号 at all, SKU under
+  // `item`, cartons under `cts`, and `qty` is pieces PER CASE.
+  const ITEM_HEADER = [null, '品名', '图片（一定要有图）', 'UPC(条码12位数字)', '产品规格尺寸长*宽*高（CM）', 'item', '材质', 'qty', 'cts', '总PCS', '长cm(外箱)', '宽cm(外箱)', '高cm(外箱)', '毛重KG（每包装箱）', '总量KG', '体积CBM']
+
+  it('reads an `item`-headed sheet, taking 总PCS (not per-case qty) and cts as cartons', () => {
+    const parsed = parsePackingListSheet([
+      ITEM_HEADER,
+      [1, '大南瓜', null, '737879112014', '高度10.7直径13', 'S162825', 'TPR+面粉', 36, 30, 1080, 56.5, 43.5, 39, 18, 540, 2.88],
+    ])
+    expect(parsed.problems).toEqual([])
+    expect(parsed.lines[0]).toMatchObject({ sku: 'S162825', barcodeFromFile: '737879112014', qtyShipped: 1080, cartons: 30, piecesPerCase: 36 })
+    expect(parsed.lines[0].caseLengthIn).toBe(22.24)
+  })
+
+  // On this format 'qty' is the case pack, so a sheet missing 总PCS must
+  // refuse rather than register 36 pieces for a 1,080-piece line.
+  it('refuses an `item`-headed sheet with no 总PCS rather than reading per-case qty', () => {
+    expect(() => parsePackingListSheet([['item', 'qty', 'cts'], ['S162825', 36, 30]]))
+      .toThrow(/Could not find a piece-count column/)
+  })
+
+  it('matches `item` exactly and prefers 货号 when both are present', () => {
+    expect(() => parsePackingListSheet([['Item Description', '总PCS'], ['Pumpkin', 10]])).toThrow(/No 货号 or `item`/)
+    const parsed = parsePackingListSheet([['货号', 'item', 'QTY'], ['F1', 'old-code', 48]])
+    expect(parsed.lines[0]).toMatchObject({ sku: 'F1', qtyShipped: 48 })
+  })
+})
+
+describe('isSkuHeaderCell', () => {
+  it('accepts 货号 anywhere and `item` only as the whole header', () => {
+    expect(isSkuHeaderCell('货号')).toBe(true)
+    expect(isSkuHeaderCell(' Item ')).toBe(true)
+    expect(isSkuHeaderCell('Item No.')).toBe(false)
+    expect(isSkuHeaderCell(null)).toBe(false)
   })
 })
 

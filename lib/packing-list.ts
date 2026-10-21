@@ -136,12 +136,33 @@ export interface PackingListParse {
 
 export class PackingListError extends Error {}
 
+/**
+ * The SKU column's header. Usually 货号, but some 2026 sheets (container
+ * TLLU5419845, ETD 0914, both Arrival and Original List) head it `item`
+ * instead, with no 货号 anywhere. `item` is matched EXACTLY, never as a
+ * substring, so "Item Description" or "Item No. (old)" can't pass for it.
+ * Same rule as scripts/fill-case-weights-from-arrival-lists.mjs.
+ */
+export function isSkuHeaderCell(cell: unknown): boolean {
+  if (typeof cell !== 'string') return false
+  return cell.includes('货号') || cell.trim().toLowerCase() === 'item'
+}
+
 function findHeaderRow(rows: SheetRow[]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const row = rows[i] ?? []
     if (row.some((cell) => typeof cell === 'string' && cell.includes('货号'))) return i
   }
+  // 货号 anywhere in the first 10 rows wins over an `item` header, so an
+  // `item` cell can never redirect a sheet that already parses.
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    if ((rows[i] ?? []).some(isSkuHeaderCell)) return i
+  }
   return -1
+}
+
+function findExactCol(headerRow: SheetRow, label: string): number {
+  return headerRow.findIndex((cell) => typeof cell === 'string' && cell.trim().toLowerCase() === label)
 }
 
 // Case-insensitive so a sheet headed "Qty" or "总pcs" matches the same rules
@@ -271,7 +292,7 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   const headerRowIndex = findHeaderRow(rows)
   if (headerRowIndex < 0) {
     throw new PackingListError(
-      "No 货号 (SKU) column found in the first 10 rows — this doesn't look like a supplier packing list. The \"Original List\" and \"Arrival List\" .xls/.xlsx both carry a 货号 column and both parse; the Arrival List PDFs of the same name do not.",
+      "No 货号 or `item` (SKU) column found in the first 10 rows — this doesn't look like a supplier packing list. The \"Original List\" and \"Arrival List\" .xls/.xlsx both carry one and both parse; the Arrival List PDFs of the same name do not.",
     )
   }
 
@@ -284,7 +305,17 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
       ? findDimensionCol(headerRow, DIMENSION_AXES[field], substrings)
       : findCol(headerRow, substrings)
   }
-  colIndex.qty = findColAny(headerRow, QTY_COLUMN_ALTERNATIVES)
+  // The `item`-headed format: SKU in `item`, cartons in `cts`, and `qty` is
+  // pieces PER CASE (TLLU5419845: S162825 reads qty 36 x cts 30 = 总PCS
+  // 1080). So on these sheets only 总PCS counts as the line total -- falling
+  // back to 'qty' would register the case pack as the received quantity.
+  const itemFormat = colIndex.sku < 0 && findExactCol(headerRow, 'item') >= 0
+  if (itemFormat) {
+    colIndex.sku = findExactCol(headerRow, 'item')
+    if (colIndex.cartons < 0) colIndex.cartons = findExactCol(headerRow, 'cts')
+  }
+  const qtyAlternatives = itemFormat ? QTY_COLUMN_ALTERNATIVES.slice(0, 1) : QTY_COLUMN_ALTERNATIVES
+  colIndex.qty = findColAny(headerRow, qtyAlternatives)
 
   if (colIndex.sku < 0) {
     throw new PackingListError(
@@ -293,7 +324,7 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
   }
   if (colIndex.qty < 0) {
     throw new PackingListError(
-      `Could not find a piece-count column — tried ${QTY_COLUMN_ALTERNATIVES.map((a) => a.all.join('+')).join(', ')}. ` +
+      `Could not find a piece-count column — tried ${qtyAlternatives.map((a) => a.all.join('+')).join(', ')}. ` +
         `Header row read as: ${JSON.stringify(headerRow)}. If this supplier names it something else, add it to ` +
         `QTY_COLUMN_ALTERNATIVES in lib/packing-list.ts after checking the real header — don't guess, a wrong column registers the wrong stock.`,
     )

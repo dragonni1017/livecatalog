@@ -102,10 +102,17 @@ const COLUMN = {
   weight: ['毛重'],
 }
 
+// SKU header: 货号, or exactly `item` on some 2026 sheets (TLLU5419845).
+// Mirrors isSkuHeaderCell in lib/packing-list.ts; 货号 is searched first.
+const isItemHeader = (cell) => typeof cell === 'string' && cell.trim().toLowerCase() === 'item'
+
 function findHeaderRow(rows) {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const row = rows[i] ?? []
     if (row.some((cell) => typeof cell === 'string' && cell.includes('货号'))) return i
+  }
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    if ((rows[i] ?? []).some(isItemHeader)) return i
   }
   return -1
 }
@@ -232,7 +239,7 @@ async function main() {
     if (idx >= 0) { headerRowIndex = idx; sheetRows = rows; break }
   }
   if (!sheetRows) {
-    console.error('No sheet with a 货号 column found -- this file may not be a packing list this script understands.')
+    console.error('No sheet with a 货号 or item column found -- this file may not be a packing list this script understands.')
     process.exit(1)
   }
 
@@ -240,7 +247,8 @@ async function main() {
   const colIndex = {}
   for (const [field, substrings] of Object.entries(COLUMN)) {
     const isDim = DIMENSION_FIELDS.has(field)
-    const idx = isDim ? findDimensionCol(headerRow, substrings) : findCol(headerRow, substrings)
+    let idx = isDim ? findDimensionCol(headerRow, substrings) : findCol(headerRow, substrings)
+    if (idx < 0 && field === 'sku') idx = headerRow.findIndex(isItemHeader)
     if (idx < 0) {
       const matches = findAllCols(headerRow, substrings)
       const why =
