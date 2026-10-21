@@ -17,7 +17,7 @@ it) -- i.e. everything the sync had touched once. On 2026-10-21 that was all
 84 SKUs it adjusted since 09-25, 44 live; swings of ±1 (52 SKUs) up to
 ±6,000 (K229486: 0 / 6,000 / 12,000 against Erply's 6,000).
 
-**Fix (PR after #154):** anchor at max(our clock, newest
+**Fix (PR #155):** anchor at max(our clock, newest
 `stock_adjustments.created_at`) AFTER the writes -- the DB stamps
 adjustments with its own clock, so our clock alone could land before them.
 `tests/stock-sync.test.ts` simulates several nights; its products are seeded
