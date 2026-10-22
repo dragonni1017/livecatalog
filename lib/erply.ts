@@ -51,7 +51,22 @@ interface ErplyProduct {
    * Erply returns a per-warehouse dictionary keyed by warehouse ID. Confirmed
    * live: this account has warehouse 1 "L&Y USA" and warehouse 2 "Store LA".
    */
-  warehouses?: Record<string, { warehouseID: number; totalInStock: number; reserved: number }>
+  // totalInStock is a decimal STRING ("6000.000000") when the product has a
+  // stock record at that warehouse, and a plain number 0 when it has none.
+  // Read it through erplyQty(), never directly.
+  warehouses?: Record<string, { warehouseID: number; totalInStock: number | string; reserved: number | string }>
+}
+
+/**
+ * Erply's stock figure as a number. The API sends "6000.000000", which used
+ * as a number compares unequal to 6000, concatenates under +, and is refused
+ * by an integer column ("invalid input syntax for type integer"): every
+ * receiving apply's per-line write-back failed that way from 2026-09-23 to
+ * 2026-10-22, and the nightly drift check flagged all 2,193 counted SKUs.
+ */
+export function erplyQty(raw: number | string | null | undefined): number {
+  const n = Number(raw ?? 0)
+  return Number.isFinite(n) ? Math.round(n) : 0
 }
 
 // Public catalog price (decided 2026-08-21, supersedes the 2026-08-06
@@ -291,7 +306,7 @@ function normalizeProduct(p: ErplyProduct): ErplySyncProduct {
   // to a specific warehouseID instead (open decision, see
   // docs/memory/project-erply-pagination-fix.md).
   const stockQty = Object.values(p.warehouses ?? {}).reduce(
-    (sum, w) => sum + (w.totalInStock ?? 0),
+    (sum, w) => sum + erplyQty(w.totalInStock),
     0
   )
 
@@ -313,6 +328,15 @@ function normalizeProduct(p: ErplyProduct): ErplySyncProduct {
 export interface ErplyStockRow {
   sku: string
   stockQty: number
+  /**
+   * Erply has a stock record for this product at the warehouse, i.e. stock
+   * has been entered for it at some point: totalInStock came as a string
+   * ("0.000000" included), not the plain 0 Erply sends when there is none.
+   * Uncounted is "never counted", which the stock sync must not read as 0 in
+   * stock; a counted product at 0 has sold through, and the sync takes it
+   * to 0. On 2026-10-22: 2,025 counted above 0, 168 counted at 0, 1,022 not.
+   */
+  counted: boolean
 }
 
 /**
@@ -351,10 +375,10 @@ export async function getErplyStock(warehouseId = 1): Promise<ErplyStockRow[]> {
   }
 
   return all
-    .map((p) => ({
-      sku: (p.code || String(p.productID)).trim(),
-      stockQty: p.warehouses?.[String(warehouseId)]?.totalInStock ?? 0,
-    }))
+    .map((p) => {
+      const raw = p.warehouses?.[String(warehouseId)]?.totalInStock
+      return { sku: (p.code || String(p.productID)).trim(), stockQty: erplyQty(raw), counted: typeof raw === 'string' }
+    })
     .filter((r) => r.sku)
 }
 
@@ -411,7 +435,7 @@ export async function getErplyStockIndex(warehouseId = 1): Promise<Map<string, E
       productId: p.productID,
       sku,
       name: p.name,
-      stockQty: p.warehouses?.[String(warehouseId)]?.totalInStock ?? 0,
+      stockQty: erplyQty(p.warehouses?.[String(warehouseId)]?.totalInStock),
     })
   }
   return bySku
