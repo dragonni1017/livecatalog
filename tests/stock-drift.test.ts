@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DRIFT_SAMPLE_SIZE, measureStockDrift, stockDriftFromDetails } from '../lib/stock-drift'
 import { buildSyncRunRow } from '../lib/sync-runs'
+import { erplyQty } from '../lib/erply'
 
 const row = (sku: string, stock_qty: number | null, hidden = false) => ({ sku, stock_qty, is_active: true, manually_hidden: hidden })
 
@@ -76,5 +77,33 @@ describe('stockDriftFromDetails', () => {
       details: { stockDrift: { skipped: 'check failed: timeout' } },
     })
     expect(run.status).toBe('ok')
+  })
+})
+
+describe('erplyQty', () => {
+  // Erply sends stock as a decimal string. Compared raw, all 2,193 counted
+  // SKUs read as drifted on 2026-10-22; written raw to an integer column, it
+  // failed every receiving line's write-back.
+  it("reads Erply's decimal strings as numbers", () => {
+    expect(erplyQty('6000.000000')).toBe(6000)
+    expect(erplyQty('0.000000')).toBe(0)
+    expect(erplyQty(12)).toBe(12)
+    expect(erplyQty(undefined)).toBe(0)
+    expect(erplyQty('not a number')).toBe(0)
+    expect(0 + erplyQty('6000.000000') + erplyQty('12.000000')).toBe(6012)
+  })
+})
+
+describe('measureStockDrift with counted flags', () => {
+  it('checks a sold-through 0 the sync wrote, skips a never-counted one', () => {
+    const drift = measureStockDrift(
+      [
+        { sku: 'SOLD', stockQty: 0, counted: true },
+        { sku: 'NEVER', stockQty: 0, counted: false },
+        { sku: 'SAME', stockQty: 6000, counted: true },
+      ],
+      [row('SOLD', 5), row('NEVER', 999), row('SAME', 6000)],
+    )
+    expect(drift).toMatchObject({ checked: 2, drifted: 1, sample: [{ sku: 'SOLD', catalog: 5, erply: 0 }] })
   })
 })

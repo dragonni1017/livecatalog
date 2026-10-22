@@ -10,9 +10,10 @@
  * same comparison every night, from the Erply stock the cron already
  * fetched, and records it in sync_runs.details.stockDrift for /admin/sync.
  *
- * Read-only. Only SKUs Erply has COUNTED (stock > 0) are compared: the stock
- * sync deliberately skips Erply 0 ("not counted yet", decided 2026-09-03), so
- * those disagree by design -- e.g. the 999 import placeholders.
+ * Read-only. Only SKUs Erply has COUNTED (has a stock record for; see
+ * isErplyCounted) are compared: the stock sync deliberately skips the rest
+ * ("not counted yet", decided 2026-09-03), so those disagree by design --
+ * e.g. the 999 import placeholders.
  *
  * Right after a working sync, a counted SKU matches Erply unless the catalog
  * changed since the previous run (an order decrement Erply hasn't seen yet),
@@ -21,7 +22,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { selectAll } from './product-sync'
+import { isErplyCounted, selectAll } from './product-sync'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -54,14 +55,15 @@ interface CatalogStockRow {
 
 /** Pure: compare Erply's counted stock against the catalog. */
 export function measureStockDrift(
-  erplyStock: { sku: string; stockQty: number }[],
+  erplyStock: { sku: string; stockQty: number; counted?: boolean }[],
   catalog: CatalogStockRow[],
 ): StockDrift {
   const bySku = new Map(catalog.filter((c) => c.sku).map((c) => [c.sku!, c]))
   let checked = 0
   const drifted: StockDriftRow[] = []
   for (const e of erplyStock) {
-    if (e.stockQty === 0) continue
+    // Exactly the SKUs the stock sync writes, so a sold-through 0 is checked.
+    if (!isErplyCounted(e)) continue
     const c = bySku.get(e.sku)
     if (!c) continue
     checked++
@@ -80,7 +82,7 @@ export function measureStockDrift(
 }
 
 /** Reads the catalog's stock and measures drift against `erplyStock`. */
-export async function checkStockDrift(erplyStock: { sku: string; stockQty: number }[], db: DB): Promise<StockDrift> {
+export async function checkStockDrift(erplyStock: { sku: string; stockQty: number; counted?: boolean }[], db: DB): Promise<StockDrift> {
   const catalog = await selectAll<CatalogStockRow>((from, to) =>
     db.from('products').select('sku, stock_qty, is_active, manually_hidden').order('id').range(from, to),
   )

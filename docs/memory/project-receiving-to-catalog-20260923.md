@@ -183,3 +183,20 @@ F288017 1,600 — Erply, the catalog and the movement ledger all agree. Note
 F287862/F287866 keep the fake 1,000 from 2026-08-17 (see
 [[project-fake-stock-1000-hold]]); that is the standing decision, not an
 error.
+
+## 2026-10-22: why the per-line confirmation never wrote (point 4)
+
+Root cause found: Erply sends `totalInStock` as a decimal **string**
+(`"6000.000000"`), and `getErplyStockIndex` passed it through typed as a
+number. Postgres refuses it for the integer `erply_stock_before` column
+(`invalid input syntax for type integer`), so every line's confirmation
+update failed. All 139 lines on the 7 applied shipments had none. The
+same string would have failed `/admin/api/shipments/to-catalog`'s insert
+into `products.stock_qty`. Fixed in `lib/erply.ts` (`erplyQty`). Past
+shipments stay without per-line before/after; Erply's registration documents
+are the record for those.
+
+The string is also the signal for "counted": Erply sends a plain number 0
+when a product has no stock record and a string (`"0.000000"` included) when
+it has one. The stock sync's "skip uncounted" rule rested on that by accident
+and now reads `ErplyStockRow.counted` explicitly.

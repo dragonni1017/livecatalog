@@ -156,4 +156,22 @@ describe('syncStockFromErply anchoring', () => {
     expect(sim.stock.get('F1')).toBe(999)
     expect(sim.adjustments).toHaveLength(1)
   })
+
+  // Erply sends a plain 0 for a SKU never counted, and '0.000000' for one
+  // that sold through. Only the first is 'not counted'.
+  it('takes a counted SKU that sold through down to 0', async () => {
+    const sim = simDb({ F1: 40, F2: 999 })
+    night++
+    vi.setSystemTime(Date.parse('2026-10-01T08:33:00Z') + night * DAY)
+    const r = await syncStockFromErply(
+      [
+        { sku: 'F1', stockQty: 0, counted: true },
+        { sku: 'F2', stockQty: 0, counted: false },
+      ],
+      sim.db as never,
+    )
+    expect(sim.stock.get('F1')).toBe(0)
+    expect(sim.stock.get('F2')).toBe(999)
+    expect(r).toMatchObject({ changed: 1, skippedUncounted: 1 })
+  })
 })

@@ -476,9 +476,19 @@ const ADJUST_CONCURRENCY = 25
  * first runs. A SKU starts syncing normally (including back down to 0
  * later, if it sells through) as soon as Erply shows a real count above 0
  * at least once.
+ *
+ * "Counted" is Erply having a stock record at the warehouse (ErplyStockRow.
+ * counted), not the figure being nonzero: Erply sends "0.000000" for a SKU
+ * that sold through and a plain number 0 for one never counted. Until
+ * 2026-10-22 this distinction rested on the figure staying a string, and
+ * "0.000000" !== 0; it is explicit now. 168 SKUs were in that state then.
  */
+export function isErplyCounted(s: { stockQty: number; counted?: boolean }): boolean {
+  return s.counted ?? s.stockQty !== 0
+}
+
 export async function syncStockFromErply(
-  stock: { sku: string; stockQty: number }[],
+  stock: { sku: string; stockQty: number; counted?: boolean }[],
   db: DB,
 ): Promise<StockSyncResult> {
   const syncStartedAt = new Date().toISOString()
@@ -492,8 +502,8 @@ export async function syncStockFromErply(
 
   const errors: StockSyncResult['errors'] = []
   let changed = 0
-  const skippedUncounted = stock.filter((s) => s.stockQty === 0).length
-  const countedStock = stock.filter((s) => s.stockQty !== 0)
+  const countedStock = stock.filter(isErplyCounted)
+  const skippedUncounted = stock.length - countedStock.length
 
   // Chunk the baseline lookup to stay well under Postgres's parameter/URL
   // limits for a large `= any(...)` array against the full catalog.
