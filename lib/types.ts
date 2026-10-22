@@ -221,6 +221,12 @@ export interface ImportResult {
   uncategorized?: { sku: string; category: string }[]
   /** SKUs this run deactivated (not in the Erply feed). */
   deactivatedSkus?: string[]
+  /**
+   * /admin/import only: SKUs whose Stock Qty was ignored because Erply
+   * manages their stock (lib/import-stock.ts), and the note saying so.
+   */
+  stockIgnored?: string[]
+  stockNote?: string | null
 }
 
 // One row classified against the current DB state
@@ -230,6 +236,8 @@ export interface ClassifiedRow {
   status: 'new' | 'changed' | 'unchanged'
   validStatus: 'valid' | 'warning' | 'error'
   issues: string[]
+  /** The row's Stock Qty will be ignored: Erply manages it (lib/import-stock.ts). */
+  stockIgnored?: boolean
 }
 
 // Result of the pre-import diff check
@@ -237,4 +245,5 @@ export interface DiffResult {
   rows: ClassifiedRow[]
   deactivateCount: number
   deactivateSample: { sku: string; name: string }[]
+  stockNote?: string | null
 }

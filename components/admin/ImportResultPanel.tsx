@@ -27,6 +27,13 @@ export default function ImportResultPanel({ result, onReset }: ImportResultPanel
         </p>
       </div>
 
+      {result.stockNote && (
+        <details className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+          <summary className="cursor-pointer">{result.stockNote}</summary>
+          <p className="mt-2 break-words font-mono text-xs text-blue-700">{(result.stockIgnored ?? []).join(', ')}</p>
+        </details>
+      )}
+
       {hasImportErrors && (
         <div className="rounded-xl bg-white border border-red-200 overflow-hidden">
           <div className="px-4 py-3 bg-red-50 border-b border-red-200">

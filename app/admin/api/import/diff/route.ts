@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ExcelRow, DiffResult, ClassifiedRow } from '@/lib/types'
 import { parseStockCell, selectAll } from '@/lib/product-sync'
+import { loadErplyStockGuard, stockGuardNote, stockManagedByErply } from '@/lib/import-stock'
 
 interface DbProduct {
   sku: string
@@ -49,10 +50,10 @@ function validateRow(row: ExcelRow): { status: ClassifiedRow['validStatus']; iss
 // Mirrors what app/api/import/route.ts will actually write to an EXISTING
 // product: description and category are never touched, and a blank Image URL
 // or Stock Qty cell keeps the stored value. So those can't make a row
-// "changed".
-function rowMatchesDb(row: ExcelRow, db: DbProduct): boolean {
+// "changed". Nor can a Stock Qty the import will ignore (lib/import-stock.ts).
+function rowMatchesDb(row: ExcelRow, db: DbProduct, ignoreStock: boolean): boolean {
   const priceCents = Math.round(parseFloat(row.Price?.toString() ?? '0') * 100)
-  const stockQty = parseStockCell(row['Stock Qty'])
+  const stockQty = ignoreStock ? null : parseStockCell(row['Stock Qty'])
   const name = row.Name.toString().trim()
   const imageUrl = row['Image URL']?.toString().trim() || null
   const isActive = row.Active?.toString().toLowerCase() !== 'false'
@@ -111,6 +112,10 @@ export async function POST(request: NextRequest) {
       dbBySku.set(p.sku, p)
     }
 
+    // Same check the import makes, so the preview shows what will happen.
+    const guard = await loadErplyStockGuard()
+    let stockIgnoredCount = 0
+
     const classifiedRows: ClassifiedRow[] = []
 
     for (let i = 0; i < rows.length; i++) {
@@ -118,12 +123,15 @@ export async function POST(request: NextRequest) {
       const { status: validStatus, issues } = validateRow(row)
       const sku = row.SKU?.toString().trim() ?? ''
 
+      const stockIgnored = parseStockCell(row['Stock Qty']) !== null && stockManagedByErply(sku, guard)
+      if (stockIgnored) stockIgnoredCount++
+
       let status: ClassifiedRow['status'] = 'new'
       if (sku && dbBySku.has(sku)) {
-        status = rowMatchesDb(row, dbBySku.get(sku)!) ? 'unchanged' : 'changed'
+        status = rowMatchesDb(row, dbBySku.get(sku)!, stockIgnored) ? 'unchanged' : 'changed'
       }
 
-      classifiedRows.push({ rowIndex: i + 2, row, status, validStatus, issues })
+      classifiedRows.push({ rowIndex: i + 2, row, status, validStatus, issues, stockIgnored })
     }
 
     // The import no longer deactivates products missing from the sheet
@@ -133,6 +141,7 @@ export async function POST(request: NextRequest) {
       rows: classifiedRows,
       deactivateCount: 0,
       deactivateSample: [],
+      stockNote: stockGuardNote(guard, stockIgnoredCount),
     }
 
     return NextResponse.json(result)

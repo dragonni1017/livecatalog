@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BarcodeCorrection, ExcelRow, ImportResult } from '@/lib/types'
 import { parseStockCell, syncToSupabase, type SyncProduct } from '@/lib/product-sync'
+import { applyStockGuard, loadErplyStockGuard, stockGuardNote } from '@/lib/import-stock'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -107,12 +108,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Stock Qty is dropped for SKUs Erply counts: the nightly stock sync adds
+    // Erply's changes on top, so the same delivery would count twice. See
+    // lib/import-stock.ts.
+    const guard = await loadErplyStockGuard()
+    const { rows: guardedProducts, ignored: stockIgnored } = applyStockGuard(validProducts, guard)
+
     // A sheet is a partial edit, not the whole catalog, and Erply is the
     // master. So: nothing missing from the sheet is deactivated; description
     // and category are insert-only, since the catalog owns them once a
     // product exists (/admin/cleanup, /admin/products); and a blank Image URL
     // or Stock Qty cell leaves the stored value alone instead of erasing it.
-    const result = await syncToSupabase(validProducts, db, {
+    const result = await syncToSupabase(guardedProducts, db, {
       deactivateMissing: false,
       skipFields: ['category', 'description'],
       keepExistingWhenBlank: ['image_url', 'stock_qty'],
@@ -125,6 +132,8 @@ export async function POST(request: NextRequest) {
       ...result,
       skipped: result.skipped + errors.length,
       errors: [...errors, ...result.errors],
+      stockIgnored,
+      stockNote: stockGuardNote(guard, stockIgnored.length),
     }
 
     await logImportRun(db, rows.length, merged)
