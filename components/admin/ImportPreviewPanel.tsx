@@ -114,6 +114,10 @@ export default function ImportPreviewPanel({
         </div>
       )}
 
+      {diff.stockNote && (
+        <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">{diff.stockNote}</div>
+      )}
+
       {/* Rows table */}
       <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
         <div className="overflow-auto max-h-[480px]">
@@ -139,7 +143,16 @@ export default function ImportPreviewPanel({
                     {vr.row.Price != null ? `$${parseFloat(vr.row.Price.toString()).toFixed(2)}` : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {vr.row['Stock Qty'] != null ? vr.row['Stock Qty'].toString() : '0'}
+                    {vr.stockIgnored ? (
+                      <span className="text-gray-400 line-through" title="Ignored: Erply manages this product's stock">
+                        {vr.row['Stock Qty']?.toString()}
+                      </span>
+                    ) : vr.row['Stock Qty'] != null ? (
+                      vr.row['Stock Qty'].toString()
+                    ) : (
+                      '0'
+                    )}
+                    {vr.stockIgnored && <span className="ml-1 text-xs text-blue-700">Erply</span>}
                   </td>
                   <td className="px-4 py-3"><DiffBadge status={vr.status} /></td>
                   <td className="px-4 py-3"><ValidationNote status={vr.validStatus} issues={vr.issues} /></td>
