@@ -45,3 +45,15 @@ the cron cover what it did.
 `lib/erply.ts`, not the memory nodes or the .mjs mirror. Never treat "hidden
 and priced" as "should be visible" without the cohort. See
 [[project-receiving-to-catalog-20260923]] and [[project-admin-cleanup-queue]].
+
+**2026-10-23: awaiting_price (migration 0067).** Ready to show now takes
+cohort OR `products.awaiting_price` (`hiddenForPrice` in
+`lib/needs-pricing.ts`). The flag means "hidden only because it had no price"
+and is set wherever the system hides a $0 product (sync insert, to-catalog,
+the QB create scripts, `zero-price-visibility.mjs --hide`); any hand-set
+visibility (/admin/products toggle, the unhide route) clears it. Backfilled
+on the 148 hidden unpriced products, which brought the 60 QB-created ones
+(2026-10-06) into the flow. Same PR: the dashboard's "Re-enable products that
+now have an image" got a `price_cents > 0` guard. Before it, the button would
+have put 121 hidden $0 products live. It still unhides ~1,200 priced products
+that were hidden on purpose.

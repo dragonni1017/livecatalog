@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         // Priced at 0, so hidden: lib/order-submission.ts checks only
         // is_active/manually_hidden, and a visible $0 product is orderable.
         manually_hidden: true,
+        awaiting_price: true, // migration 0067
         needs_photo: true,
         category_id: categoryId,
         image_url: null,

@@ -302,6 +302,7 @@ for (const p of todo) {
     sku, barcode: null, name: r.final_name, description: null,
     price_cents: 0, stock_qty: 0, is_active: true,
     manually_hidden: true, // a visible $0 product is orderable
+    awaiting_price: true,  // hidden only for want of a price (migration 0067)
     needs_photo: true,     // scripts/upload-container-photos.ts clears this
     category_id: r.catalog_category_id, image_url: null, image_urls: [],
     case_length_in: num(r.case_length_in), case_width_in: num(r.case_width_in),

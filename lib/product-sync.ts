@@ -313,7 +313,9 @@ export async function syncToSupabase(
   const toHide = hideOnInsert.filter((s) => !failedSkus.has(s))
   for (let i = 0; i < toHide.length; i += CHUNK_SIZE) {
     const chunk = toHide.slice(i, i + CHUNK_SIZE)
-    const { error } = await db.from('products').update({ manually_hidden: true }).in('sku', chunk)
+    // awaiting_price marks why (migration 0067), so the cleanup tab's Ready to
+    // show offers it once it's priced.
+    const { error } = await db.from('products').update({ manually_hidden: true, awaiting_price: true }).in('sku', chunk)
     if (error) {
       // Loud, because the alternative is a $0 product on the storefront that
       // lib/order-submission.ts will accept onto a real order.

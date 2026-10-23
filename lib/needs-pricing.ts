@@ -65,9 +65,20 @@ export interface PricingRow {
   is_active: boolean
   manually_hidden: boolean | null
   price_cents: number | null
+  /** Hidden only for want of a price (migration 0067). */
+  awaiting_price?: boolean | null
 }
 
-export type UnhideBlocker = 'not_in_cohort' | 'inactive' | 'not_priced' | 'not_hidden'
+export type UnhideBlocker = 'hidden_by_choice' | 'inactive' | 'not_priced' | 'not_hidden'
+
+/**
+ * Hidden because it had no price, not by someone's choice: created by
+ * receiving (the cohort), or marked awaiting_price when the system hid it.
+ * Everything else hidden stays hidden.
+ */
+export function hiddenForPrice(row: PricingRow, cohort: Set<string>): boolean {
+  return row.awaiting_price === true || cohort.has(String(row.sku ?? '').trim().toUpperCase())
+}
 
 /**
  * Why a product can't be unhidden from this tab, or null when it can.
@@ -75,7 +86,7 @@ export type UnhideBlocker = 'not_in_cohort' | 'inactive' | 'not_priced' | 'not_h
  * same column conditions.
  */
 export function unhideBlocker(row: PricingRow, cohort: Set<string>): UnhideBlocker | null {
-  if (!cohort.has(String(row.sku ?? '').trim().toUpperCase())) return 'not_in_cohort'
+  if (!hiddenForPrice(row, cohort)) return 'hidden_by_choice'
   if (!row.is_active) return 'inactive'
   if (!((row.price_cents ?? 0) > 0)) return 'not_priced'
   if (row.manually_hidden !== true) return 'not_hidden'
@@ -83,13 +94,13 @@ export function unhideBlocker(row: PricingRow, cohort: Set<string>): UnhideBlock
 }
 
 export const UNHIDE_BLOCKER_TEXT: Record<UnhideBlocker, string> = {
-  not_in_cohort: 'not a product created by receiving, so it is hidden by choice',
+  hidden_by_choice: 'hidden by choice, not for want of a price',
   inactive: 'inactive in the catalog',
   not_priced: 'still has no price',
   not_hidden: 'already on the storefront',
 }
 
-/** "Ready to show": priced, still hidden, active, and in the receiving cohort. */
+/** "Ready to show": priced, still hidden, active, and hidden for want of a price. */
 export function isReadyToShow(row: PricingRow, cohort: Set<string>): boolean {
   return unhideBlocker(row, cohort) === null
 }
