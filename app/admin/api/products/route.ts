@@ -61,7 +61,13 @@ export async function PATCH(request: NextRequest) {
 
     // Build the update from only the fields actually provided.
     const updates: Record<string, unknown> = {}
-    if (typeof body.manually_hidden === 'boolean') updates.manually_hidden = body.manually_hidden
+    if (typeof body.manually_hidden === 'boolean') {
+      updates.manually_hidden = body.manually_hidden
+      // A hand-set visibility is a choice, so it is no longer "hidden only for
+      // want of a price" (migration 0067): a product hidden here must never
+      // come back under the cleanup tab's Ready to show.
+      updates.awaiting_price = false
+    }
     if (typeof body.name === 'string') {
       const name = body.name.trim()
       if (!name) return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
@@ -333,6 +339,10 @@ export async function POST(request: NextRequest) {
         .not('image_url', 'is', null)
         .neq('image_url', '')
         .eq('manually_hidden', true)
+        // Never a $0 product: lib/order-submission.ts checks only is_active and
+        // manually_hidden, so a visible $0 product is orderable for free. 121
+        // hidden products with a photo were at $0 on 2026-10-23.
+        .gt('price_cents', 0)
         .select('id')
       if (error) throw error
       return NextResponse.json({ ok: true, affected: data?.length ?? 0 })

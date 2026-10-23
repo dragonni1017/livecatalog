@@ -36,10 +36,11 @@ export interface UnpricedRow {
   qbPrices: number[]
   inQuickBooks: boolean
   /**
-   * Created by receiving. Rows outside the cohort won't show up under Ready
-   * to show once priced -- unhiding those is a call made in /admin/products.
+   * Hidden only for want of a price (lib/needs-pricing.ts hiddenForPrice), so
+   * it moves to Ready to show once priced. Otherwise someone hid it on
+   * purpose, and unhiding it is a call made in /admin/products.
    */
-  inCohort: boolean
+  listsWhenPriced: boolean
   /** Holiday the product sells for, if its name says so (lib/seasons.ts). */
   season: SeasonInfo | null
 }
@@ -166,8 +167,8 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Ready to show ({ready.length})</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Products created by receiving that now have a price but are still hidden. Products hidden for any
-              other reason never appear here and stay hidden.
+              Products that were hidden only because they had no price, now priced but still hidden. Products
+              hidden on purpose never appear here and stay hidden.
             </p>
           </div>
           {bulkReady.length > 0 && (
@@ -378,9 +379,9 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
                         <SeasonBadge season={r.season} />
                       </div>
                     )}
-                    {!r.inCohort && (
+                    {!r.listsWhenPriced && (
                       <div className="mt-1 text-xs text-amber-700">
-                        Not from receiving: once priced it stays hidden and won&apos;t appear under Ready to show.
+                        Hidden by choice: once priced it stays hidden and won&apos;t appear under Ready to show.
                       </div>
                     )}
                   </td>

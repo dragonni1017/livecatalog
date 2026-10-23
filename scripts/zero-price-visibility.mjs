@@ -111,7 +111,9 @@ let changed = 0
 for (const p of targets) {
   const { error } = await db
     .from('products')
-    .update({ manually_hidden: HIDE, updated_at: new Date().toISOString() })
+    // awaiting_price (migration 0067) records why, so the cleanup tab offers it
+    // again once priced; cleared when unhiding.
+    .update({ manually_hidden: HIDE, awaiting_price: HIDE, updated_at: new Date().toISOString() })
     .eq('id', p.id)
   if (error) console.error(`  ${p.sku}: ${error.message}`)
   else changed++

@@ -164,6 +164,7 @@ for (const sku of missing) {
     stock_qty: Number(e.warehouses?.[String(WAREHOUSE_ID)]?.totalInStock ?? 0),
     is_active: e.active === 1,
     manually_hidden: true,   // priced at 0 -- see header
+    awaiting_price: true,    // migration 0067
     needs_photo: true,       // scripts/upload-container-photos.mjs clears this
     category_id: categoryId,
     image_url: null,

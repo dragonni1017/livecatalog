@@ -15,7 +15,9 @@ export const dynamic = 'force-dynamic'
 // POST { skus: string[] } -> { unhidden: string[], skipped: { sku, reason }[] }
 //
 // The "Ready to show" half of /admin/cleanup?issue=pricing: puts priced
-// products from the receiving cohort on the storefront. Everything the
+// products that were hidden only for want of a price (receiving cohort or
+// awaiting_price, lib/needs-pricing.ts hiddenForPrice) on the storefront,
+// and clears awaiting_price as it goes. Everything the
 // screen showed is re-checked here, and the UPDATE itself is guarded by the
 // same column conditions (active, priced, still hidden), so a product the
 // sync re-zeroed or someone re-hid in the meantime is skipped, not shown.
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
     const cohort = await fetchReceivingCohort(db)
     const { data, error } = await db
       .from('products')
-      .select('id, sku, is_active, manually_hidden, price_cents')
+      .select('id, sku, is_active, manually_hidden, price_cents, awaiting_price')
       .in('sku', skus)
     if (error) throw new Error(`Product lookup failed: ${error.message}`)
 
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
 
       const { data: written, error: updateError } = await db
         .from('products')
-        .update({ manually_hidden: false, updated_at: new Date().toISOString() })
+        .update({ manually_hidden: false, awaiting_price: false, updated_at: new Date().toISOString() })
         .eq('id', row.id)
         .eq('is_active', true)
         .eq('manually_hidden', true)
