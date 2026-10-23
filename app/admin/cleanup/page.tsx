@@ -15,6 +15,7 @@ import CleanupPricing, { type ReadyRow, type UnpricedRow } from '@/components/ad
 import { fetchReceivingCohort, isReadyToShow, needsErplyPrice } from '@/lib/needs-pricing'
 import { fetchQbItemsBySku } from '@/lib/qb-item-directory'
 import { categoryMedians, describeCasePrice, likelyCasePrice } from '@/lib/price-check'
+import { compareBySeason, seasonOf } from '@/lib/seasons'
 
 export const dynamic = 'force-dynamic'
 
@@ -182,12 +183,18 @@ export default async function AdminCleanupPage({
 
   // Needs pricing: two lists, unpaginated (~100 rows between them).
   const readyAll = activeRows.filter((r) => r.sku && isReadyToShow(r, cohort))
+  // Seasonal products whose holiday is closest come first (lib/seasons.ts):
+  // they lose their value once it passes. Then most recently arrived first,
+  // since those are the ones on the floor now.
+  const now = new Date()
+  const seasonById = new Map(activeRows.map((r) => [r.id, seasonOf(r.name, now)]))
   const unpricedAll = activeRows
     .filter((r) => r.sku && needsErplyPrice(r))
-    // Most recently arrived first: those are the ones on the floor now.
     .sort(
       (a, b) =>
-        (b.arrived_at ?? '').localeCompare(a.arrived_at ?? '') || (a.sku ?? '').localeCompare(b.sku ?? ''),
+        compareBySeason(seasonById.get(a.id) ?? null, seasonById.get(b.id) ?? null) ||
+        (b.arrived_at ?? '').localeCompare(a.arrived_at ?? '') ||
+        (a.sku ?? '').localeCompare(b.sku ?? ''),
     )
   counts.pricing = readyAll.length + unpricedAll.length
 
@@ -225,6 +232,7 @@ export default async function AdminCleanupPage({
         qbPrices: prices,
         inQuickBooks: items.length > 0,
         inCohort: cohort.has((r.sku as string).trim().toUpperCase()),
+        season: seasonById.get(r.id) ?? null,
       }
     })
   }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { MAX_SKUS_PER_REQUEST } from '@/lib/needs-pricing'
+import { isSeasonSoon, type SeasonInfo } from '@/lib/seasons'
 
 // "Needs pricing" tab of /admin/cleanup. Prices are never set here (Dragon,
 // 2026-10-02): they are entered in Erply by hand and the Erply sync carries
@@ -39,6 +40,8 @@ export interface UnpricedRow {
    * to show once priced -- unhiding those is a call made in /admin/products.
    */
   inCohort: boolean
+  /** Holiday the product sells for, if its name says so (lib/seasons.ts). */
+  season: SeasonInfo | null
 }
 
 interface Props {
@@ -60,6 +63,20 @@ interface PullResult {
 }
 
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+function SeasonBadge({ season }: { season: SeasonInfo }) {
+  const [text, style] = season.over
+    ? [`${season.label} is over`, 'bg-gray-100 text-gray-500']
+    : season.daysLeft === 0
+      ? [`${season.label} is today`, 'bg-red-100 text-red-800']
+      : isSeasonSoon(season)
+        ? [
+            `${season.label} in ${season.daysLeft} day${season.daysLeft === 1 ? '' : 's'}`,
+            season.daysLeft <= 30 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800',
+          ]
+        : [season.label, 'bg-gray-100 text-gray-600']
+  return <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${style}`}>{text}</span>
+}
 
 function Thumb({ src }: { src: string | null }) {
   if (!src) return <span className="text-xs text-gray-400">No photo</span>
@@ -104,6 +121,7 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
   // once someone has looked at it.
   const bulkReady = ready.filter((r) => !r.casePrice)
   const flaggedCount = ready.length - bulkReady.length
+  const soonCount = unpriced.filter((r) => isSeasonSoon(r.season)).length
 
   function unhideAll() {
     const skus = bulkReady.slice(0, MAX_SKUS_PER_REQUEST).map((r) => r.sku)
@@ -252,6 +270,12 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
               catalog shows the Erply price rounded to the nearest quarter (never .75). Pulling never unhides
               anything.
             </p>
+            {soonCount > 0 && (
+              <p className="mt-1 max-w-3xl text-sm text-gray-500">
+                Seasonal products with the closest holiday are listed first ({soonCount}): they stop selling once it
+                passes. Then newest arrivals. A season that just ended is listed last.
+              </p>
+            )}
           </div>
           {unpriced.length > 0 && (
             <button
@@ -349,6 +373,11 @@ export default function CleanupPricing({ ready, unpriced }: Props) {
                   </td>
                   <td className="px-4 py-3 text-gray-900">
                     {r.name}
+                    {r.season && (
+                      <div>
+                        <SeasonBadge season={r.season} />
+                      </div>
+                    )}
                     {!r.inCohort && (
                       <div className="mt-1 text-xs text-amber-700">
                         Not from receiving: once priced it stays hidden and won&apos;t appear under Ready to show.
