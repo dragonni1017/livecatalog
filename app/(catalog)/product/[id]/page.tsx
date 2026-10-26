@@ -6,6 +6,7 @@ import { supabase, getAdminClient } from '@/lib/supabase'
 import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
+import { meaningfulDescription } from '@/lib/product-description'
 import { getDisplaySettings } from '@/lib/display-settings'
 import { getActivePriceTiers } from '@/lib/rep-tier'
 import StockBadge from '@/components/catalog/StockBadge'
@@ -51,7 +52,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   const price = formatPrice(product.price_cents)
   const displayName = stripCsSuffix(product.name)
-  const description = (stripCsSuffix(product.description) || `${displayName} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
+  const description = (stripCsSuffix(meaningfulDescription(product.description, product.name)) || `${displayName} — ${price}. Available from L & Y USA. Request a quote.`).slice(0, 200)
   const img = resolveCdnImage(product.image_url, 1200)
 
   return {
@@ -248,7 +249,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             {(() => {
               const packSpec = extractPackSpec(product.name)
               const showPackInfo = settings.show_pack_info_detail && !!packSpec
-              if (!showPackInfo && !product.description) return null
+              const description = stripCsSuffix(meaningfulDescription(product.description, product.name))
+              if (!showPackInfo && !description) return null
               return (
                 <div>
                   {showPackInfo && (
@@ -267,8 +269,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
                       )}
                     </>
                   )}
-                  {product.description && (
-                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{stripCsSuffix(product.description)}</p>
+                  {description && (
+                    <p className="mt-0.5 text-sm leading-relaxed text-gray-600">{description}</p>
                   )}
                 </div>
               )

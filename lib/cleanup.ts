@@ -5,6 +5,7 @@
  * script classify a row identically.
  */
 
+import { isNameCopyDescription } from './product-description.ts'
 import { auditProductName, parseProductName, type NameIssue, type PackSpec } from './product-naming.ts'
 
 export type CleanupIssue = 'photo' | 'name' | 'category' | 'description'
@@ -31,14 +32,15 @@ export type CleanupFlags = Record<CleanupIssue, boolean>
  *                enough to place the product: 666 live rows had a join row
  *                but a null category_id on 2026-10-01, and they do show in
  *                their category.
- * - description: blank after trimming
+ * - description: blank after trimming, or only a copy of the name
+ *                (lib/product-description.ts; the product page hides those)
  */
 export function classifyProduct(row: CleanupClassifiable): CleanupFlags {
   return {
     photo: !(row.image_url ?? '').trim() || row.needs_photo === true,
     name: auditProductName(row.name).issues.length > 0,
     category: !row.category_id && !row.has_category_link,
-    description: !(row.description ?? '').trim(),
+    description: !(row.description ?? '').trim() || isNameCopyDescription(row.description, row.name),
   }
 }
 
