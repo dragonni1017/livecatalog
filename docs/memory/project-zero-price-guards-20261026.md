@@ -40,5 +40,9 @@ a product was a way to sell one free.
 - Rep custom-priced lines are sent to reprice so they can be flagged, but
   the client throws away their returned price. A hand price is never
   overwritten.
+- The first nightly sync with step 4c is 2026-10-27 at 1 AM Pacific. Expect
+  `zeroPriceHidden` empty and no "could NOT be hidden" errors. If it is
+  non-empty, those were live products whose Erply price had been cleared;
+  check why.
 - On 2026-10-26, 0 products were visible at $0, so none of this changed
   anything live when it shipped.

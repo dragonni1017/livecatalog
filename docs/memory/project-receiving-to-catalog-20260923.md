@@ -197,6 +197,11 @@ into `products.stock_qty`. Fixed in `lib/erply.ts` (`erplyQty`). Past
 shipments stay without per-line before/after; Erply's registration documents
 are the record for those.
 
+**Still unproven live (2026-10-26).** No shipment has been applied since the
+fix, so `erply_stock_before`/`erply_stock_after`/`applied_at` have never been
+written on a real line. After the next apply on /admin/receiving, check that
+shipment's `shipment_lines`: every applied line should have all three set.
+
 The string is also the signal for "counted": Erply sends a plain number 0
 when a product has no stock record and a string (`"0.000000"` included) when
 it has one. The stock sync's "skip uncounted" rule rested on that by accident
