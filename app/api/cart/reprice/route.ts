@@ -101,7 +101,11 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    return NextResponse.json(promo ? { prices, promo } : { prices })
+    // Asked about but not priced: inactive, hidden or $0 (buildLineItems drops
+    // them, and the real order will too). The cart marks these lines rather
+    // than letting them vanish from the order unannounced.
+    const unavailable = [...new Set(items.map((i) => i.productId))].filter((id) => !(id in prices))
+    return NextResponse.json(promo ? { prices, unavailable, promo } : { prices, unavailable })
   } catch (err) {
     console.error('[cart/reprice] error:', err)
     return NextResponse.json({ error: 'Reprice failed' }, { status: 500 })
