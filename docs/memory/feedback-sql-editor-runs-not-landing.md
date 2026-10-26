@@ -39,6 +39,20 @@ isn't done stays broken.
   same SQL.
 - Supabase's log stream lagged ~20 min on 2026-10-26, so "no write in the
   logs" is not proof. The table is.
+- **Pasted free text gets corrupted (2026-10-26).** Three versions of a
+  19-row UPDATE carrying product descriptions with inch marks (`12"`) all
+  failed in the editor, yet each one parsed and matched in a read-only
+  `execute_sql` test:
+  - with `$d$` quoting: syntax error at `v`;
+  - with plain quotes: syntax error at `prod`, meaning a quote was lost;
+  - as base64: "invalid base64 end sequence".
+
+  Once, "returned 19 rows" was reported while nothing had landed. For text
+  edits or many-row edits that an `/admin/api` route already supports, use
+  the signed-in admin tab instead: a `fetch` loop to the route, such as
+  `PATCH /admin/api/products {id, description}` (the Cleanup editor's own
+  save), worked first time, followed by a read-back. Keep editor SQL for short
+  statements without free text, such as migrations.
 - Related: a write through the admin site can also silently not happen; see
   [[project-admin-login-wholesale-tier-20261026]] (confirm popup) and
   [[feedback-browser-state-change-blocked]].
