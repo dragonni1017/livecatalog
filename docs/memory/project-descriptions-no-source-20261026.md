@@ -31,7 +31,7 @@ it. Anything more (materials, uses) would be invented, and buyers order on
 it. Real copy (materials, uses) has to come from someone who knows the
 products.
 
-**Photo pilot (2026-10-26, NOT applied).** 20 visible products, one per
+**Photo pilot (2026-10-26, applied: 19 live).** 20 visible products, one per
 category, described only from what the photo shows, into
 `data/description-pilot.csv` (local; columns sku, id, current_name,
 proposed_description, from_photo, check). 19 were written; D701018's photo
@@ -45,7 +45,17 @@ was too blurry.
   audit. Nobody had checked these when the pilot ran: F287657 (photo 100
   pcs/pk, name 10/pk), F286756 (64 vs cs.60), F286863 (bow 10" vs name 10'),
   D701083 (3" vs 3.2inch).
-- Applying: once the user approves rows, use one UPDATE in the SQL editor
-  and read it back. The sync never overwrites a description, so approved text
-  sticks. Next, if wanted: labelled photos first, in batches, always into a
-  review file first.
+- **Applied 2026-10-26.** All 19 were approved and saved through the admin
+  site: `PATCH /admin/api/products` from the signed-in Chrome tab. The SQL
+  editor route failed three times on paste
+  ([[feedback-sql-editor-runs-not-landing]]). The read-back found all 19
+  with 2,389 characters matching, and the live prod-00608 page shows its
+  description. One wording change from the review file: F286819's text no
+  longer mentions "the photo". These went live with their checks still open:
+  F286501 assumed black (-BLK photo), and C266032 (candy) had no
+  food-wording review. The 4 name conflicts above are still unfixed, so
+  F286863's description says the bow is 10" while its name says 10'. D701018
+  needs a new photo.
+- The sync never overwrites a description, so approved text sticks. Next, if
+  wanted: labelled photos first, in batches, always into a review file first,
+  then apply through the admin site.
