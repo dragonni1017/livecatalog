@@ -34,8 +34,19 @@ describe('ready to show', () => {
     expect(isReadyToShow({ ...row, sku: 'k229582' }, cohort)).toBe(true)
   })
 
-  it('never offers a product hidden by choice (outside the cohort)', () => {
-    expect(unhideBlocker({ ...row, sku: 'F286606' }, cohort)).toBe('not_in_cohort')
+  it('never offers a product hidden by choice (outside the cohort, not awaiting a price)', () => {
+    expect(unhideBlocker({ ...row, sku: 'F286606' }, cohort)).toBe('hidden_by_choice')
+    expect(unhideBlocker({ ...row, sku: 'F286606', awaiting_price: false }, cohort)).toBe('hidden_by_choice')
+    expect(unhideBlocker({ ...row, sku: 'F286606', awaiting_price: null }, cohort)).toBe('hidden_by_choice')
+  })
+
+  // The 60 QuickBooks-created products of 2026-10-06 (tumblers, keychains):
+  // hidden by the zero-price guard but never in a received container.
+  it('offers a product outside the cohort that was hidden for want of a price', () => {
+    expect(isReadyToShow({ ...row, sku: 'T642206', awaiting_price: true }, cohort)).toBe(true)
+    // The flag alone never shows an unpriced or deliberately visible row.
+    expect(unhideBlocker({ ...row, sku: 'T642206', awaiting_price: true, price_cents: 0 }, cohort)).toBe('not_priced')
+    expect(unhideBlocker({ ...row, sku: 'T642206', awaiting_price: true, manually_hidden: false }, cohort)).toBe('not_hidden')
   })
 
   it('refuses unpriced, inactive or already-visible rows', () => {

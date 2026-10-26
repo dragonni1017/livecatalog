@@ -12,7 +12,7 @@ import CleanupPhotoDrop from '@/components/admin/CleanupPhotoDrop'
 import CleanupRowEditor from '@/components/admin/CleanupRowEditor'
 import CleanupNameFix from '@/components/admin/CleanupNameFix'
 import CleanupPricing, { type ReadyRow, type UnpricedRow } from '@/components/admin/CleanupPricing'
-import { fetchReceivingCohort, isReadyToShow, needsErplyPrice } from '@/lib/needs-pricing'
+import { fetchReceivingCohort, hiddenForPrice, isReadyToShow, needsErplyPrice } from '@/lib/needs-pricing'
 import { fetchQbItemsBySku } from '@/lib/qb-item-directory'
 import { categoryMedians, describeCasePrice, likelyCasePrice } from '@/lib/price-check'
 import { compareBySeason, seasonOf } from '@/lib/seasons'
@@ -62,6 +62,7 @@ interface CleanupDbRow {
   needs_photo: boolean | null
   category_id: string | null
   manually_hidden: boolean
+  awaiting_price: boolean
   is_active: boolean
   stock_qty: number | null
   price_cents: number | null
@@ -70,7 +71,7 @@ interface CleanupDbRow {
 }
 
 const COLUMNS =
-  'id, sku, name, description, image_url, needs_photo, category_id, manually_hidden, is_active, stock_qty, price_cents, case_pieces, arrived_at'
+  'id, sku, name, description, image_url, needs_photo, category_id, manually_hidden, awaiting_price, is_active, stock_qty, price_cents, case_pieces, arrived_at'
 
 // Every product, not one page's worth: the counts and the issue filters are
 // computed in JS (auditProductName can't run in PostgREST), so the whole set
@@ -231,7 +232,7 @@ export default async function AdminCleanupPage({
         arrivedAt: r.arrived_at,
         qbPrices: prices,
         inQuickBooks: items.length > 0,
-        inCohort: cohort.has((r.sku as string).trim().toUpperCase()),
+        listsWhenPriced: hiddenForPrice(r, cohort),
         season: seasonById.get(r.id) ?? null,
       }
     })
