@@ -174,13 +174,18 @@ export default function CartPage() {
     itemsRef.current = items
   }, [items])
 
+  // Lines the server can no longer sell (deactivated, hidden, or no price).
+  // The order drops them silently, so the cart says so instead.
+  const [unavailable, setUnavailable] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     function reprice() {
-      // Rep custom-priced lines are excluded from the request entirely --
-      // the server only ever returns prices for productIds it was asked
-      // about, so this keeps updatePrices() from touching them at all.
-      const current = itemsRef.current.filter((i) => !i.isCustomPrice)
+      const current = itemsRef.current
       if (current.length === 0) return
+      // Rep custom-priced lines are asked about too, so an unavailable one is
+      // flagged, but their returned price is discarded below: a hand price
+      // is never overwritten.
+      const custom = new Set(current.filter((i) => i.isCustomPrice).map((i) => i.productId))
       fetch('/api/cart/reprice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,7 +193,13 @@ export default function CartPage() {
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.prices) updatePrices(data.prices)
+          if (data.prices) {
+            const prices = Object.fromEntries(
+              Object.entries(data.prices as Record<string, number>).filter(([id]) => !custom.has(id)),
+            )
+            updatePrices(prices)
+          }
+          if (Array.isArray(data.unavailable)) setUnavailable(new Set(data.unavailable as string[]))
         })
         .catch(() => {})
     }
@@ -334,7 +345,15 @@ export default function CartPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- promoKey captures the items that matter
   }, [promoCode, promoKey, hydrated])
   const promoDiscount = promo?.applied ? promo.discountCents : 0
-  const estimatedTotal = subtotalCents - promoDiscount
+  // Unavailable lines won't be on the order, so they count toward nothing:
+  // not the subtotal, the promo, the tax estimate or the order minimum.
+  const unavailableCents = items.reduce(
+    (sum, i) => (unavailable.has(i.productId) ? sum + i.priceCents * i.qty : sum),
+    0,
+  )
+  const orderSubtotal = subtotalCents - unavailableCents
+  const unavailableItems = items.filter((i) => unavailable.has(i.productId))
+  const estimatedTotal = orderSubtotal - promoDiscount
 
   // ── Estimated sales tax (lib/sales-tax.ts) ─────────────────────────────────
   // Shown once a ship-to state is picked. Display only: the order route
@@ -543,9 +562,11 @@ export default function CartPage() {
         {/* Line items */}
         <div className="lg:col-span-2">
           <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-            {items.map((item) => (
-              <li key={item.productId} className="flex items-center gap-4 p-4">
-                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100">
+            {items.map((item) => {
+              const gone = unavailable.has(item.productId)
+              return (
+              <li key={item.productId} className={`flex items-center gap-4 p-4 ${gone ? 'bg-gray-50' : ''}`}>
+                <div className={`h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 ${gone ? 'opacity-40' : ''}`}>
                   {item.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={resolveCdnImage(item.imageUrl, 150) ?? undefined} alt={item.name} className="h-full w-full object-contain" />
@@ -554,6 +575,9 @@ export default function CartPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
                   <p className="font-mono text-xs text-gray-400">{item.sku}</p>
+                  {gone ? (
+                    <p className="text-sm font-medium text-red-700">No longer available. It won&apos;t be included in your request.</p>
+                  ) : (
                   <p className="text-sm text-gray-700">
                     {formatPrice(item.priceCents)} each
                     {item.isCustomPrice && (
@@ -562,6 +586,7 @@ export default function CartPage() {
                       </span>
                     )}
                   </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -582,7 +607,7 @@ export default function CartPage() {
                     +
                   </button>
                 </div>
-                <div className="w-20 text-right text-sm font-bold text-gray-900">
+                <div className={`w-20 text-right text-sm font-bold ${gone ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {formatPrice(item.priceCents * item.qty)}
                 </div>
                 <button
@@ -596,8 +621,25 @@ export default function CartPage() {
                   </svg>
                 </button>
               </li>
-            ))}
+              )
+            })}
           </ul>
+          {unavailableItems.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              <span>
+                {unavailableItems.length === 1
+                  ? '1 item is no longer available and won’t be included.'
+                  : `${unavailableItems.length} items are no longer available and won’t be included.`}
+              </span>
+              <button
+                type="button"
+                onClick={() => unavailableItems.forEach((i) => removeItem(i.productId))}
+                className="font-semibold underline hover:text-red-800"
+              >
+                Remove {unavailableItems.length === 1 ? 'it' : 'them'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Checkout form + summary */}
@@ -605,7 +647,7 @@ export default function CartPage() {
           <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-600">Subtotal</span>
-              <span className={promoDiscount || showTax ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(subtotalCents)}</span>
+              <span className={promoDiscount || showTax ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(orderSubtotal)}</span>
             </div>
             {promoDiscount > 0 && promo && (
               <div className="mb-1 flex items-center justify-between text-sm text-green-700">
