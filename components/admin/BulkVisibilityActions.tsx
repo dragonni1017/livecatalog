@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
-type Action = 'hide_imageless' | 'unhide_with_image'
+// There is deliberately no bulk "re-enable products with an image": hidden
+// is not a reason, and about 1,200 priced products with photos are hidden on
+// purpose. Unhiding is per product (/admin/products) or, for products hidden
+// only for want of a price, Ready to show in /admin/cleanup?issue=pricing.
+type Action = 'hide_imageless'
 
 interface Note {
   action: Action
@@ -49,20 +53,11 @@ export default function BulkVisibilityActions() {
         >
           {pending === 'hide_imageless' ? 'Hiding…' : 'Hide all products without an image'}
         </button>
-        <button
-          onClick={() => run('unhide_with_image')}
-          disabled={pending !== null}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {pending === 'unhide_with_image' ? 'Re-enabling…' : 'Re-enable products that now have an image'}
-        </button>
       </div>
 
       {note && (
         <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-700">
-          ✓ {note.action === 'hide_imageless'
-            ? `Hid ${note.affected} product${note.affected !== 1 ? 's' : ''} without an image.`
-            : `Re-enabled ${note.affected} product${note.affected !== 1 ? 's' : ''} that now have an image.`}
+          ✓ Hid {note.affected} product{note.affected !== 1 ? 's' : ''} without an image.
         </div>
       )}
 

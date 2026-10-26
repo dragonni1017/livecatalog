@@ -592,7 +592,8 @@ export default async function AdminDashboard() {
           <div className="rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm">
             <h2 className="text-base font-semibold text-gray-900">Product Visibility</h2>
             <p className="text-sm text-gray-500 mt-0.5 mb-4">
-              Bulk hide or re-enable products based on whether they have an image
+              Hide every product that has no image. To show products again, unhide them one at a time in
+              Products, or use Ready to show under Cleanup for products hidden only for want of a price.
             </p>
             <BulkVisibilityActions />
           </div>
