@@ -222,6 +222,12 @@ export interface ImportResult {
   /** SKUs this run deactivated (not in the Erply feed). */
   deactivatedSkus?: string[]
   /**
+   * Existing products that were visible and arrived at price 0, so this run
+   * hid them (and marked them awaiting_price): a visible $0 product would be
+   * orderable for free.
+   */
+  zeroPriceHidden?: string[]
+  /**
    * /admin/import only: SKUs whose Stock Qty was ignored because Erply
    * manages their stock (lib/import-stock.ts), and the note saying so.
    */
