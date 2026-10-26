@@ -6,6 +6,7 @@ import {
   implausibleCaseMeasurement,
   parseMeasurementInput,
 } from '@/lib/measurements'
+import { touchesZeroPriceRule, zeroPriceBlock, ZERO_PRICE_BLOCK_TEXT } from '@/lib/visibility-guard'
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -242,9 +243,36 @@ export async function PATCH(request: NextRequest) {
     const { getAdminClient } = await import('@/lib/supabase')
     const db = getAdminClient()
 
+    // Never leave a product visible at $0 (lib/visibility-guard.ts).
+    const guarded = touchesZeroPriceRule(updates)
+    if (guarded) {
+      const { data: current, error: currentError } = await db
+        .from('products')
+        .select('manually_hidden, price_cents')
+        .eq('id', id)
+        .maybeSingle()
+      if (currentError) throw currentError
+      if (!current) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      const block = zeroPriceBlock(current, updates)
+      if (block) return NextResponse.json({ error: ZERO_PRICE_BLOCK_TEXT[block] }, { status: 400 })
+    }
+
     updates.updated_at = new Date().toISOString()
-    const { error } = await db.from('products').update(updates).eq('id', id)
+    let write = db.from('products').update(updates).eq('id', id)
+    // The check above read the row; these filters make the UPDATE hold to it
+    // if the sync re-zeroed or someone unhid the product in between.
+    if (guarded && !(typeof updates.price_cents === 'number' && updates.price_cents > 0)) {
+      write = updates.manually_hidden === false ? write.gt('price_cents', 0) : write.eq('manually_hidden', true)
+    }
+    const { data: written, error } = await write.select('id')
     if (error) throw error
+    if (!written || written.length === 0) {
+      if (!guarded) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'The product changed while saving (price or visibility). Reload and try again.' },
+        { status: 409 },
+      )
+    }
 
     if (newCategoryIds !== null) {
       const { error: deleteError } = await db.from('product_categories').delete().eq('product_id', id)
