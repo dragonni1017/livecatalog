@@ -17,9 +17,8 @@
 // Every product it creates is HIDDEN (manually_hidden = true) because it is
 // priced at 0: Erply cannot accept a price over the API on this account
 // (proven 2026-09-16), so a received product has no price until someone sets
-// one in Erply by hand, and lib/order-submission.ts checks only
-// is_active/manually_hidden -- a visible $0.00 product can go on a real
-// order. Unhide with scripts/zero-price-visibility.mjs --unhide once a real
+// one in Erply by hand, and a visible $0.00 product shows at $0 (it could go
+// on a real order until lib/order-submission.ts drops $0 lines since 2026-10-26). Unhide with scripts/zero-price-visibility.mjs --unhide once a real
 // sync has brought the price across.
 //
 // Refuses to touch any SKU that already has a price in Erply: that one

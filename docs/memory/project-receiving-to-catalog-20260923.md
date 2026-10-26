@@ -34,7 +34,8 @@ Four things worth keeping:
    someone prices it in Erply by hand. `app/(catalog)` shows any row with
    `is_active && !manually_hidden`, and `lib/order-submission.ts` re-checks
    only those same two flags -- so a synced-in $0 product is a free product
-   a customer can put on a real order. Eight had been live that way
+   a customer can put on a real order. (No longer true since 2026-10-26:
+   order submission drops $0 lines, see [[project-zero-price-guards-20261026]].) Eight had been live that way
    (F287699 since 08-19, five K2295xx + F288020 since 09-01, K229581 from
    today); they are hidden now. `lib/product-sync.ts` now hides any product
    it INSERTS at price <= 0, insert-only so it can never fight a deliberate

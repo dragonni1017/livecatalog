@@ -11,8 +11,9 @@
 // sync maps that straight through to price_cents = 0.
 //
 // A $0.00 product is not merely ugly: app/(catalog) shows any row with
-// is_active && !manually_hidden, and lib/order-submission.ts re-checks only
-// those same two flags, so a customer can put a free product on a real order.
+// is_active && !manually_hidden, and until 2026-10-26 lib/order-submission.ts
+// re-checked only those two flags, so a customer could order it free (it now
+// drops $0 lines).
 //
 //   --hide    every visible product priced at 0 becomes manually_hidden.
 //             Catches rows that pre-date the insert-time guard in

@@ -24,9 +24,9 @@ export const dynamic = 'force-dynamic'
 // Cohort membership lives in another table and can't be part of the UPDATE's
 // filter; it is re-read immediately before.
 //
-// Only ever sets manually_hidden=false. A $0 product must never go live --
-// a visible $0 product is orderable for free (lib/order-submission.ts checks
-// only is_active and manually_hidden).
+// Only ever sets manually_hidden=false. A $0 product must never go live: it
+// would show at $0, and until 2026-10-26 it was orderable for free (now
+// lib/order-submission.ts drops $0 lines as a second guard).
 
 interface ProductRow extends PricingRow {
   id: string

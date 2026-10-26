@@ -118,8 +118,8 @@ export async function POST(request: NextRequest) {
         price_cents: 0,
         stock_qty: stockIndex.get(sku.toUpperCase())?.stockQty ?? 0,
         is_active: e.isActive,
-        // Priced at 0, so hidden: lib/order-submission.ts checks only
-        // is_active/manually_hidden, and a visible $0 product is orderable.
+        // Priced at 0, so hidden: a visible $0 product shows at $0 (and
+        // lib/order-submission.ts drops $0 lines since 2026-10-26).
         manually_hidden: true,
         awaiting_price: true, // migration 0067
         needs_photo: true,

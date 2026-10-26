@@ -245,8 +245,9 @@ export async function syncToSupabase(
     // A product arriving with no price must not go live: Erply cannot accept
     // a price over the API on this account (proven 2026-09-16), so everything
     // created from a received container lands at 0 and is priced by hand
-    // afterwards -- and lib/order-submission.ts checks only
-    // is_active/manually_hidden, so a visible $0 row is orderable.
+    // afterwards. A visible $0 row was orderable for free until
+    // lib/order-submission.ts began dropping $0 lines (2026-10-26); hiding
+    // stays the first guard.
     //
     // Collected here and hidden AFTER the upsert rather than set on the row.
     // Putting manually_hidden on only some rows of a batch breaks the whole

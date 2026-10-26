@@ -1,5 +1,5 @@
-// A visible $0 product is orderable for free: lib/order-submission.ts checks
-// only is_active and manually_hidden. Every single-product edit in
+// A visible $0 product shows at $0 on the storefront (and was orderable for
+// free until lib/order-submission.ts drops $0 lines since 2026-10-26). Every single-product edit in
 // PATCH /admin/api/products passes through this before it writes.
 //
 // Judged on the row as it will be after the edit, so both ways in are caught:
