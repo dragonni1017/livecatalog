@@ -45,10 +45,19 @@ export async function buildLineItems(
   for (const item of items) {
     const p = byId.get(item.productId)
     if (!p || !p.is_active || p.manually_hidden) continue
+    // Never sell at $0. Every unhide path refuses an unpriced product and the
+    // sync hides one whose price is cleared, but this is where a free line
+    // would actually land on an order, so it is checked here too, on the
+    // effective price (a volume tier can be 0 as well as the base). Dropped
+    // like a hidden product: the cart's reprice and the order both omit it.
+    const unitPrice = getEffectivePrice(p.price_cents, item.qty, p.volume_tiers as VolumeTier[] | null)
+    if (!(p.price_cents > 0) || !(unitPrice > 0)) {
+      console.warn(`[order-submission] dropped ${p.sku}: no price (base ${p.price_cents}, effective ${unitPrice})`)
+      continue
+    }
     if (p.stock_qty < item.qty) {
       outOfStock.push(`${p.sku} (${p.name}) — ${p.stock_qty} in stock, ${item.qty} requested`)
     }
-    const unitPrice = getEffectivePrice(p.price_cents, item.qty, p.volume_tiers as VolumeTier[] | null)
     lineItems.push({
       product_id: p.id, sku: p.sku, name: p.name,
       unit_price_cents: unitPrice, qty: item.qty,

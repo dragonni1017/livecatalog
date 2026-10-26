@@ -16,7 +16,7 @@ const CATEGORIES = [
   { id: 'cat-064', name: 'Seasonal & Holiday', slug: 'seasonal-holiday' },
 ]
 
-function fakeDb(existingSkus: string[]) {
+function fakeDb(existingSkus: string[], visibleSkus: string[] = []) {
   const categoryWrites: string[] = []
   const upserts: Record<string, unknown>[][] = []
   const updates: Record<string, unknown>[] = []
@@ -35,6 +35,13 @@ function fakeDb(existingSkus: string[]) {
       }
       if (table === 'products' && has('update')) {
         updates.push(args('update')[0] as Record<string, unknown>)
+        // The zero-price hide (step 4c) is filtered to visible rows and reads
+        // back which SKUs it hid.
+        const onlyVisible = calls.some(([m, a]) => m === 'eq' && a[0] === 'manually_hidden' && a[1] === false)
+        if (onlyVisible) {
+          const skus = (args('in')[1] as string[]) ?? []
+          return { data: skus.filter((s) => visibleSkus.includes(s)).map((sku) => ({ sku })), error: null }
+        }
         return { data: [], error: null }
       }
       if (table === 'products' && has('range')) {
@@ -218,5 +225,23 @@ describe('syncToSupabase deactivation guard', () => {
     expect(updates.some((u) => u.is_active === false)).toBe(false)
     expect(result.deactivated).toBe(0)
     expect(result.errors.map((e) => e.message)).toEqual([expect.stringMatching(/^refused to deactivate 299 of 300/)])
+  })
+})
+
+describe('syncToSupabase zero-price hide', () => {
+  const zero = (sku: string): SyncProduct => ({ ...product(sku), price_cents: 0 })
+
+  it('hides an existing visible product whose price is now 0, and marks it awaiting a price', async () => {
+    const { db, updates } = fakeDb(['LIVE', 'HIDDEN', 'PRICED'], ['LIVE', 'PRICED'])
+    const result = await syncToSupabase([zero('LIVE'), zero('HIDDEN'), product('PRICED')], db, { deactivateMissing: false })
+    expect(result.zeroPriceHidden).toEqual(['LIVE'])
+    expect(updates).toContainEqual({ manually_hidden: true, awaiting_price: true })
+  })
+
+  it('hides nothing when every product has a price', async () => {
+    const { db, updates } = fakeDb(['A', 'B'], ['A', 'B'])
+    const result = await syncToSupabase([product('A'), product('B')], db, { deactivateMissing: false })
+    expect(result.zeroPriceHidden).toEqual([])
+    expect(updates.some((u) => u.manually_hidden === true)).toBe(false)
   })
 })

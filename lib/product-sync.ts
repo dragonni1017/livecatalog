@@ -219,6 +219,8 @@ export async function syncToSupabase(
   const incomingSkus: string[] = []
   // SKUs inserted at price 0 -- hidden in a separate pass, see below.
   const hideOnInsert: string[] = []
+  // Existing SKUs arriving at price 0 -- hidden only if visible, see 4c.
+  const hideIfVisible: string[] = []
   // New rows and existing rows are upserted as SEPARATE batches, because the
   // insert-only fields (category_id, description) are present on one and
   // absent from the other. supabase-js sends a bulk upsert's column list as
@@ -254,6 +256,9 @@ export async function syncToSupabase(
     // it failed 500 rows on the 2026-09-24 sync, the first one where a new
     // $0 product appeared after the guard shipped.
     if (isNewProduct && p.price_cents <= 0) hideOnInsert.push(p.sku)
+    // An EXISTING product re-zeroed upstream (Erply price cleared, or a $0 or
+    // blank Price in an Excel sheet) is hidden too if it is visible. See 4c.
+    if (!isNewProduct && p.price_cents <= 0) hideIfVisible.push(p.sku)
     // Same insert-only rule as category: when 'description' is skipped, an
     // existing product's description is never touched, but a new one still
     // gets Erply's.
@@ -321,6 +326,32 @@ export async function syncToSupabase(
       // lib/order-submission.ts will accept onto a real order.
       chunk.forEach((sku) => errors.push({ row: 0, sku, message: `inserted but could NOT be hidden: ${error.message}` }))
     }
+  }
+
+  // 4c. Hide an existing product that was visible and has just been written
+  // at price 0. Before this, only NEW $0 products were hidden, so a live
+  // product whose Erply price was cleared stayed on the storefront at $0,
+  // orderable for free. Filtered to manually_hidden=false so a product
+  // someone hid on purpose is not marked awaiting_price: Ready to show must
+  // never offer it.
+  const zeroPriceHidden: string[] = []
+  const toHideIfVisible = hideIfVisible.filter((s) => !failedSkus.has(s))
+  for (let i = 0; i < toHideIfVisible.length; i += CHUNK_SIZE) {
+    const chunk = toHideIfVisible.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await db
+      .from('products')
+      .update({ manually_hidden: true, awaiting_price: true })
+      .in('sku', chunk)
+      .eq('manually_hidden', false)
+      .select('sku')
+    if (error) {
+      chunk.forEach((sku) => errors.push({ row: 0, sku, message: `price is now 0 but could NOT be hidden: ${error.message}` }))
+      continue
+    }
+    for (const r of (data ?? []) as { sku: string }[]) zeroPriceHidden.push(r.sku)
+  }
+  if (zeroPriceHidden.length) {
+    console.warn(`[product-sync] hid ${zeroPriceHidden.length} visible product(s) whose price is now 0: ${zeroPriceHidden.slice(0, 20).join(', ')}`)
   }
 
   // 5. Count inserted vs updated (excluding failures)
@@ -398,7 +429,7 @@ export async function syncToSupabase(
   if (uncategorized.length) {
     console.warn(`[product-sync] ${uncategorized.length} new product(s) with no matching category: ${uncategorized.slice(0, 20).map((u) => `${u.sku} ("${u.category}")`).join(', ')}`)
   }
-  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized, deactivatedSkus }
+  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized, deactivatedSkus, zeroPriceHidden }
 }
 
 /**
