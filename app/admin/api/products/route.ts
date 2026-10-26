@@ -313,7 +313,9 @@ export async function DELETE(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const action: 'hide_imageless' | 'unhide_with_image' = body.action
+    // 'unhide_with_image' was removed 2026-10-26: it unhid every hidden product
+    // with a photo, including ~1,200 hidden on purpose (see BulkVisibilityActions).
+    const action: 'hide_imageless' = body.action
 
     if (isMockMode()) {
       return NextResponse.json({ ok: true, mock: true, affected: 0 })
@@ -327,22 +329,6 @@ export async function POST(request: NextRequest) {
         .from('products')
         .update({ manually_hidden: true, updated_at: new Date().toISOString() })
         .or('image_url.is.null,image_url.eq.')
-        .select('id')
-      if (error) throw error
-      return NextResponse.json({ ok: true, affected: data?.length ?? 0 })
-    }
-
-    if (action === 'unhide_with_image') {
-      const { data, error } = await db
-        .from('products')
-        .update({ manually_hidden: false, updated_at: new Date().toISOString() })
-        .not('image_url', 'is', null)
-        .neq('image_url', '')
-        .eq('manually_hidden', true)
-        // Never a $0 product: lib/order-submission.ts checks only is_active and
-        // manually_hidden, so a visible $0 product is orderable for free. 121
-        // hidden products with a photo were at $0 on 2026-10-23.
-        .gt('price_cents', 0)
         .select('id')
       if (error) throw error
       return NextResponse.json({ ok: true, affected: data?.length ?? 0 })
