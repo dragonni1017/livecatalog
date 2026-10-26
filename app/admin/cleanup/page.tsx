@@ -16,6 +16,7 @@ import { fetchReceivingCohort, hiddenForPrice, isReadyToShow, needsErplyPrice } 
 import { fetchQbItemsBySku } from '@/lib/qb-item-directory'
 import { categoryMedians, describeCasePrice, likelyCasePrice } from '@/lib/price-check'
 import { compareBySeason, seasonOf } from '@/lib/seasons'
+import { meaningfulDescription } from '@/lib/product-description'
 
 export const dynamic = 'force-dynamic'
 
@@ -364,7 +365,8 @@ export default async function AdminCleanupPage({
         {issue === 'description' && (
           <p className="mb-4 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
             Descriptions are owned by the catalog: the Erply sync fills one in only when a product is first
-            created and never overwrites it after. An Excel import still does.
+            created and never overwrites it after. An Excel import still does. What the sync fills in is a
+            copy of the name, so those count as missing here and aren&apos;t shown on the product page.
           </p>
         )}
 
@@ -446,7 +448,7 @@ export default async function AdminCleanupPage({
                           <CleanupRowEditor
                             id={row.id}
                             mode={issue}
-                            description={row.description ?? ''}
+                            description={meaningfulDescription(row.description, row.name)}
                             categories={categories}
                           />
                         )}

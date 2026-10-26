@@ -2,6 +2,7 @@ import type { Product } from '@/lib/types'
 import type { DisplaySettings } from '@/lib/display-settings'
 import { resolveCdnImage } from '@/lib/image'
 import { stripCsSuffix } from '@/lib/pack'
+import { meaningfulDescription } from '@/lib/product-description'
 
 // schema.org Product + Offer for the product page, so search engines can
 // show name, image, price and availability as a rich result.
@@ -33,7 +34,7 @@ export function productJsonLd(product: Product, settings: Settings): Record<stri
   const images = [product.image_url, ...(product.image_urls ?? [])]
     .map((u) => resolveCdnImage(u ?? null, 1200))
     .filter((u, i, all): u is string => !!u && all.indexOf(u) === i)
-  const description = stripCsSuffix(product.description)?.trim()
+  const description = stripCsSuffix(meaningfulDescription(product.description, product.name)).trim()
 
   const ld: Record<string, unknown> = {
     '@context': 'https://schema.org',
