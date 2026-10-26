@@ -28,6 +28,24 @@ empty. No data was changed.
 
 **Not done, on purpose.** Writing descriptions from the name only rewords
 it. Anything more (materials, uses) would be invented, and buyers order on
-it. Offered as an option: a pilot that writes only what's visible in the
-product photo plus size and pack from the name, into a review file. Real copy
-has to come from someone who knows the products.
+it. Real copy (materials, uses) has to come from someone who knows the
+products.
+
+**Photo pilot (2026-10-26, NOT applied).** 20 visible products, one per
+category, described only from what the photo shows, into
+`data/description-pilot.csv` (local; columns sku, id, current_name,
+proposed_description, from_photo, check). 19 were written; D701018's photo
+was too blurry.
+
+- **Product photos are a data source.** 16 of 20 carry a printed L&Y label
+  with the item dimensions, the case count (sometimes per-pack), the UPC and
+  sometimes a variant suffix (`F286501-BLK`, `F561935-MIX`). Fetch them small
+  through Cloudinary (`/upload/w_500,f_jpg,q_70/<public id>`).
+- **The labels disagree with catalog names**, so the pilot doubled as an
+  audit. Nobody had checked these when the pilot ran: F287657 (photo 100
+  pcs/pk, name 10/pk), F286756 (64 vs cs.60), F286863 (bow 10" vs name 10'),
+  D701083 (3" vs 3.2inch).
+- Applying: once the user approves rows, use one UPDATE in the SQL editor
+  and read it back. The sync never overwrites a description, so approved text
+  sticks. Next, if wanted: labelled photos first, in batches, always into a
+  review file first.
