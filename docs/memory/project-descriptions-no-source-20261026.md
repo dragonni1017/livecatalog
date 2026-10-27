@@ -103,3 +103,25 @@ live prod-02781 page was checked.
   (`tabs_create_mcp` → `/admin`) kept the sign-in and saved all 28 in one
   `javascript_tool` call. After a timeout, check the database before
   retrying: in this case nothing had been sent.
+
+**Batch 3 (2026-10-27, applied: 25 live, 72 in all).** Same selection, also
+skipping K229473 and D701018. The file is `data/description-batch-03.csv`.
+All 25 were saved from a fresh tab, read back (3,179 characters), and the
+live prod-00470 page was checked. 5 of the 30 got no description.
+
+- **Photo problems (photo needs replacing):**
+  - P273668 "Fluffy Pig Slippers" has the **wrong photo**: white teddy bears
+    holding "Love" hearts. This is the second one, after K229473.
+  - Too blurry to read: H424270, F561926, D701098, D701004. Products whose
+    `image_url` is a bare Cloudinary SKU id are older uploads and blurry more
+    often.
+- **Found, nothing fixed yet:**
+  - D701115 "Hair Clipper Set" is decorative hair clips (a clip plus a bobby
+    pin), filed under Deco.
+  - Case counts: T641712 is 24/cs on the label and in QuickBooks, 36 in the
+    name. 3D801158 is 144 on the label and in the name, 96 in QuickBooks.
+    D701097 has the same boxes-vs-pins issue as D701081.
+  - S162760's name inverts the pack layout (12/pk 20bx against 20/box ×
+    12 boxes; same 240).
+  - F287300: QuickBooks says red, the photo shows red, purple and pink.
+  - Name text: "Harbrushes" (H424269), leftover "1000 ea/..." (F287570).
