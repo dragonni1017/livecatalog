@@ -212,7 +212,23 @@ Label sizes that only make sense with an accessory (T642007's 9.5" mirror,
 probably including the strap) are left out. Props in the photo are described
 as shown ("shown filled with moss"), not as included.
 
-**Progress 2026-10-27:** 189 of 1,183 visible products have a real
-description. 994 remain, all with a photo: about 33 more batches of 30. The
-flag rate fell from 12-17 per batch to 4-7 as the batches reached newer
-photos with clear labels.
+**Batch 8 (2026-10-27, applied: 29 live, 218 in all).** The file is
+`data/description-batch-08.csv`. All 29 were read back (3,966 characters),
+and the live prod-01465 page was checked. D701114 got no description: a
+blurry, bare-SKU-id photo.
+
+- **Case counts:** F286668 is 240 on the label and in QuickBooks, 540 in the
+  name. 3D801207 is 48 on the label and in QuickBooks, 192 in the name.
+  3D801205 is 84 on the label and in the name, 96 in QuickBooks.
+- T642029 has the same odd "12 x 4 x 3" label size as T641941, so it was
+  left out.
+- Colour variants of an already-described product (sprays, glitter roses,
+  manicure sets, pearl garlands, bouquet boxes) reuse the same sentence with
+  their own colour, so related products read alike.
+- When the Chrome extension disconnects ("Browser extension is not
+  connected"), stop and ask the user to reconnect. Nothing is sent in that
+  state, so there's nothing to clean up.
+
+**Progress 2026-10-27:** 218 of 1,183 visible products have a real
+description, and 965 remain. The flag rate fell from 12-17 per batch to 4-7
+as the batches reached newer photos with clear labels.
