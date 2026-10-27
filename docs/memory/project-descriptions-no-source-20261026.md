@@ -74,3 +74,32 @@ was too blurry.
 - The sync never overwrites a description, so approved text sticks. Next, if
   wanted: labelled photos first, in batches, always into a review file first,
   then apply through the admin site.
+
+**Batch 2 (2026-10-27, applied: 28 live, 47 in all).** The 30 visible
+products with the most stock and a name-copy or blank description, at most
+3 per category, skipping D701018. The file is `data/description-batch-02.csv`.
+Every photo had a label. All 28 were read back (3,354 characters) and the
+live prod-02781 page was checked.
+
+- **New rule:** when a photo label disagrees with the name, leave that fact
+  out of the description and flag it, so the page never contradicts itself.
+  For example, 3D801155's length is left out: the label says 17.7" and the
+  name says 20".
+- **Found, nothing fixed yet:**
+  - K229473 has the **wrong photo**: capybara keychains with a label reading
+    "K228473", while the name and QuickBooks say a puppy keychain. It has no
+    description until the photo is fixed.
+  - IC44200 "Green Glitter Bottle" is 100 g of craft glitter, filed under
+    Drinkware & Cups.
+  - Every chenille colour's label says 100 pcs/pk against 10/pk in the name
+    (F287657/58/59).
+  - 3D801155: the label and QuickBooks say 216/cs, the name says 240.
+  - D701081: the label says 480 boxes/cs, the name means 480 pins.
+  - S121034-G: name typo "Dumping".
+  - F287475: the photo label shows F287472 (the red bow) on a white bow.
+  - F287415: the photo shows red and pink together; check whether a pack is
+    mixed.
+- **Applying:** the admin tab froze, and a reload didn't help. A new tab
+  (`tabs_create_mcp` → `/admin`) kept the sign-in and saved all 28 in one
+  `javascript_tool` call. After a timeout, check the database before
+  retrying: in this case nothing had been sent.
