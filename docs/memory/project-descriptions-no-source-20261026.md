@@ -53,9 +53,24 @@ was too blurry.
   description. One wording change from the review file: F286819's text no
   longer mentions "the photo". These went live with their checks still open:
   F286501 assumed black (-BLK photo), and C266032 (candy) had no
-  food-wording review. The 4 name conflicts above are still unfixed, so
-  F286863's description says the bow is 10" while its name says 10'. D701018
-  needs a new photo.
+  food-wording review. D701018 needs a new photo.
+- **Name conflicts, resolved 2026-10-27 against QuickBooks
+  (`qb_item_directory.sales_desc`).** A photo label alone isn't enough to
+  change a pack count, because the price stays the same and only the
+  quantity changes.
+  - F286863 is **fixed**. It's now `10" Purple Gift Bow - 20/pk 100bx/cs
+    cs.100`, the same format as the other 10" bows. It was applied with
+    `fix-product-names.ts --plan=data/product-name-fixes-conflicts.csv`,
+    which verified Erply, Woo and Supabase, and the name was read back.
+    QuickBooks says 1000/cs (50pk), while the photo and the name say 2000.
+    The count was left alone and is still to check.
+  - D701083: left as is. QuickBooks also says 3.2inch, so the photo's 3" is
+    rounding.
+  - F286756: **needs a count**. QuickBooks and the photo say 64/cs, but 64
+    doesn't fit 12/pk, so the pack layout is unknown.
+  - F287657: **needs a count**. The photo says 100 pcs/pk against the name's
+    10/pk, and QuickBooks only says "100 pks/cs". At the same $2.00 that's a
+    10x change.
 - The sync never overwrites a description, so approved text sticks. Next, if
   wanted: labelled photos first, in batches, always into a review file first,
   then apply through the admin site.
