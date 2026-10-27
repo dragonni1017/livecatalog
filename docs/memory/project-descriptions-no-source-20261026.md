@@ -268,5 +268,26 @@ back (3,754 characters), and the live prod-01443 page was checked.
   Nothing runs when that error appears.
 
 **Progress 2026-10-27:** 277 of 1,183 visible products have a real
-description, and 906 remain. The flag rate fell from 12-17 per batch to 4-7
+description, and 906 remain.
+
+**Name fixes from the batches, applied 2026-10-27.** 13 renames went
+through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
+The plan was built from live names, with one exact substring fix per row.
+Erply, Woo and Supabase were all verified, and the names were read back.
+Fixed:
+
+- typos: Dumping (S121034-G), Harbrushes (H424269, H424268), Myster
+  (3D801162), Pluses (P273756), Fuffly (P273766), Footbal (T641963, plus
+  the repeated "40oz"), Silione (K229367), Diamon (F287074), Desert to
+  Dessert (B325102);
+- the truncated F287835 (full name taken from QuickBooks);
+- feet for inches on D701045-White (47.2' to 47.2");
+- leftover "180 ea/sc" (F287074) and "1000 ea/..." (F287570).
+
+The Woo guard skipped F287570 because its Woo name already differed. So
+the typo bullets in the batch sections above are now **fixed**. Still open,
+because they need a decision rather than a typo fix: P273766 "Sneaker"
+(the photo shows slippers), "Brown Bear" to capybara, the "Hair Clipper
+Set" (hair clips), IC44200's category, and every pack or case-count
+conflict. The flag rate fell from 12-17 per batch to 4-7
 as the batches reached newer photos with clear labels.
