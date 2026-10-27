@@ -229,6 +229,25 @@ blurry, bare-SKU-id photo.
   connected"), stop and ask the user to reconnect. Nothing is sent in that
   state, so there's nothing to clean up.
 
-**Progress 2026-10-27:** 218 of 1,183 visible products have a real
-description, and 965 remain. The flag rate fell from 12-17 per batch to 4-7
+**Batch 9 (2026-10-27, applied: 29 live, 247 in all).** The file is
+`data/description-batch-09.csv`. All 29 were read back (3,802 characters),
+and the live prod-01466 page was checked.
+
+- **Wrong photo:** F286877-2 "Wicker Style Print Paper Bag" shows F286877,
+  the plain pink quilted bag. It has no description.
+- **Case counts:** the chain-handle bags F286996 and F286995 are 240/cs on
+  the label and in QuickBooks, 180 in the name.
+- T642048 is another "Brown Bear" capybara (animal left out). T642034's
+  photo label is blacked out (no size). F287790's label size is unclear
+  (left out).
+- F287483: the display box says the rose lights up, so the description
+  attributes that to the box ("box that says it lights up") rather than
+  claiming it.
+- **Extension "not connected" after the user reconnected:**
+  `list_connected_browsers` showed the browser connected and in use, and
+  the next `tabs_context_mcp` worked. Check that before asking the user
+  again.
+
+**Progress 2026-10-27:** 247 of 1,183 visible products have a real
+description, and 936 remain. The flag rate fell from 12-17 per batch to 4-7
 as the batches reached newer photos with clear labels.
