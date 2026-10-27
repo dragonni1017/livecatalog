@@ -135,7 +135,8 @@ back (4,353 characters), and the live prod-02768 page was checked. 1 of the
 - **Third wrong photo:** P273606-2 "GWL Brown Wolf Slippers" has a blurry
   photo of teddy bears holding hearts. All three wrong photos (K229473,
   P273668, P273606-2) are slippers, keychains or bears showing another
-  product, so the photo upload for those lines likely mixed SKUs up.
+  product. Photos may have been mixed up between neighbouring SKUs when
+  they were uploaded; not confirmed (see the K229470 lead in batch 6).
 - **Found, nothing fixed yet:**
   - Case counts: P256789 is 30/cs on the label, 20 in the name and
     QuickBooks. F287431 is 600 pks/cs on the label, 50 in the name.
@@ -157,8 +158,10 @@ saved from a fresh tab, read back (3,534 characters), and the live
 prod-00614 page was checked. Fewer flags (7 against 12-17), because most of
 these photos are newer uploads with clear labels.
 
-- **Fourth wrong photo:** P273781, Positive "Brown Bear" Crochet Keychain,
-  shows a capybara keychain. It has no description.
+- ~~Fourth wrong photo: P273781~~. **Corrected in batch 6:** "Brown Bear"
+  is the catalog's name for its capybara items, so the capybara photo is
+  probably right. P273781 still has no description; it can get one in a
+  later batch.
 - **Found, nothing fixed yet:**
   - Feet for inches again: D701045-White's name says 47.2', the label says a
     47" pole. Same mistake as F286863.
@@ -170,3 +173,26 @@ these photos are newer uploads with clear labels.
     QuickBooks, 48 in the name.
   - T641941: the label size (12" x 4" x 3") doesn't fit a 40oz mug, so it
     was left out.
+
+**Batch 6 (2026-10-27, applied: 29 live, 159 in all).** The file is
+`data/description-batch-06.csv`. All 29 were saved from a fresh tab, read
+back (3,595 characters), and the live prod-02386 page was checked. Only 6
+flags.
+
+- **"Brown Bear" means capybara.** Every "Brown Bear" product photographed
+  so far shows a capybara: P273747 (slippers), P273744-23cm (sitting
+  plush), P273781 (keychain) and P273773 (backpack). On 2026-10-27, 39
+  active products had "Brown Bear", "Cappy" or "Capybara" in the name, most
+  of them "Brown Bear" (often in quotes). A buyer searching "capybara" misses
+  them. Renaming is the catalog owner's call, and nothing was renamed. Until
+  then, descriptions for these say "brown plush animal" (no species), so
+  they contradict neither the name nor the photo.
+  - Lead, not confirmed: K229473's capybara-on-pool-float photo may belong
+    to K229470, "Unicorn Riding 'Brown Bear' Keychain".
+- **Wrong photo:** F286809 "Mint Colored Ruffle Styled Flower Paper" shows
+  F286809-GRAY, a grey gift box set. It has no description.
+- **Found, nothing fixed yet:** F287534 is 16 sets/cs on the label and in
+  QuickBooks, 20 in the name. P273766 has the typo "Fuffly" (and it's
+  slippers, not sneakers). F287535 "Gray" shows white and grey.
+- Display boxes that print "2 in 1 plain mirror and magnifying glass" (the
+  T6419xx slim compacts) are enough to state that in the description.
