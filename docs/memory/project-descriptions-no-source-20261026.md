@@ -322,8 +322,22 @@ verified and no skips, and the names read back.
 
 That makes 20 names fixed on 10-27 (F286863, 13, and 6).
 
-**Progress 2026-10-27:** 334 of 1,183 visible products have a real
-description, and 849 remain.
+**Batch 13 (2026-10-27, applied: 30 live, 364 in all).** The file is
+`data/description-batch-13.csv`. All 30 were read back (3,803 characters),
+and the live prod-01329 page was checked. Every photo was usable, so none
+were left blank. The batch query is unchanged, with F286965 added to the
+bad-photo exclusions.
+
+- **Case conflicts:** 3D801239 (the label and name say 96/cs, QuickBooks
+  says 48), and 3D801238 (the label says 350/cs, the name 348, QuickBooks
+  240).
+- **Sizes left out as implausible:** the "Large" squid 3D801239 (printed
+  2.8" x 1.2") and the spiral jellyfish 3D801240 (1.8" x 0.6").
+- G333153 is named "Floral Pattern", but the photo shows gold dots.
+- F283918, K229398 and F287694 have no QuickBooks entry.
+
+**Progress 2026-10-27:** 364 of 1,183 visible products have a real
+description, and 819 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
