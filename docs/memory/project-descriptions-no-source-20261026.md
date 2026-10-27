@@ -196,3 +196,23 @@ flags.
   slippers, not sneakers). F287535 "Gray" shows white and grey.
 - Display boxes that print "2 in 1 plain mirror and magnifying glass" (the
   T6419xx slim compacts) are enough to state that in the description.
+
+**Batch 7 (2026-10-27, applied: 30 live, 189 in all).** The file is
+`data/description-batch-07.csv`. The first batch where all 30 got a
+description, including P273781 (see the batch 6 "Brown Bear" note). All 30
+were saved from a fresh tab, read back (3,735 characters), and the live
+prod-01594 page was checked. Only 4 flags:
+
+- F286507's name says 240/cs and QuickBooks says 300; the handwritten
+  label is unreadable.
+- F286894 and F286893 say "with Clear Lid", but no lid is visible.
+- P273781's "Brown Bear" naming.
+
+Label sizes that only make sense with an accessory (T642007's 9.5" mirror,
+probably including the strap) are left out. Props in the photo are described
+as shown ("shown filled with moss"), not as included.
+
+**Progress 2026-10-27:** 189 of 1,183 visible products have a real
+description. 994 remain, all with a photo: about 33 more batches of 30. The
+flag rate fell from 12-17 per batch to 4-7 as the batches reached newer
+photos with clear labels.
