@@ -287,8 +287,34 @@ and the live prod-02960 page was checked. F287429 got no description
   template produced "…with a white handle, with a handle…", which was fixed
   in the file before applying.
 
-**Progress 2026-10-27:** 305 of 1,183 visible products have a real
-description, and 878 remain.
+**Batch 12 (2026-10-27, applied: 29 live, 334 in all).** The file is
+`data/description-batch-12.csv`. All 29 were read back (3,948 characters),
+and the live prod-01467 page was checked. F286965 got no description
+(blurry). From here the batch query uses `distinct on (p.id)` against the
+duplicate QuickBooks rows.
+
+- **A second truncated "2-in-1" name:** F287843 reads "2-in - 1/pk 12bx/cs
+  cs.12". QuickBooks has "2-in-1 Set Cream Color Corrugated Plastic Vase".
+  Names starting "2-in-1" seem to have been cut at the hyphen when they
+  were created, so search for others (`name like '2-in -%'`) before the
+  next fix round.
+- **G333144 confirmed:** the medium heart bag G333148's label (12.5" x
+  10.25", 180/cs) matches G333144's photo label, so the "Small" bag shows
+  the medium photo.
+- **Case counts:** T642128 is 24/cs on the label and in QuickBooks, 36 in
+  the name ("Brown Bear" capybara print, animal left out). 3D801233 is 48 on
+  the label, 72 in the name and QuickBooks.
+- Name typo "Bacsket" (F287541). F287542's QuickBooks sales description is
+  only the UPC. D701104's label size reads 1.4' x 59' (left out).
+- Proofreading every built description before showing the batch caught a
+  clumsy template again (the plush keychain list). Print the descriptions
+  and read them, every batch.
+
+**Next name-fix round (not yet planned):** F287843 (truncated), "Kechains"
+(K229391), "Billing" (K229387) and "Bacsket" (F287541).
+
+**Progress 2026-10-27:** 334 of 1,183 visible products have a real
+description, and 849 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
