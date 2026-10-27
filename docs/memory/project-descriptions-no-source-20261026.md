@@ -267,8 +267,28 @@ back (3,754 characters), and the live prod-01443 page was checked.
   same tab and running a one-line probe (`location.pathname`) fixed it.
   Nothing runs when that error appears.
 
-**Progress 2026-10-27:** 277 of 1,183 visible products have a real
-description, and 906 remain.
+**Batch 11 (2026-10-27, applied: 28 live, 305 in all).** The file is
+`data/description-batch-11.csv`. All 28 were read back (3,520 characters),
+and the live prod-02960 page was checked. F287429 got no description
+(blurry, bare-SKU-id photo).
+
+- **QuickBooks has two entries under T641015:** the pineapple lamp and one
+  named "Umbrella Unicorn". The batch query returned T641015 twice because
+  it joins on `qb_item_directory.sku_norm`. Deduplicate by product id when
+  picking a batch.
+- G333144 "Gift Bags Small" (240/cs in the name and QuickBooks): the photo
+  label says 180/cs and 12.5", which looks like the large size's photo. The
+  size was left out of the description.
+- F287117 is 80/cs on the label and in QuickBooks, 72 in the name.
+  QuickBooks says 3D801232 is "68/cs", probably meaning 168.
+- Name typos for the next fix round: "Kechains" (K229391) and "Billing" for
+  Bling (K229387).
+- Template text needs a read-through before applying. The bling-mug
+  template produced "…with a white handle, with a handle…", which was fixed
+  in the file before applying.
+
+**Progress 2026-10-27:** 305 of 1,183 visible products have a real
+description, and 878 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
