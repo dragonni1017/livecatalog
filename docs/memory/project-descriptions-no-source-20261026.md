@@ -125,3 +125,28 @@ live prod-00470 page was checked. 5 of the 30 got no description.
     12 boxes; same 240).
   - F287300: QuickBooks says red, the photo shows red, purple and pink.
   - Name text: "Harbrushes" (H424269), leftover "1000 ea/..." (F287570).
+
+**Batch 4 (2026-10-27, applied: 29 live, 101 in all).** Same selection, also
+skipping batch 3's photo problems. The file is
+`data/description-batch-04.csv`. All 29 were saved from a fresh tab, read
+back (4,353 characters), and the live prod-02768 page was checked. 1 of the
+30 got no description.
+
+- **Third wrong photo:** P273606-2 "GWL Brown Wolf Slippers" has a blurry
+  photo of teddy bears holding hearts. All three wrong photos (K229473,
+  P273668, P273606-2) are slippers, keychains or bears showing another
+  product, so the photo upload for those lines likely mixed SKUs up.
+- **Found, nothing fixed yet:**
+  - Case counts: P256789 is 30/cs on the label, 20 in the name and
+    QuickBooks. F287431 is 600 pks/cs on the label, 50 in the name.
+  - Pack layout inverted, same totals: T641325 and F287704 (against
+    QuickBooks or the label), and the spray fans T641109, T641111 and
+    T641522 (label 9/bx × 8, name 12/pk × 6).
+  - F286543 "LOVE Letters RED" shows hot pink roses, so the colour was left
+    out. Confirm whether the heart box is included.
+  - B325088 "Hand Clutch" has a shoulder chain. F287433 "Brown" baskets are
+    tan and white, like F287432.
+  - Name typos: "Desert" for Dessert (B325102), "Harbrushes" (H424268),
+    "Myster" (3D801162), "Pluses" (P273756).
+- Text printed on a product (P273756's "Positive potato" card) is
+  paraphrased, not quoted in full.
