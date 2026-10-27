@@ -310,8 +310,17 @@ duplicate QuickBooks rows.
   clumsy template again (the plush keychain list). Print the descriptions
   and read them, every batch.
 
-**Next name-fix round (not yet planned):** F287843 (truncated), "Kechains"
-(K229391), "Billing" (K229387) and "Bacsket" (F287541).
+**Second name-fix round, applied 2026-10-27.** 6 renames went through
+`data/product-name-fixes-typos-20261027b.csv`, with all three systems
+verified and no skips, and the names read back.
+
+- The search `name ~* '^\d-in\s*-\s'` found **three** truncated names:
+  F287843 (visible), plus F287459 and F287845 (both hidden). All three got
+  their full names from QuickBooks, so **none are left**.
+- Typos Kechains (K229391), Billing to Bling (K229387) and Bacsket
+  (F287541).
+
+That makes 20 names fixed on 10-27 (F286863, 13, and 6).
 
 **Progress 2026-10-27:** 334 of 1,183 visible products have a real
 description, and 849 remain.
