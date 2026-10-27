@@ -150,3 +150,23 @@ back (4,353 characters), and the live prod-02768 page was checked. 1 of the
     "Myster" (3D801162), "Pluses" (P273756).
 - Text printed on a product (P273756's "Positive potato" card) is
   paraphrased, not quoted in full.
+
+**Batch 5 (2026-10-27, applied: 29 live, 130 in all).** Same selection, also
+skipping P273606-2. The file is `data/description-batch-05.csv`. All 29 were
+saved from a fresh tab, read back (3,534 characters), and the live
+prod-00614 page was checked. Fewer flags (7 against 12-17), because most of
+these photos are newer uploads with clear labels.
+
+- **Fourth wrong photo:** P273781, Positive "Brown Bear" Crochet Keychain,
+  shows a capybara keychain. It has no description.
+- **Found, nothing fixed yet:**
+  - Feet for inches again: D701045-White's name says 47.2', the label says a
+    47" pole. Same mistake as F286863.
+  - Name doesn't match the photo (animal or use left out of the
+    description): P273710 "Headband" is worn on the wrist, T641884
+    "Unicorn" has no horn, and P273773 "Brown Bear" has a capybara-like face.
+  - Case counts: T641963 is 25/cs on the label and in QuickBooks, 20 in the
+    name (plus the typo "Footbal"). F287531 is 50 on the label and in
+    QuickBooks, 48 in the name.
+  - T641941: the label size (12" x 4" x 3") doesn't fit a 40oz mug, so it
+    was left out.
