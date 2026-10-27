@@ -248,6 +248,25 @@ and the live prod-01466 page was checked.
   the next `tabs_context_mcp` worked. Check that before asking the user
   again.
 
-**Progress 2026-10-27:** 247 of 1,183 visible products have a real
-description, and 936 remain. The flag rate fell from 12-17 per batch to 4-7
+**Batch 10 (2026-10-27, applied: 30 live, 277 in all).** The file is
+`data/description-batch-10.csv`. All 30 got a description. All were read
+back (3,754 characters), and the live prod-01443 page was checked.
+
+- **F287835's name is truncated** to "2-in - 1/pk 36bx/cs cs.36" on the live
+  site. QuickBooks has the full name, "2-in-1 Set Round Plastic Rattan Style
+  Flower Pot Set".
+- **Chenille, 4th colour:** F287655 (fuchsia, no pack spec in its name)
+  also says 100 pcs/pk on its label, the same as F287657/58/59. That's
+  stronger evidence the 10/pk names are wrong, but still uncounted.
+- **QuickBooks disagrees with the label and name:** 3D801220 (QuickBooks 96
+  against 192) and F287832 (QuickBooks 12 sets against 9).
+- T642115 is another "Brown Bear" capybara. Name typos: "Silione"
+  (K229367), and "Diamon" plus leftover "180 ea/sc" (F287074).
+- `javascript_tool` can fail with "Couldn't determine which page this
+  action targets" even right after `tabs_context_mcp`. Re-navigating the
+  same tab and running a one-line probe (`location.pathname`) fixed it.
+  Nothing runs when that error appears.
+
+**Progress 2026-10-27:** 277 of 1,183 visible products have a real
+description, and 906 remain. The flag rate fell from 12-17 per batch to 4-7
 as the batches reached newer photos with clear labels.
