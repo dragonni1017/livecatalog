@@ -222,6 +222,12 @@ export interface ImportResult {
   /** SKUs this run deactivated (not in the Erply feed). */
   deactivatedSkus?: string[]
   /**
+   * Catalog-held prices (products.held_price_cents): `kept` = the source
+   * still differs, so the held price stayed; `released` = the source now
+   * matches, so the hold was cleared and the source owns the price again.
+   */
+  heldPrices?: { kept: string[]; released: string[] }
+  /**
    * Existing products that were visible and arrived at price 0, so this run
    * hid them (and marked them awaiting_price): a visible $0 product would be
    * orderable for free.
