@@ -477,8 +477,24 @@ audit rows and the log.
   generically.
 - Name-fix list: "Flora" for Floral again (F286940).
 
-**Progress 2026-10-28:** 568 of 1,183 visible products have a real
-description, and 615 remain.
+**Batch 21 (2026-10-28, applied: 30 live, 598 in all).** The file is
+`data/description-batch-21.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,625 characters), and the live
+prod-02674 page was checked. Every photo was usable. prod-00116 and
+prod-00339 had older name copies, kept exactly in the audit rows and the
+log.
+
+- **K229438's photo label reads K229430** (the bear-ear keychain), though
+  it shows flower keychains.
+- Case counts: F287850 and F287849 (label and QuickBooks 40, name 36),
+  P257265 and P257262 (50 against 48), T641916 (label 264, name and
+  QuickBooks 360).
+- Sizes left out: T641667 (label 19.3", name 21"). F287863's label size
+  equals the QuickBooks carton size, so it isn't the product size.
+- Name-fix list: P273701 10' (feet).
+
+**Progress 2026-10-28:** 598 of 1,183 visible products have a real
+description, and 585 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
