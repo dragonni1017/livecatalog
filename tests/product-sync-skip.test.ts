@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/low-stock-alert', () => ({ checkLowStockAndNotify: async () => {} }))
 vi.mock('../lib/back-in-stock-notify', () => ({ checkBackInStockAndNotify: async () => {} }))
 
-import { planDeactivation, resolveCategories, syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
+import { planDeactivation, resolveCategories, resolveHeldPrice, syncToSupabase, type SyncOptions, type SyncProduct } from '../lib/product-sync'
 
 /**
  * Minimal chainable stand-in for the supabase-js client: every builder method
@@ -16,7 +16,7 @@ const CATEGORIES = [
   { id: 'cat-064', name: 'Seasonal & Holiday', slug: 'seasonal-holiday' },
 ]
 
-function fakeDb(existingSkus: string[], visibleSkus: string[] = []) {
+function fakeDb(existingSkus: string[], visibleSkus: string[] = [], held: Record<string, number> = {}) {
   const categoryWrites: string[] = []
   const upserts: Record<string, unknown>[][] = []
   const updates: Record<string, unknown>[] = []
@@ -46,7 +46,7 @@ function fakeDb(existingSkus: string[], visibleSkus: string[] = []) {
       }
       if (table === 'products' && has('range')) {
         const [lo, hi] = args('range') as [number, number]
-        return { data: existingSkus.slice(lo, hi + 1).map((sku) => ({ sku })), error: null }
+        return { data: existingSkus.slice(lo, hi + 1).map((sku) => ({ sku, held_price_cents: held[sku] ?? null })), error: null }
       }
       return { data: [], error: null }
     }
@@ -241,6 +241,54 @@ describe('syncToSupabase zero-price hide', () => {
   it('hides nothing when every product has a price', async () => {
     const { db, updates } = fakeDb(['A', 'B'], ['A', 'B'])
     const result = await syncToSupabase([product('A'), product('B')], db, { deactivateMissing: false })
+    expect(result.zeroPriceHidden).toEqual([])
+    expect(updates.some((u) => u.manually_hidden === true)).toBe(false)
+  })
+})
+
+describe('resolveHeldPrice', () => {
+  it('passes the source price through when nothing is held', () => {
+    expect(resolveHeldPrice(300, null)).toEqual({ price_cents: 300, release: false })
+    expect(resolveHeldPrice(300, undefined)).toEqual({ price_cents: 300, release: false })
+  })
+
+  it('keeps the held price while the source still differs, even at 0', () => {
+    expect(resolveHeldPrice(250, 300)).toEqual({ price_cents: 300, release: false })
+    expect(resolveHeldPrice(0, 300)).toEqual({ price_cents: 300, release: false })
+  })
+
+  it('releases the hold once the source matches it', () => {
+    expect(resolveHeldPrice(300, 300)).toEqual({ price_cents: 300, release: true })
+  })
+})
+
+describe('syncToSupabase held prices', () => {
+  it('keeps a held price, releases a matched one, and leaves the rest alone', async () => {
+    // product() sends 100 cents for every SKU.
+    const { db, upserts } = fakeDb(['KEEP', 'MATCH', 'FREE'], [], { KEEP: 300, MATCH: 100 })
+    const result = await syncToSupabase([product('KEEP'), product('MATCH'), product('FREE')], db, { deactivateMissing: false })
+
+    const rows = upserts.flat()
+    const row = (sku: string) => rows.find((r) => r.sku === sku)!
+    expect(row('KEEP').price_cents).toBe(300)
+    expect(row('KEEP')).not.toHaveProperty('held_price_cents')
+    expect(row('MATCH').price_cents).toBe(100)
+    expect(row('MATCH').held_price_cents).toBeNull()
+    expect(row('FREE').price_cents).toBe(100)
+    expect(row('FREE')).not.toHaveProperty('held_price_cents')
+    expect(result.heldPrices).toEqual({ kept: ['KEEP'], released: ['MATCH'] })
+
+    // The release key must never share a chunk with rows lacking it, or
+    // they'd be sent held_price_cents = NULL and lose their hold.
+    for (const chunk of upserts) {
+      const sigs = new Set(chunk.map((r) => Object.keys(r).sort().join(',')))
+      expect(sigs.size).toBe(1)
+    }
+  })
+
+  it('does not hide a visible held product when the source sends 0', async () => {
+    const { db, updates } = fakeDb(['HELD'], ['HELD'], { HELD: 300 })
+    const result = await syncToSupabase([{ ...product('HELD'), price_cents: 0 }], db, { deactivateMissing: false })
     expect(result.zeroPriceHidden).toEqual([])
     expect(updates.some((u) => u.manually_hidden === true)).toBe(false)
   })

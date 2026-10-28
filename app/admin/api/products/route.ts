@@ -274,6 +274,18 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // A product whose price is held for Erply (migration 0068) keeps its hold
+    // in step with an edit here, or the next sync would put the old held
+    // price back. Products without a hold are untouched.
+    if (typeof updates.price_cents === 'number' && updates.price_cents > 0) {
+      const { error: holdError } = await db
+        .from('products')
+        .update({ held_price_cents: updates.price_cents })
+        .eq('id', id)
+        .not('held_price_cents', 'is', null)
+      if (holdError) throw holdError
+    }
+
     if (newCategoryIds !== null) {
       const { error: deleteError } = await db.from('product_categories').delete().eq('product_id', id)
       if (deleteError) throw deleteError
