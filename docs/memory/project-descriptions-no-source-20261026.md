@@ -416,8 +416,32 @@ S162757 got no description (blurry); add it to the bad-photo exclusions.
   a heart keychain. P251933's label says 13" against the 14'' name (size
   left out).
 
-**Progress 2026-10-28:** 479 of 1,183 visible products have a real
-description, and 704 remain.
+**Batch 18 (2026-10-28, applied: 29 live, 508 in all).** The file is
+`data/description-batch-18.csv`. 29 audit rows (written before the apply)
+were matched against the live text (2,848 characters), and the live
+prod-00182 page was checked. LL666 got no description (blurry); add it to
+the bad-photo exclusions.
+
+- **Encoding trap:** `XLSX.readFile` on a CSV decodes it as Latin-1, so
+  "appliqués" came out "appliquÃ©s" in the payload. It was caught before
+  anything was written, and no earlier batch had non-ASCII text (checked
+  the files and audit_log). Read batch CSVs with
+  `XLSX.read(fs.readFileSync(f,'utf8'),{type:'string'})`, and keep
+  descriptions ASCII.
+- **F287772 and F287773 share the name "Matte Light Purple Pull Flower
+  Ribbon".** F287772's photo is deep purple, so its name is wrong.
+- **B325097's photo label reads B425097**; it's still a belt bag, so check
+  that the photo belongs to this SKU.
+- Chenille again: F287656 and F287660 labels say 100 pcs/pk against 10/pk.
+  F287660 "Dark Red" looks brown (colour left out).
+- QuickBooks 3D-range counts again: 3D801264 (QuickBooks 216 against 60),
+  D751002 (QuickBooks 48 against 96).
+- P257222 "Rainbow Bear" has a horn (animal left out). P257236 "Tote Bag"
+  is a paper gift bag filed under Bags/Purses.
+- Name-fix list: "Sequence" for Sequin (B325069).
+
+**Progress 2026-10-28:** 508 of 1,183 visible products have a real
+description, and 675 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
