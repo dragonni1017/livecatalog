@@ -394,8 +394,30 @@ description (blurry); add them to the bad-photo exclusions.
   by character name.
 - Name-fix list: "Rectaungular" again (G333170).
 
-**Progress 2026-10-28:** 450 of 1,183 visible products have a real
-description, and 733 remain.
+**Batch 17 (2026-10-28, applied: 29 live, 479 in all).** The file is
+`data/description-batch-17.csv`. 29 audit rows were matched against the
+live text (2,975 characters), and the live prod-00933 page was checked.
+S162757 got no description (blurry); add it to the bad-photo exclusions.
+
+- **Better logging order, use from now on:** write the `audit_log` rows
+  *before* the apply, with `old_value = p.description` read in the same
+  INSERT and `new_value` the proposed text (dollar-quoted `$d$...$d$`).
+  Afterwards check `products.description = audit_log.new_value` for every
+  row. This keeps exact old text even when it isn't name + "/cs": F287104
+  and F287110 ended "cs.36/cs", matching the label's 36/cs. Their current
+  names say "cs.3pk", which looks like a later bad rename.
+- **QuickBooks case counts for the 3D range look wrong:** 3D801256/57/59
+  are 72/cs on the label and in the name, while QuickBooks says 12 (240 for
+  3D801256). Same as 3D801255 in batch 16.
+- Other case conflicts: F287438 (label and QuickBooks 80, name 72);
+  F287430 (label and QuickBooks 600 pks, name cs.50pk); T641834 (name 480,
+  QuickBooks 60).
+- K229420's QuickBooks sales description says "Soccer Bling Keychain" for
+  a heart keychain. P251933's label says 13" against the 14'' name (size
+  left out).
+
+**Progress 2026-10-28:** 479 of 1,183 visible products have a real
+description, and 704 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
