@@ -361,8 +361,27 @@ photo is a tiny blurred placeholder, and E273127's is blurry.
   "Floral Pattern" (batch 13).
 - The storefront product URL is `/product/<id>` (singular).
 
-**Progress 2026-10-28:** 392 of 1,183 visible products have a real
-description, and 791 remain.
+**Batch 15 (2026-10-28, applied: 30 live, 422 in all).** The file is
+`data/description-batch-15.csv`. All 30 were read back (3,368 characters),
+and the live prod-01232 page was checked. Logged the same way as batch 14:
+30 `audit_log` rows plus `data/description-batch-15-log.csv` and
+`-undo.json`. Every old description was checked to be exactly name + "/cs"
+before applying.
+
+- **Name doesn't match the photo (left out):** K229410 "Starfish" charms
+  are seashells. K229414 "Pink & White Dog" shows black and pink dogs.
+- **Counts:** E273134 is 144/cs on the label and in QuickBooks, 288 in the
+  name. F287672: label 150 pcs/cs, QuickBooks 150 pk/cs, name 48/pk.
+- F287156's name size (7.5*4*7.1) disagrees with the label (7.5" x 4.5" x
+  1.5"), so its description has no size. Tiny 3D keychain label sizes
+  (3D801249, 3D801248) were left out.
+- For the next name-fix round: D701047 16' (feet) for 16" (inches); typos
+  "Erase" (E273136), "Monter" (E273134), "Turlte" (3D801248),
+  "Rectaungular" (G333166, G333167); leftover sizes in F287155/F287156 and
+  F287154 (batch 14).
+
+**Progress 2026-10-28:** 422 of 1,183 visible products have a real
+description, and 761 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
