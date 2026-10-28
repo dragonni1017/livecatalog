@@ -514,8 +514,23 @@ prod-01527 page was checked. Every photo was usable.
   luxury monogram (described generically).
 - Name-fix list: "Rafia" for Raffia (G333158).
 
-**Progress 2026-10-28:** 628 of 1,183 visible products have a real
-description, and 555 remain.
+**Batch 23 (2026-10-28, applied: 30 live, 658 in all).** The file is
+`data/description-batch-23.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,970 characters), and the live
+prod-02056 page was checked. Every photo was usable, and every description
+passed the copy check.
+
+- F286984 and F286983 share the name "5 leaf Plastic Floral Paper" (one
+  white, one black).
+- P273740 "in Deer Hoodie" shows a pineapple-like hood (hoodie animal left
+  out). S162759 is another "Brown Bear" capybara.
+- Case counts: T642071 (QuickBooks 192 against 156), F287855 (label and
+  QuickBooks 50 against 48). P256993's name inverts its pack layout (18/pk
+  40bx; really 40 per display x 18).
+- H424183's headbands carry a brand-like embroidered name, left out.
+
+**Progress 2026-10-28:** 658 of 1,183 visible products have a real
+description, and 525 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
