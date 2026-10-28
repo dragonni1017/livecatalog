@@ -529,8 +529,22 @@ passed the copy check.
   40bx; really 40 per display x 18).
 - H424183's headbands carry a brand-like embroidered name, left out.
 
-**Progress 2026-10-28:** 658 of 1,183 visible products have a real
-description, and 525 remain.
+**Batch 24 (2026-10-28, applied: 30 live, 688 in all).** The file is
+`data/description-batch-24.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,241 characters), and the live
+prod-02271 page was checked. Every photo was usable, every description
+passed the copy check, and every old description was the standard copy.
+
+- F286631's QuickBooks sales description is for another product ("Heart
+  Shape Box Set with Clear Top - 16/cs").
+- F287146 "Burgundy" glitter looks bright red-pink (colour left out).
+  P273741-40cm is another "Brown Bear" capybara.
+- Pack and case counts: G333163 (label 80/pk against 100), F287317 (label
+  30 pks/cs against 50).
+- K229447 and K229448 designs resemble luxury brands (described generically).
+
+**Progress 2026-10-28:** 688 of 1,183 visible products have a real
+description, and 495 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
