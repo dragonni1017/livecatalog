@@ -616,8 +616,21 @@ prod-02812 page was checked. Four old descriptions were blank and two
 - Case counts: F287848 (label and QuickBooks 40 against 36). F286459's
   handwritten label looks like 30/cs against 40 (hard to read).
 
-**Progress 2026-10-28:** 837 of 1,183 visible products have a real
-description, and 346 remain.
+**Batch 30 (2026-10-28, applied: 30 live, 867 in all).** The file is
+`data/description-batch-30.csv`. 30 audit rows (written before the apply)
+were matched against the live text, and the live prod-40590 page was
+checked. Twelve old descriptions were blank; the rest were name copies.
+
+- **More compact mirrors named "Leather Patch":** T642235 "Leopart Print
+  Leather Patch" (also a typo) and T642234 "Rectangular Rhinestone Leather
+  Patch", like T642233 in batch 28. P273856 "Husky Weighted Panda" is a
+  husky. K229475 "Mini Bear" shows puppies (label reads K329475).
+- Labels: K229381 reads K299381. S121030-25CM shows the small 3.35" S121030,
+  so no size was given. F288019 is named 11 1/4" but labelled 12".
+- Case counts: S146887 (label 12 x 12 = 144, QuickBooks 288).
+
+**Progress 2026-10-28:** 867 of 1,183 visible products have a real
+description, and 316 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
