@@ -336,8 +336,33 @@ bad-photo exclusions.
 - G333153 is named "Floral Pattern", but the photo shows gold dots.
 - F283918, K229398 and F287694 have no QuickBooks entry.
 
-**Progress 2026-10-27:** 364 of 1,183 visible products have a real
-description, and 819 remain.
+**Batch 14 (2026-10-28, applied: 28 live, 392 in all).** The file is
+`data/description-batch-14.csv`. All 28 were read back (3,099 characters),
+and the live prod-01332 page was checked. Two got no description: F287526's
+photo is a tiny blurred placeholder, and E273127's is blurry.
+
+- **Reversal log, from this batch on.** The products PATCH route writes no
+  audit entry for a description edit, so each change was logged twice: the
+  local `data/description-batch-14-log.csv` (old and new text, with
+  `-undo.json` as a ready PATCH payload), and 28 `audit_log` rows (`action
+  = 'product_description_updated'`, `old_value`/`new_value`, `performed_by`
+  naming the batch). The old text was the name plus "/cs" (P273810-60cm's
+  was blank).
+- **Wrong-size photo:** P273810-60cm (24") uses the 46cm photo, so the size
+  is left out.
+- **Pack and case conflicts:** E273133's label says 3 pcs/pk and 288 pk/cs
+  against 12/pk cs.288 in the name. F287151-S is 140/cs on the label and in
+  QuickBooks, 120 in the name. F287833 is 16 sets on the label and in the
+  name, 12 in QuickBooks.
+- T642163 "Floral" shows butterflies (print left unnamed). K229406 is
+  another "Brown Bear" capybara. 3D801241's 2.4" "Large" size was left out,
+  like 3D801240. F287154's name has leftover "9*6.06*1.5 24ea".
+- Lead: G333155's gold-rectangle photo looks like the one on G333153
+  "Floral Pattern" (batch 13).
+- The storefront product URL is `/product/<id>` (singular).
+
+**Progress 2026-10-28:** 392 of 1,183 visible products have a real
+description, and 791 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
