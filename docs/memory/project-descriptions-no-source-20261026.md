@@ -440,8 +440,25 @@ the bad-photo exclusions.
   is a paper gift bag filed under Bags/Purses.
 - Name-fix list: "Sequence" for Sequin (B325069).
 
-**Progress 2026-10-28:** 508 of 1,183 visible products have a real
-description, and 675 remain.
+**Batch 19 (2026-10-28, applied: 30 live, 538 in all).** The file is
+`data/description-batch-19.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,174 characters), and the live
+prod-40557 page was checked. Every photo was usable. Three newer products
+(prod-40557, prod-40648, prod-40531) had blank descriptions rather than
+name copies; their undo restores blank.
+
+- **Name doesn't match the photo:** B325101 "Backpack" is a handbag with
+  top handles. F286921 "Purple Rose" shows pink roses (colour left out).
+  F287969 "BLACK" shows white, black and pink sets.
+- **Case counts:** F287691 and F287692 (label and QuickBooks 200, name 192),
+  P257237 (label and QuickBooks 50, name 48), P273648-40cm (label and
+  QuickBooks 12, name 24), D751077 (label 192, name and QuickBooks 96).
+- P273676-100cm: label 32" against 100cm in the name (size left out).
+- Name-fix list: P273676-L 12' (feet), "See-Though" (B325105), "Flora" for
+  Floral (F286938), "Mall" probably Small (T642285).
+
+**Progress 2026-10-28:** 538 of 1,183 visible products have a real
+description, and 645 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
