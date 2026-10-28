@@ -629,8 +629,17 @@ checked. Twelve old descriptions were blank; the rest were name copies.
   so no size was given. F288019 is named 11 1/4" but labelled 12".
 - Case counts: S146887 (label 12 x 12 = 144, QuickBooks 288).
 
-**Progress 2026-10-28:** 867 of 1,183 visible products have a real
-description, and 316 remain.
+**Batch 31 (2026-10-28, applied: 23 live, 890 in all).** The file is
+`data/description-batch-31.csv`. Only 23 qualified under the 3-per-category
+cap, since few categories are left; raise it to 4 next time. 23 audit rows
+(written before the apply) were matched against the live text (2,477
+characters), and the live prod-40591 page was checked. Two old descriptions
+were blank; the rest were name copies.
+
+- Names: T642214 "Shapped" typo; P273623 has a stray dash.
+
+**Progress 2026-10-28:** 890 of 1,183 visible products have a real
+description, and 293 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
