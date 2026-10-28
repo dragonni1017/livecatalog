@@ -543,8 +543,24 @@ passed the copy check, and every old description was the standard copy.
   30 pks/cs against 50).
 - K229447 and K229448 designs resemble luxury brands (described generically).
 
-**Progress 2026-10-28:** 688 of 1,183 visible products have a real
-description, and 495 remain.
+**Batch 25 (2026-10-28, applied: 29 live, 717 in all).** The file is
+`data/description-batch-25.csv`. 29 audit rows (written before the apply)
+were matched against the live text (2,716 characters), and the live
+prod-02833 page was checked. P257251 got no description (blurry); add it to
+the bad-photo exclusions.
+
+- C801021 (a makeup brush set) is filed under Drinkware & Cups; its name
+  says "3 Color" but the photo shows one.
+- P273777-40cm's photo label reads P273776-40cm. P273759-40cm is another
+  "Brown Bear" capybara.
+- Pack and case counts: K229454 (QuickBooks 120 against 240), F287318
+  (label and QuickBooks 30 pks against 50), F287507 (QuickBooks 50 against
+  60), P257247 (label 24 markers per pack against 100/pk in the name).
+- Brand-like designs (tweed charm purse, race cars, "Tetris" in a name)
+  are described generically.
+
+**Progress 2026-10-28:** 717 of 1,183 visible products have a real
+description, and 466 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
