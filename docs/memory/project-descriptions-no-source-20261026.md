@@ -457,8 +457,28 @@ name copies; their undo restores blank.
 - Name-fix list: P273676-L 12' (feet), "See-Though" (B325105), "Flora" for
   Floral (F286938), "Mall" probably Small (T642285).
 
-**Progress 2026-10-28:** 538 of 1,183 visible products have a real
-description, and 645 remain.
+**Batch 20 (2026-10-28, applied: 30 live, 568 in all).** The file is
+`data/description-batch-20.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,963 characters), and the live
+prod-01469 page was checked. Every photo was usable. Three had older name
+copies (prod-00636, prod-00337, prod-00568), and their exact text is in the
+audit rows and the log.
+
+- **Name doesn't match the photo (left out):** S146893 "Squirrel" looks
+  like a chick. P257260 "Heart Puppy" looks like a bear or cat. F287792
+  "Butterfly Print" shows birds and hearts. F286940 "Red And Peach" shows
+  hot and light pink. FD250019 "Light Green" is mid green.
+- S146927 "Mermaid Slime": the photo also shows a dinosaur display. The
+  label says 72/bx x 8 = 576 against the name's cs.144.
+- Case counts: F287698 (200 against 192), D751119 (240 against 192),
+  T641826 (50 against 48), D751121 (QuickBooks 70 against 140). P273689's
+  QuickBooks entry says 36cm and 36/cs.
+- K229433's "number 5 bottle" resembles a perfume brand; it's described
+  generically.
+- Name-fix list: "Flora" for Floral again (F286940).
+
+**Progress 2026-10-28:** 568 of 1,183 visible products have a real
+description, and 615 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
