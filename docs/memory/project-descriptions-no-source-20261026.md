@@ -638,8 +638,20 @@ were blank; the rest were name copies.
 
 - Names: T642214 "Shapped" typo; P273623 has a stray dash.
 
-**Progress 2026-10-28:** 890 of 1,183 visible products have a real
-description, and 293 remain.
+**Batch 32 (2026-10-28, applied: 27 live, 917 in all).** The file is
+`data/description-batch-32.csv`; the cap is now 4 per category. 27 audit
+rows (written before the apply) were matched against the live text (3,100
+characters), and the live prod-02270 page was checked. Five old
+descriptions were blank (prod-03031 among them, so not only prod-40xxx ids).
+
+- P273744 is another "Brown Bear" capybara. P273803-60cm uses the 46CM photo.
+  T641716 starts with stray "XR009) (". B325120 "2 Style" shows one style.
+- Case counts: P273583 (name 12 x 50 = 600, label and QuickBooks 360),
+  F287769 (name cs.50, really 1,000 pcs), P273819 (label 24, QuickBooks 48),
+  T641209 (name 50bg/cs and cs.48).
+
+**Progress 2026-10-28:** 917 of 1,183 visible products have a real
+description, and 266 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
