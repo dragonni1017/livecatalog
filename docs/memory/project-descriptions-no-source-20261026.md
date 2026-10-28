@@ -605,8 +605,19 @@ products), and prod-02571 had an older name copy; all are kept exactly.
 - Case counts: T641850 (label and QuickBooks 54 against 48), T641666
   (label 96, QuickBooks 108).
 
-**Progress 2026-10-28:** 807 of 1,183 visible products have a real
-description, and 376 remain.
+**Batch 29 (2026-10-28, applied: 30 live, 837 in all).** The file is
+`data/description-batch-29.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,037 characters), and the live
+prod-02812 page was checked. Four old descriptions were blank and two
+(pull bows) were older name copies; all are kept exactly.
+
+- S162753 is another "Brown Bear" capybara. F286610 "Four Colored" shows
+  two colours.
+- Case counts: F287848 (label and QuickBooks 40 against 36). F286459's
+  handwritten label looks like 30/cs against 40 (hard to read).
+
+**Progress 2026-10-28:** 837 of 1,183 visible products have a real
+description, and 346 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
