@@ -380,8 +380,22 @@ before applying.
   "Rectaungular" (G333166, G333167); leftover sizes in F287155/F287156 and
   F287154 (batch 14).
 
-**Progress 2026-10-28:** 422 of 1,183 visible products have a real
-description, and 761 remain.
+**Batch 16 (2026-10-28, applied: 28 live, 450 in all).** The file is
+`data/description-batch-16.csv`. All 28 were read back (2,926 characters),
+and the live prod-00534 page was checked. Logged like batch 15 (28
+`audit_log` rows, log CSV, undo JSON). P257216 and T641505 got no
+description (blurry); add them to the bad-photo exclusions.
+
+- F287859 "Butterfly-Pattern" shows a flower border (pattern left unnamed).
+- 3D801255 is 72/cs on the label and in the name, 12 in QuickBooks.
+- QuickBooks colours are incomplete: F287297 "pink & red" and F287298 "red"
+  also show purple (and pink).
+- Character look-alikes (the K229418 fish) are described generically, not
+  by character name.
+- Name-fix list: "Rectaungular" again (G333170).
+
+**Progress 2026-10-28:** 450 of 1,183 visible products have a real
+description, and 733 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
