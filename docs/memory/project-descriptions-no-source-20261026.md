@@ -493,8 +493,29 @@ log.
   equals the QuickBooks carton size, so it isn't the product size.
 - Name-fix list: P273701 10' (feet).
 
-**Progress 2026-10-28:** 598 of 1,183 visible products have a real
-description, and 585 remain.
+**Batch 22 (2026-10-28, applied: 30 live, 628 in all).** The file is
+`data/description-batch-22.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,791 characters), and the live
+prod-01527 page was checked. Every photo was usable.
+
+- **Copy-detector trap:** a short description whose words all appear in
+  the name ("Green flower lei." for "Solid Green Flower Lei") counts as a
+  name copy under `isNameCopyDescription` and would be hidden. It was caught
+  before applying, and batches 14-22 were all re-checked clean. Run every
+  batch file through the same word-subset check before applying.
+- **The QuickBooks sales descriptions of K229440 and K229420 are swapped:**
+  the soccer ball says "Open Heart" and the heart says "Soccer".
+- P273725 "Fat Cat 20'": label 13.5" (size left out); QuickBooks 12/cs
+  against the label's 18.
+- Case counts: S162748 (QuickBooks 24 against 36), T641923 (label 75
+  against 84), T641919 (QuickBooks 48 against 24), P282115 (QuickBooks 120
+  against 240), F287851 (label 40 against 36).
+- K229439 is another "Brown Bear" capybara. F286983's pattern resembles a
+  luxury monogram (described generically).
+- Name-fix list: "Rafia" for Raffia (G333158).
+
+**Progress 2026-10-28:** 628 of 1,183 visible products have a real
+description, and 555 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
