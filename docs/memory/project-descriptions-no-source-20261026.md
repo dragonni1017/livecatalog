@@ -559,8 +559,21 @@ the bad-photo exclusions.
 - Brand-like designs (tweed charm purse, race cars, "Tetris" in a name)
   are described generically.
 
-**Progress 2026-10-28:** 717 of 1,183 visible products have a real
-description, and 466 remain.
+**Batch 26 (2026-10-28, applied: 30 live, 747 in all).** The file is
+`data/description-batch-26.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,828 characters), and the live
+prod-40588 page was checked. Every photo was usable. prod-40588's old
+description was blank, and prod-02535 had an older name copy; both are kept
+exactly in the audit rows and the log.
+
+- **T641581 and T641585 are named "Single Plate", but the photos and boxes
+  show bowls.**
+- Case counts: F286505 (QuickBooks 200 against 180), T641868 (QuickBooks
+  600 against the name's 300).
+- Name-fix list: "Motocycle" (E273146), "GIft" (T641868).
+
+**Progress 2026-10-28:** 747 of 1,183 visible products have a real
+description, and 436 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
