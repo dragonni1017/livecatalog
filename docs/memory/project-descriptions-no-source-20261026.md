@@ -572,8 +572,23 @@ exactly in the audit rows and the log.
   600 against the name's 300).
 - Name-fix list: "Motocycle" (E273146), "GIft" (T641868).
 
-**Progress 2026-10-28:** 747 of 1,183 visible products have a real
-description, and 436 remain.
+**Batch 27 (2026-10-28, applied: 30 live, 777 in all).** The file is
+`data/description-batch-27.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,751 characters), and the live
+prod-02827 page was checked. Every photo was usable. prod-03026 and
+prod-03023 had blank old descriptions (undo restores blank).
+
+- **Three more "Single Plate" products are bowls** (T641586, T641588,
+  T641593), making five with batch 26's T641581 and T641585. The whole
+  T6415xx "Single Plate" series probably needs renaming to bowls.
+- Sizes left out where the label and name disagree: P273690 (label 14",
+  name "40m", QuickBooks 25cm), P273815-60cm (label 27.5", name 24"),
+  T641790 (label 40", name 29.5").
+- Case counts: T641139 and T641820 (QuickBooks and label 50, names 48).
+- Name-fix list: "Cristmas" (P257192); T641790's name is truncated ("C...").
+
+**Progress 2026-10-28:** 777 of 1,183 visible products have a real
+description, and 406 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
