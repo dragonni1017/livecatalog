@@ -587,8 +587,26 @@ prod-03023 had blank old descriptions (undo restores blank).
 - Case counts: T641139 and T641820 (QuickBooks and label 50, names 48).
 - Name-fix list: "Cristmas" (P257192); T641790's name is truncated ("C...").
 
-**Progress 2026-10-28:** 777 of 1,183 visible products have a real
-description, and 406 remain.
+**Batch 28 (2026-10-28, applied: 30 live, 807 in all).** The file is
+`data/description-batch-28.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,108 characters), and the live
+prod-40522 page was checked. Ten old descriptions were blank (newer
+products), and prod-02571 had an older name copy; all are kept exactly.
+
+- **"Brown Bear" = capybara is confirmed:** P257278's "Brown Bear" pen
+  display box is printed "CAPY BARA".
+- **Photo doesn't match the product:** F286809-GR "Gray" shows the black
+  set (label F286809-BLK). 3D801313 "Dino Toy" shows a shaggy horned cow or
+  yak. T641666's photo label reads T641166. K229468's reads K229467.
+- **Names that don't describe the product:** T642233 "Butterfly Leather
+  Patch" and T642236 "Rectangular Fish Scale Pattern" are compact mirrors.
+  T642241 "Spraying Painting Color" is a lace print. T642180 "Limbing" is
+  probably Bling.
+- Case counts: T641850 (label and QuickBooks 54 against 48), T641666
+  (label 96, QuickBooks 108).
+
+**Progress 2026-10-28:** 807 of 1,183 visible products have a real
+description, and 376 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
