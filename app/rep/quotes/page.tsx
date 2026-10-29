@@ -17,6 +17,7 @@ interface QuoteRow extends AttributableOrder {
   customer_name: string | null
   customer_company: string | null
   customer_email: string | null
+  assigned_rep_email: string | null
 }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -50,20 +51,23 @@ export default async function RepQuotesPage() {
   const user = await getSessionUser()
   const db = getAdminClient()
   const email = user?.email ?? ''
-  const fields = 'id, reference_code, created_at, status, subtotal_cents, placed_by_rep, rep_user_id, customer_name, customer_company, customer_email'
+  const fields = 'id, reference_code, created_at, status, subtotal_cents, placed_by_rep, rep_user_id, customer_name, customer_company, customer_email, assigned_rep_email'
 
-  const [byUser, byEmail, reps] = await Promise.all([
+  const [byUser, byEmail, byOwner, reps] = await Promise.all([
     user ? db.from('order_requests').select(fields).eq('rep_user_id', user.id) : Promise.resolve({ data: [] }),
     email ? db.from('order_requests').select(fields).ilike('placed_by_rep', ilikeExact(email)) : Promise.resolve({ data: [] }),
+    // Orders this rep owns for follow-up (docs/ORDER-FOLLOW-UP-PLAN.md part 2).
+    email ? db.from('order_requests').select(fields).ilike('assigned_rep_email', ilikeExact(email)) : Promise.resolve({ data: [] }),
     loadRepAccounts(db),
   ])
   const seen = new Map<string, QuoteRow>()
-  for (const o of [...((byUser.data ?? []) as QuoteRow[]), ...((byEmail.data ?? []) as QuoteRow[])]) seen.set(o.id, o)
-  // Same credit rule as the admin page, so the two always agree.
+  for (const o of [...((byUser.data ?? []) as QuoteRow[]), ...((byEmail.data ?? []) as QuoteRow[]), ...((byOwner.data ?? []) as QuoteRow[])]) seen.set(o.id, o)
+  const isOwner = (o: QuoteRow) => !!email && o.assigned_rep_email?.toLowerCase() === email.toLowerCase()
+  // Credited by the same rule as the admin page (so the two always agree), or assigned to this rep.
   const mine = [...seen.values()]
     .filter((o) => {
       const a = attributeOrder(o, reps)
-      return a.kind === 'rep' && a.repId === user?.id
+      return (a.kind === 'rep' && a.repId === user?.id) || isOwner(o)
     })
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
@@ -78,7 +82,7 @@ export default async function RepQuotesPage() {
         <h1 className="mt-2 text-2xl font-bold text-gray-900">My Quotes</h1>
         <p className="mb-6 text-sm text-gray-500">
           Quote requests credited to you: you were chosen in &quot;Placed by (rep)&quot; (or the customer used your link), or you
-          placed it while signed in.
+          placed it while signed in. Also any quote assigned to you to follow up.
         </p>
 
         <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -133,6 +137,9 @@ export default async function RepQuotesPage() {
                       <td className="px-4 py-3 text-right tabular-nums">{dollars(o.subtotal_cents ?? 0)}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                        {isOwner(o) && (
+                          <span className="ml-1.5 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Yours to follow up</span>
+                        )}
                       </td>
                     </tr>
                   )

@@ -4,6 +4,8 @@ import { getAdminClient } from '@/lib/supabase'
 import OrderStatusControls from '@/components/admin/OrderStatusControls'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import OrderDismissControls from '@/components/admin/OrderDismissControls'
+import OrderOwnerControl from '@/components/admin/OrderOwnerControl'
+import { loadRepAccounts } from '@/lib/rep-accounts'
 import { dismissBlocker } from '@/lib/order-dismiss'
 import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
@@ -80,6 +82,7 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
     .maybeSingle()
   const cert = certData as Pick<ResaleCertificate, 'id' | 'state' | 'permit_number' | 'expires_on' | 'status'> | null
   const taxLine = orderTaxLine(order)
+  const repEmails = (await loadRepAccounts(db)).map((r) => r.email)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -133,6 +136,14 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
               {order.status_changed_by ? ` by ${order.status_changed_by}` : ''}
             </p>
           )}
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Owner (follows up)</h3>
+            <OrderOwnerControl id={order.id} owner={order.assigned_rep_email} reps={repEmails} />
+            {order.assigned_rep_email && order.assigned_at && (
+              <p className="mt-2 text-xs text-gray-400">Assigned {formatDate(order.assigned_at)}</p>
+            )}
+          </div>
 
           <div className="mt-5 border-t border-gray-100 pt-4">
             <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">QuickBooks</h3>
