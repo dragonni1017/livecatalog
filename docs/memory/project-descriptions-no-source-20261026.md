@@ -713,8 +713,21 @@ were matched against the live text, and the live prod-40598 page was checked.
 - P273647-50CM-CHK is named 20" (50cm), but its photo label is the 16" base
   P273647, so no size was given.
 
-**Progress 2026-10-29:** 1,043 of 1,183 visible products have a real
-description, and 140 remain.
+**Batch 39 (2026-10-29, applied: 40 live, 1,083 in all).** The file is
+`data/description-batch-39-log.csv`. From this batch on the selection cap is
+12 per category and 40 per batch (the user asked for bigger batches; the
+4-per-category cap had shrunk batches to 16). 40 audit rows (written before
+the apply) were matched against the live text, and the live prod-40553 page
+was checked. 20 old descriptions were blank (the prod-40xxx ids).
+
+- P273854 "Potted Water Chestnut" shows calla-lily-style flowers. F287738
+  "Red" looks rose pink with red trim. Three-colo typo (K229510).
+- Case counts: P273859-35CM (label 12/cs, QuickBooks 24), F287820 (name 1/pk,
+  QuickBooks 20/pk), F287778 (label 150 pcs/cs, name 48/pk), F287746 (name
+  1/pk, label 20/pk x 30), P273854 (label 72/cs, QuickBooks 60).
+
+**Progress 2026-10-29:** 1,083 of 1,183 visible products have a real
+description, and 100 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
