@@ -726,8 +726,21 @@ was checked. 20 old descriptions were blank (the prod-40xxx ids).
   QuickBooks 20/pk), F287778 (label 150 pcs/cs, name 48/pk), F287746 (name
   1/pk, label 20/pk x 30), P273854 (label 72/cs, QuickBooks 60).
 
-**Progress 2026-10-29:** 1,083 of 1,183 visible products have a real
-description, and 100 remain.
+**Batch 40 (2026-10-29, applied: 39 live, 1,122 in all).** The file is
+`data/description-batch-40-log.csv`. The 12-per-category cap only gave 24, so
+16 more came from beyond the cap. Photos were viewed as labelled 2x2 contact
+sheets (sharp from node_modules, scratchpad montage.cjs). 39 audit rows
+(written before the apply) were matched against the live text, and the live
+prod-40637 page was checked. 25 old descriptions were blank. F288013 ("White
+Gold Dotted") was left out: its photo shows red hearts like F287683. Add it to
+the bad-photo exclusion list.
+
+- Solid-paper names that do not match the photo color: F287826 "Light Green"
+  (taupe), F287976 "Light Grey" (mauve), F287979 "Light Cream" (tan kraft),
+  F287981 "Salmon" (rose pink). Lavedar typo (F287906).
+
+**Progress 2026-10-29:** 1,122 of 1,183 visible products have a real
+description, and 61 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
