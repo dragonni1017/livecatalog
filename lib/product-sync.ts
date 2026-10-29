@@ -32,6 +32,24 @@ export async function selectAll<T>(
   return all
 }
 
+/**
+ * The price an EXISTING product is synced to, given what the source sends and
+ * the catalog's held price (products.held_price_cents, migration 0068).
+ *
+ * Prices are entered by hand in Erply, so a price set in the catalog first
+ * would be overwritten by the next daily sync. A held price wins until the
+ * source's price equals it; that sync clears the hold (`release`), and from
+ * then on the source owns the price again. Pure.
+ */
+export function resolveHeldPrice(
+  incomingCents: number,
+  heldCents: number | null | undefined,
+): { price_cents: number; release: boolean } {
+  if (heldCents == null || heldCents <= 0) return { price_cents: incomingCents, release: false }
+  if (incomingCents === heldCents) return { price_cents: incomingCents, release: true }
+  return { price_cents: heldCents, release: false }
+}
+
 /** Normalized product shape that both sources (Excel + Erply) map into */
 export interface SyncProduct {
   sku: string
@@ -209,10 +227,16 @@ export async function syncToSupabase(
   // 2. Snapshot existing SKUs for insert vs update counting.
   //    Paginate: a plain select is capped at 1000 rows by PostgREST, which would
   //    misclassify updates as inserts once the catalog exceeds 1000 products.
-  const existingRows = await selectAll<{ sku: string }>((from, to) =>
-    db.from('products').select('sku').range(from, to),
+  //    held_price_cents comes along so a catalog-held price survives the sync
+  //    (see resolveHeldPrice).
+  const existingRows = await selectAll<{ sku: string; held_price_cents?: number | null }>((from, to) =>
+    db.from('products').select('sku, held_price_cents').range(from, to),
   )
   const existingSkus = new Set(existingRows.map((r) => r.sku))
+  const heldBySku = new Map<string, number>()
+  for (const r of existingRows) if (r.held_price_cents) heldBySku.set(r.sku, r.held_price_cents)
+  const heldKept: string[] = []
+  const heldReleased: string[] = []
 
   // 3. Build DB records
   const now = new Date().toISOString()
@@ -257,9 +281,15 @@ export async function syncToSupabase(
     // it failed 500 rows on the 2026-09-24 sync, the first one where a new
     // $0 product appeared after the guard shipped.
     if (isNewProduct && p.price_cents <= 0) hideOnInsert.push(p.sku)
+    // A catalog-held price (migration 0068) is kept until the source catches
+    // up with it. Releasing the hold adds held_price_cents: null to the row,
+    // a different key set, which byKeySet below upserts in its own chunk.
+    const held = isNewProduct ? { price_cents: p.price_cents, release: false } : resolveHeldPrice(p.price_cents, heldBySku.get(p.sku))
+    if (!isNewProduct && heldBySku.has(p.sku)) (held.release ? heldReleased : heldKept).push(p.sku)
     // An EXISTING product re-zeroed upstream (Erply price cleared, or a $0 or
     // blank Price in an Excel sheet) is hidden too if it is visible. See 4c.
-    if (!isNewProduct && p.price_cents <= 0) hideIfVisible.push(p.sku)
+    // Not when a held price is keeping it priced.
+    if (!isNewProduct && held.price_cents <= 0) hideIfVisible.push(p.sku)
     // Same insert-only rule as category: when 'description' is skipped, an
     // existing product's description is never touched, but a new one still
     // gets Erply's.
@@ -270,7 +300,8 @@ export async function syncToSupabase(
       sku: p.sku,
       barcode: p.barcode,
       name: p.name,
-      price_cents: p.price_cents,
+      price_cents: held.price_cents,
+      ...(held.release ? { held_price_cents: null } : {}),
       ...(setDescription ? { description: p.description } : {}),
       is_active: p.is_active,
       ...(setStock ? { stock_qty: p.stock_qty ?? 0 } : {}),
@@ -430,7 +461,10 @@ export async function syncToSupabase(
   if (uncategorized.length) {
     console.warn(`[product-sync] ${uncategorized.length} new product(s) with no matching category: ${uncategorized.slice(0, 20).map((u) => `${u.sku} ("${u.category}")`).join(', ')}`)
   }
-  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized, deactivatedSkus, zeroPriceHidden }
+  if (heldKept.length || heldReleased.length) {
+    console.log(`[product-sync] held prices: ${heldKept.length} kept (source differs), ${heldReleased.length} released (source now matches)`)
+  }
+  return { inserted, updated, deactivated, skipped: errors.length, errors, uncategorized, deactivatedSkus, zeroPriceHidden, heldPrices: { kept: heldKept, released: heldReleased } }
 }
 
 /**
