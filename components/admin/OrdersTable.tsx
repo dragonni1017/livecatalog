@@ -5,6 +5,8 @@ import Link from 'next/link'
 import OrderStatusBadge from '@/components/admin/OrderStatusBadge'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import { tierLabel } from '@/lib/order-rules'
+import { DISMISS_REASON_LABELS, isDismissReason } from '@/lib/order-dismiss'
+import { isWaiting, waitAge } from '@/lib/order-age'
 import type { OrderStatus } from '@/lib/types'
 
 export interface OrderRow {
@@ -19,6 +21,9 @@ export interface OrderRow {
   entered_in_qb: boolean
   notes: string | null
   applied_tier_code: string | null
+  dismissed_at: string | null
+  dismissed_reason: string | null
+  assigned_rep_email: string | null
   order_items: { count: number }[]
 }
 
@@ -44,14 +49,52 @@ const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
   { value: 'lost', label: 'Lost' },
 ]
 
-export default function OrdersTable({ orders, initialSearch }: { orders: OrderRow[]; initialSearch?: string }) {
+const WAIT_STYLES = {
+  fresh: 'bg-gray-100 text-gray-600',
+  amber: 'bg-amber-100 text-amber-800',
+  red: 'bg-red-100 text-red-700',
+} as const
+
+function WaitBadge({ createdAt, nowIso }: { createdAt: string; nowIso: string }) {
+  const a = waitAge(createdAt, nowIso)
+  const text = a.calendarDays === 0 ? 'Waiting: today' : `Waiting ${a.calendarDays}d`
+  return (
+    <span
+      className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${WAIT_STYLES[a.level]}`}
+      title={`${a.businessDays} business day${a.businessDays === 1 ? '' : 's'} without a response`}
+    >
+      {text}
+    </span>
+  )
+}
+
+export default function OrdersTable({
+  orders,
+  initialSearch,
+  initialFollowUp = false,
+  nowIso,
+}: {
+  orders: OrderRow[]
+  initialSearch?: string
+  /** Start on "Needs follow-up" (/admin/orders?view=followup, the dashboard link). */
+  initialFollowUp?: boolean
+  nowIso: string
+}) {
+  // Needs follow-up: waiting orders only (new, not dismissed), oldest first.
+  const [followUp, setFollowUp] = useState(initialFollowUp)
+  const waitingCount = useMemo(() => orders.filter(isWaiting).length, [orders])
   const [status, setStatus] = useState<OrderStatus | 'all'>('all')
   const [qb, setQb] = useState<'all' | 'entered' | 'pending'>('all')
   const [search, setSearch] = useState(initialSearch ?? '')
+  // Dismissed test/duplicate/spam requests are hidden unless asked for.
+  const [showDismissed, setShowDismissed] = useState(false)
+  const dismissedCount = useMemo(() => orders.filter((o) => o.dismissed_at).length, [orders])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return orders.filter((o) => {
+    const rows = orders.filter((o) => {
+      if (followUp && !isWaiting(o)) return false
+      if (!showDismissed && o.dismissed_at) return false
       if (status !== 'all' && o.status !== status) return false
       if (qb === 'entered' && !o.entered_in_qb) return false
       if (qb === 'pending' && o.entered_in_qb) return false
@@ -61,7 +104,8 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
       }
       return true
     })
-  }, [orders, status, qb, search])
+    return followUp ? [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at)) : rows
+  }, [orders, status, qb, search, showDismissed, followUp])
 
   const selectCls =
     'rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
@@ -70,6 +114,16 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
     <div>
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setFollowUp((v) => !v)}
+          className={
+            'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ' +
+            (followUp ? 'bg-red-600 text-white hover:bg-red-700' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50')
+          }
+        >
+          Needs follow-up ({waitingCount})
+        </button>
         <input
           type="search"
           value={search}
@@ -89,6 +143,17 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
           <option value="pending">QB: not entered</option>
           <option value="entered">QB: entered</option>
         </select>
+        {dismissedCount > 0 && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={showDismissed}
+              onChange={(e) => setShowDismissed(e.target.checked)}
+              className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            />
+            Show dismissed ({dismissedCount})
+          </label>
+        )}
         <span className="text-sm text-gray-400">
           {filtered.length} of {orders.length}
         </span>
@@ -105,6 +170,7 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Items</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Total</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Owner</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Submitted</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">QuickBooks</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Sales order</th>
@@ -146,7 +212,19 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                   <td className="px-4 py-3 text-gray-600">{o.order_items?.[0]?.count ?? 0}</td>
                   <td className="px-4 py-3 font-semibold text-gray-900">{formatPrice(o.subtotal_cents)}</td>
                   <td className="px-4 py-3">
-                    <OrderStatusBadge status={o.status} />
+                    {o.dismissed_at ? (
+                      <span className="inline-flex rounded-full bg-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                        Dismissed: {isDismissReason(o.dismissed_reason) ? DISMISS_REASON_LABELS[o.dismissed_reason] : o.dismissed_reason}
+                      </span>
+                    ) : (
+                      <div className="flex flex-col items-start">
+                        <OrderStatusBadge status={o.status} />
+                        {isWaiting(o) && <WaitBadge createdAt={o.created_at} nowIso={nowIso} />}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600" title={o.assigned_rep_email ?? undefined}>
+                    {o.assigned_rep_email ? o.assigned_rep_email.split('@')[0] : <span className="text-gray-400">Unassigned</span>}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(o.created_at)}</td>
                   <td className="px-4 py-3">
@@ -173,7 +251,7 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">
                     {orders.length === 0 ? 'No order requests yet.' : 'No orders match your filters.'}
                   </td>
                 </tr>

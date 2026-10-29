@@ -5,6 +5,7 @@ import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation
 import { notifyReps, notifyCustomer } from '@/lib/order-emails'
 import { isSignedInAsOrderEmail } from '@/lib/order-rules'
 import { buildLineItems, insertOrder } from '@/lib/order-submission'
+import { autoAssignOrder } from '@/lib/order-auto-assign'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 import { resolveCustomerPricing } from '@/lib/customer-pricing'
 import { loadPromotion, priceWithPromotion } from '@/lib/promotions'
@@ -225,8 +226,10 @@ export async function POST(request: NextRequest) {
     await Promise.allSettled([
       notifyReps({ referenceCode, contact, lineItems, subtotalCents, outOfStock, discountPct, tax: taxColumns(tax) }),
       notifyCustomer({ referenceCode, accessToken, contact, lineItems, subtotalCents, tax: taxColumns(tax) }),
+      // Owner for follow-up (docs/ORDER-FOLLOW-UP-PLAN.md part 2). Catches its own errors.
+      autoAssignOrder(db, orderId),
     ]).then((results) => {
-      const labels = ['rep notification', 'customer confirmation']
+      const labels = ['rep notification', 'customer confirmation', 'auto-assign']
       results.forEach((r, i) => {
         if (r.status === 'rejected') console.error(`[orders] ${labels[i]} failed (order still saved):`, r.reason)
       })

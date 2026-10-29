@@ -7,17 +7,21 @@ export const dynamic = 'force-dynamic'
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string }>
+  searchParams: Promise<{ email?: string; view?: string }>
 }) {
-  const { email } = await searchParams
+  const { email, view } = await searchParams
+  // One "now" for the whole render, so server and client agree on ages.
+  const nowIso = new Date().toISOString()
   const db = getAdminClient()
   const { data } = await db
     .from('order_requests')
-    .select('id, reference_code, status, customer_name, customer_company, customer_email, subtotal_cents, created_at, entered_in_qb, notes, applied_tier_code, order_items(count)')
+    .select('id, reference_code, status, customer_name, customer_company, customer_email, subtotal_cents, created_at, entered_in_qb, notes, applied_tier_code, dismissed_at, dismissed_reason, assigned_rep_email, order_items(count)')
     .order('created_at', { ascending: false })
 
   const orders = (data ?? []) as OrderRow[]
-  const openCount = orders.filter((o) => o.status === 'new').length
+  // Dismissed test/duplicate/spam requests (migration 0069) aren't waiting on anyone.
+  const openCount = orders.filter((o) => o.status === 'new' && !o.dismissed_at).length
+  const dismissedCount = orders.filter((o) => o.dismissed_at).length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -46,10 +50,15 @@ export default async function AdminOrdersPage({
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
             <span className="font-semibold text-gray-900">{openCount.toLocaleString()}</span> new
           </span>
+          {dismissedCount > 0 && (
+            <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-500">
+              <span className="font-semibold text-gray-700">{dismissedCount.toLocaleString()}</span> dismissed (hidden)
+            </span>
+          )}
         </div>
 
         {/* Table with filters/search */}
-        <OrdersTable orders={orders} initialSearch={email} />
+        <OrdersTable orders={orders} initialSearch={email} initialFollowUp={view === 'followup'} nowIso={nowIso} />
       </div>
     </div>
   )

@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest) {
     // Fetch current values before updating so we can record old_value in the audit log
     const { data: current } = await db
       .from('order_requests')
-      .select('status, entered_in_qb, reference_code, stock_decremented_at')
+      .select('status, entered_in_qb, reference_code, stock_decremented_at, first_response_at')
       .eq('id', id)
       .single()
 
@@ -61,6 +61,12 @@ export async function PATCH(request: NextRequest) {
       // Single shared admin login — no per-user identity to record.
       patch.status_changed_by = 'admin'
       patch.status_changed_at = now
+      // First time the order leaves 'new' (migration 0069, order follow-up
+      // part 3). Recorded once and never moved; nothing else reads it here, so
+      // the email/stock/QuickBooks side effects below are unchanged.
+      if (body.status !== 'new' && current?.status === 'new' && !current?.first_response_at) {
+        patch.first_response_at = now
+      }
     }
     if (hasEntered) {
       patch.entered_in_qb = Boolean(body.enteredInQb)

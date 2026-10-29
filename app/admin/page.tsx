@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
 import { getAdminClient } from '@/lib/supabase'
+import { summarizeWaiting, type WaitingSummary } from '@/lib/order-age'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,13 +10,25 @@ export default async function AdminDashboard() {
   let creditPending = 0
   let stagedShipments = 0
   let certPending = 0
+  let waiting: WaitingSummary | null = null
   try {
     const db = getAdminClient()
+
+    // Quote requests still waiting for a first response (order follow-up part 3).
+    const { data: waitingRows, error: waitingError } = await db
+      .from('order_requests')
+      .select('status, dismissed_at, created_at, subtotal_cents')
+      .eq('status', 'new')
+      .is('dismissed_at', null)
+    if (!waitingError) waiting = summarizeWaiting(waitingRows ?? [], new Date().toISOString())
+
     const { count } = await db
       .from('order_requests')
       .select('id', { count: 'exact', head: true })
       .eq('entered_in_qb', false)
       .neq('status', 'lost')
+      // Dismissed test/duplicate/spam requests (migration 0069) never go to QB.
+      .is('dismissed_at', null)
     qbPending = count ?? 0
 
     // Not head:true — a HEAD response has no body for supabase-js to read an
@@ -63,6 +76,24 @@ export default async function AdminDashboard() {
 
         {/* Action cards */}
         <div className="grid gap-4">
+          {waiting && waiting.count > 0 && (
+            <Link
+              href="/admin/orders?view=followup"
+              className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-6 py-5 shadow-sm hover:border-red-400 hover:shadow-md transition-all group"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-red-800">Needs follow-up</h2>
+                <p className="text-sm text-red-700 mt-0.5">
+                  {waiting.count} waiting · oldest {waiting.oldestCalendarDays} day{waiting.oldestCalendarDays === 1 ? '' : 's'} ·{' '}
+                  {'$' + (waiting.totalCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <svg className="w-5 h-5 text-red-400 group-hover:text-red-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          )}
+
           <Link
             href="/admin/import"
             className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
