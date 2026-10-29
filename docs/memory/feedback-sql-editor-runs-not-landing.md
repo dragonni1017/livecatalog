@@ -13,6 +13,8 @@ reported as done left the live project `aguorduaxfqrvvywgrdi` unchanged:
 | 2026-10-23 | migration 0067 (`awaiting_price`), run 1 and 2 | column absent; no ALTER in the logs |
 | 2026-10-26 | same, opened via `https://supabase.com/dashboard/project/aguorduaxfqrvvywgrdi/sql/new` | **landed**: 148 rows flagged |
 | 2026-10-26 | `delete from public.customers where email = ...`, twice | row untouched (same id, `updated_at` unchanged) |
+| 2026-10-29 | migration 0069, run 1 (one-line statements) | **error, all rolled back**: the paste lost text mid-line (`= st<> 'new'`, `andstatus_changed_at`) |
+| 2026-10-29 | migration 0069, run 2 (same SQL, short lines) | **landed**, but one constraint name was cut to `order_requests_dismissed_pair_c` |
 
 Nothing on the DB side explains it. No triggers, rules or FKs block the
 delete. The only other project, "Task Manager", is paused. The cause is
@@ -53,6 +55,13 @@ isn't done stays broken.
   `PATCH /admin/api/products {id, description}` (the Cleanup editor's own
   save), worked first time, followed by a read-back. Keep editor SQL for short
   statements without free text, such as migrations.
+- **Long single-line SQL gets mangled too (2026-10-29).** Migration 0069 sent
+  as long one-line statements lost characters on paste; the editor runs the
+  whole script as one transaction, so the bad last line rolled back every
+  line before it. Re-sent with one clause per line, it landed. Send
+  migrations with short lines (or point at the migration file to copy), and
+  read back the column names, the constraint names (`pg_constraint`) and any
+  backfill count, since a name can be cut while the run still "succeeds".
 - Related: a write through the admin site can also silently not happen; see
   [[project-admin-login-wholesale-tier-20261026]] (confirm popup) and
   [[feedback-browser-state-change-blocked]].
