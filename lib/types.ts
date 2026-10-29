@@ -144,6 +144,13 @@ export interface OrderRequest {
   // Orthogonal to status for the same reason as entered_in_qb above — see
   // migration 0037_order_stock_decremented.sql.
   stock_decremented_at: string | null
+  // Order follow-up (migration 0069, lib/order-dismiss.ts). dismissed_* is a
+  // silent "test/duplicate/spam" flag, not a status: no email, stock or QB.
+  assigned_at?: string | null
+  first_response_at?: string | null
+  dismissed_at?: string | null
+  dismissed_reason?: string | null
+  dismissed_by?: string | null
   // Set only when a rep account (not the free-text placed_by_rep) placed/priced
   // this order — see migrations 0028-0030.
   rep_user_id: string | null

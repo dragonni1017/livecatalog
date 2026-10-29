@@ -16,6 +16,8 @@ export default async function AdminDashboard() {
       .select('id', { count: 'exact', head: true })
       .eq('entered_in_qb', false)
       .neq('status', 'lost')
+      // Dismissed test/duplicate/spam requests (migration 0069) never go to QB.
+      .is('dismissed_at', null)
     qbPending = count ?? 0
 
     // Not head:true — a HEAD response has no body for supabase-js to read an

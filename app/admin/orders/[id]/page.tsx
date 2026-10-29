@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import { getAdminClient } from '@/lib/supabase'
 import OrderStatusControls from '@/components/admin/OrderStatusControls'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
+import OrderDismissControls from '@/components/admin/OrderDismissControls'
+import { dismissBlocker } from '@/lib/order-dismiss'
 import { tierLabel, formatTierAdjustment } from '@/lib/order-rules'
 import type { OrderItemRecord, OrderRequest } from '@/lib/types'
 import { certStatusClasses, certStatusLabel, type ResaleCertificate } from '@/lib/resale-certificates'
@@ -139,6 +141,23 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
               <p className="mt-2 text-xs text-gray-400">Entered {formatDate(order.entered_in_qb_at)}</p>
             )}
           </div>
+
+          {(() => {
+            const dismissedAt = order.dismissed_at ?? null
+            const blocker = dismissBlocker({ status: order.status, entered_in_qb: order.entered_in_qb, dismissed_at: dismissedAt })
+            if (!dismissedAt && blocker) return null
+            return (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Test / duplicate / spam</h3>
+                <OrderDismissControls
+                  id={order.id}
+                  dismissedAt={dismissedAt}
+                  dismissedReason={order.dismissed_reason ?? null}
+                  blocker={blocker}
+                />
+              </div>
+            )
+          })()}
         </section>
 
         {/* Buyer discount */}

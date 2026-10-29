@@ -5,6 +5,7 @@ import Link from 'next/link'
 import OrderStatusBadge from '@/components/admin/OrderStatusBadge'
 import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import { tierLabel } from '@/lib/order-rules'
+import { DISMISS_REASON_LABELS, isDismissReason } from '@/lib/order-dismiss'
 import type { OrderStatus } from '@/lib/types'
 
 export interface OrderRow {
@@ -19,6 +20,8 @@ export interface OrderRow {
   entered_in_qb: boolean
   notes: string | null
   applied_tier_code: string | null
+  dismissed_at: string | null
+  dismissed_reason: string | null
   order_items: { count: number }[]
 }
 
@@ -48,10 +51,14 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
   const [status, setStatus] = useState<OrderStatus | 'all'>('all')
   const [qb, setQb] = useState<'all' | 'entered' | 'pending'>('all')
   const [search, setSearch] = useState(initialSearch ?? '')
+  // Dismissed test/duplicate/spam requests are hidden unless asked for.
+  const [showDismissed, setShowDismissed] = useState(false)
+  const dismissedCount = useMemo(() => orders.filter((o) => o.dismissed_at).length, [orders])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return orders.filter((o) => {
+      if (!showDismissed && o.dismissed_at) return false
       if (status !== 'all' && o.status !== status) return false
       if (qb === 'entered' && !o.entered_in_qb) return false
       if (qb === 'pending' && o.entered_in_qb) return false
@@ -61,7 +68,7 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
       }
       return true
     })
-  }, [orders, status, qb, search])
+  }, [orders, status, qb, search, showDismissed])
 
   const selectCls =
     'rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
@@ -89,6 +96,17 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
           <option value="pending">QB: not entered</option>
           <option value="entered">QB: entered</option>
         </select>
+        {dismissedCount > 0 && (
+          <label className="flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={showDismissed}
+              onChange={(e) => setShowDismissed(e.target.checked)}
+              className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            />
+            Show dismissed ({dismissedCount})
+          </label>
+        )}
         <span className="text-sm text-gray-400">
           {filtered.length} of {orders.length}
         </span>
@@ -146,7 +164,13 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                   <td className="px-4 py-3 text-gray-600">{o.order_items?.[0]?.count ?? 0}</td>
                   <td className="px-4 py-3 font-semibold text-gray-900">{formatPrice(o.subtotal_cents)}</td>
                   <td className="px-4 py-3">
-                    <OrderStatusBadge status={o.status} />
+                    {o.dismissed_at ? (
+                      <span className="inline-flex rounded-full bg-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-600">
+                        Dismissed: {isDismissReason(o.dismissed_reason) ? DISMISS_REASON_LABELS[o.dismissed_reason] : o.dismissed_reason}
+                      </span>
+                    ) : (
+                      <OrderStatusBadge status={o.status} />
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(o.created_at)}</td>
                   <td className="px-4 py-3">
