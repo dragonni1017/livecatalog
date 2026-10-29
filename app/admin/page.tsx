@@ -11,8 +11,17 @@ export default async function AdminDashboard() {
   let stagedShipments = 0
   let certPending = 0
   let waiting: WaitingSummary | null = null
+  let pricesToReview = 0
   try {
     const db = getAdminClient()
+
+    // Price review queue (migration 0070). Errors (e.g. table not there yet) just hide the card.
+    const { data: reviewRows, error: reviewError } = await db
+      .from('price_review_items')
+      .select('id')
+      .eq('status', 'pending')
+    if (!reviewError) pricesToReview = reviewRows?.length ?? 0
+
 
     // Quote requests still waiting for a first response (order follow-up part 3).
     const { data: waitingRows, error: waitingError } = await db
@@ -76,6 +85,22 @@ export default async function AdminDashboard() {
 
         {/* Action cards */}
         <div className="grid gap-4">
+          {pricesToReview > 0 && (
+            <Link
+              href="/admin/price-review"
+              className="flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-6 py-5 shadow-sm hover:border-amber-400 hover:shadow-md transition-all group"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-amber-900">Price review</h2>
+                <p className="text-sm text-amber-800 mt-0.5">
+                  {pricesToReview} price{pricesToReview === 1 ? '' : 's'} to decide, each with a suggestion
+                </p>
+              </div>
+              <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          )}
           {waiting && waiting.count > 0 && (
             <Link
               href="/admin/orders?view=followup"
