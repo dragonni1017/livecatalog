@@ -22,6 +22,7 @@ export interface OrderRow {
   applied_tier_code: string | null
   dismissed_at: string | null
   dismissed_reason: string | null
+  assigned_rep_email: string | null
   order_items: { count: number }[]
 }
 
@@ -123,6 +124,7 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Items</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Total</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Owner</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Submitted</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">QuickBooks</th>
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Sales order</th>
@@ -172,6 +174,9 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
                       <OrderStatusBadge status={o.status} />
                     )}
                   </td>
+                  <td className="px-4 py-3 text-xs text-gray-600" title={o.assigned_rep_email ?? undefined}>
+                    {o.assigned_rep_email ? o.assigned_rep_email.split('@')[0] : <span className="text-gray-400">Unassigned</span>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(o.created_at)}</td>
                   <td className="px-4 py-3">
                     <EnteredInQbToggle id={o.id} initial={o.entered_in_qb} variant="cell" />
@@ -197,7 +202,7 @@ export default function OrdersTable({ orders, initialSearch }: { orders: OrderRo
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">
                     {orders.length === 0 ? 'No order requests yet.' : 'No orders match your filters.'}
                   </td>
                 </tr>
