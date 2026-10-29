@@ -694,8 +694,19 @@ were matched against the live text, and the live prod-02530 page was checked.
 - Case counts: F287680-BAG (label and name 240, QuickBooks 180), F287781
   (label 150 pcs/cs, name 48/pk x 150), P273848 (label 72/cs, QuickBooks 48).
 
-**Progress 2026-10-29:** 1,007 of 1,183 visible products have a real
-description, and 176 remain.
+**Batch 37 (2026-10-29, applied: 19 live, 1,026 in all).** The file is
+`data/description-batch-37-log.csv`. 19 audit rows (written before the apply)
+were matched against the live text, and the live prod-40613 page was checked.
+13 old descriptions were blank (the prod-40xxx ids). F287575 ("Green Pull
+Flower Ribbon with Gold Stripes") was left out: its photo is clear rose-print
+cellophane. Add it to the bad-photo exclusion list.
+
+- P257311 "Fur Notebook With Color Pencils" is a filled pencil case set.
+  S162776 "Candy" box says Crystal Squish Stretch Ball.
+- Case count: F287780 (label 150 pcs/cs, name 48/pk, QuickBooks 36/pk).
+
+**Progress 2026-10-29:** 1,026 of 1,183 visible products have a real
+description, and 157 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
