@@ -10,6 +10,7 @@ import { addressSummary, sameAddress, type AddressInput, type CustomerAddress } 
 import { normalizeUsState } from '@/lib/us-states'
 import { TAX_ESTIMATE_NOTE, type TaxEstimate } from '@/lib/sales-tax'
 import StateSelect from '@/components/catalog/StateSelect'
+import { suggestEmailFix } from '@/lib/email-typo'
 import type { CartItem, CheckoutContact } from '@/lib/types'
 
 interface SavedContact {
@@ -36,6 +37,12 @@ const LS_NOTES_DRAFT_KEY = 'lyu_order_notes_draft'
 export default function CartPage() {
   const { items, subtotalCents, count, setQty, removeItem, clear, addItem, updatePrices, hydrated } = useCart()
   const [contact, setContact] = useState<CheckoutContact>({ name: '', email: '' })
+  // "Did you mean gmail.com?" (lib/email-typo.ts). Shown once the customer
+  // leaves the email field, never while typing; "Keep mine" hides it for
+  // that exact address. Only a suggestion: nothing is blocked or changed.
+  const [emailBlurred, setEmailBlurred] = useState(false)
+  const [keptEmail, setKeptEmail] = useState<string | null>(null)
+  const emailFix = emailBlurred && contact.email.trim() !== keptEmail ? suggestEmailFix(contact.email) : null
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<{ referenceCode: string } | null>(null)
@@ -742,8 +749,12 @@ export default function CartPage() {
                 label="Email *"
                 type="email"
                 value={contact.email}
-                onChange={(v) => setContact({ ...contact, email: v })}
+                onChange={(v) => {
+                  setEmailBlurred(false)
+                  setContact({ ...contact, email: v })
+                }}
                 onBlur={() => {
+                  setEmailBlurred(true)
                   const email = contact.email.trim()
                   if (!email || !email.includes('@') || items.length === 0) return
                   fetch('/api/cart-session', {
@@ -758,6 +769,27 @@ export default function CartPage() {
                 }}
                 required
               />
+              {emailFix && (
+                <div role="status" className="-mt-1 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <span>
+                    Did you mean <strong>{emailFix}</strong>?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setContact({ ...contact, email: emailFix })}
+                    className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700"
+                  >
+                    Use it
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKeptEmail(contact.email.trim())}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-amber-800 hover:underline"
+                  >
+                    Keep mine
+                  </button>
+                </div>
+              )}
               <Field label="Phone" type="tel" value={contact.phone ?? ''} onChange={(v) => setContact({ ...contact, phone: v })} />
               <Field label="Company" value={contact.company ?? ''} onChange={(v) => setContact({ ...contact, company: v })} />
               <div>
