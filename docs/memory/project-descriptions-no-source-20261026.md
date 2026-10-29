@@ -685,8 +685,17 @@ were matched against the live text, and the live prod-40540 page was checked.
 - Case counts: P257285 (label 24/cs, QuickBooks 48), P257280 (label 12
   boxes/cs, name and QuickBooks 18).
 
-**Progress 2026-10-29:** 987 of 1,183 visible products have a real
-description, and 196 remain.
+**Batch 36 (2026-10-29, applied: 20 live, 1,007 in all).** The file is
+`data/description-batch-36-log.csv`. 20 audit rows (written before the apply)
+were matched against the live text, and the live prod-02530 page was checked.
+13 old descriptions were blank (the prod-40xxx ids).
+
+- P273836-60CM uses the 46CM photo. PIneapple typo (P257189).
+- Case counts: F287680-BAG (label and name 240, QuickBooks 180), F287781
+  (label 150 pcs/cs, name 48/pk x 150), P273848 (label 72/cs, QuickBooks 48).
+
+**Progress 2026-10-29:** 1,007 of 1,183 visible products have a real
+description, and 176 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
