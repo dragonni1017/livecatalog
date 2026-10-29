@@ -13,8 +13,16 @@ export default async function AdminDashboard() {
   let waiting: WaitingSummary | null = null
   let pricesToReview = 0
   let namesToReview = 0
+  let pricesForErply = 0
   try {
     const db = getAdminClient()
+
+    // Held prices (0068) still waiting to be typed into Erply; each clears itself once Erply matches.
+    const { data: heldRows, error: heldError } = await db
+      .from('products')
+      .select('id')
+      .not('held_price_cents', 'is', null)
+    if (!heldError) pricesForErply = heldRows?.length ?? 0
 
     // Name review queue (migration 0071). Errors (e.g. table not there yet) just hide the card.
     const { data: nameRows, error: nameError } = await db
@@ -105,6 +113,24 @@ export default async function AdminDashboard() {
                 </p>
               </div>
               <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          )}
+          {pricesForErply > 0 && (
+            <Link
+              href="/admin/price-review"
+              className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-6 py-5 shadow-sm hover:border-red-300 hover:shadow-md transition-all group"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors">
+                  Prices to enter in Erply
+                </h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {pricesForErply} price{pricesForErply === 1 ? '' : 's'} set on the website but not yet in Erply. Each clears itself once Erply matches. Download the list on Price Review.
+                </p>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>

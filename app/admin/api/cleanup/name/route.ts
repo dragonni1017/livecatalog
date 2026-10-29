@@ -18,8 +18,9 @@ export const dynamic = 'force-dynamic'
 // DRY RUN unless `apply` is literally true. The screen shows the dry run's
 // per-system result first and only then offers to apply it.
 //
-// Refuses outright where Erply isn't configured (it isn't in Vercel
-// production): lib/erply.ts's getSessionKey hands back a stub key in that
+// Refuses outright where Erply isn't configured (it IS set in Vercel
+// production as of 2026-10-29; WooCommerce is not, so the Woo step reports
+// "not configured" there): lib/erply.ts's getSessionKey hands back a stub key in that
 // case, and every lookup would come back as a convincing "SKU not in Erply".
 // Same stance as the receiving apply route.
 //
