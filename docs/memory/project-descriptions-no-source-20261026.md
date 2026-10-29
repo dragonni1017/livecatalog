@@ -673,8 +673,20 @@ were matched against the live text, and the live prod-40638 page was checked.
 - Ribbon labels say 1.57" where names say 1.5" (FD400110, FD400079,
   FD400004-G, FD400109). P273846 label 30/pk x 4 vs name 12/pk (both 120/cs).
 
-**Progress 2026-10-29:** 964 of 1,183 visible products have a real
-description, and 219 remain.
+**Batch 35 (2026-10-29, applied: 23 live, 987 in all).** The file is
+`data/description-batch-35-log.csv`. 23 audit rows (written before the apply)
+were matched against the live text, and the live prod-40540 page was checked.
+14 old descriptions were blank (the prod-40xxx ids).
+
+- PF20200931-WT and PF20200931 look like the same item listed twice (the
+  PF20200931 photo label reads PF20200931-WT). P273819-45CM uses the small
+  P273819 photo. F287747 "Dark Purple" looks lavender; FD400065 "Dark Red"
+  looks raspberry. Crsytal typo (P257212).
+- Case counts: P257285 (label 24/cs, QuickBooks 48), P257280 (label 12
+  boxes/cs, name and QuickBooks 18).
+
+**Progress 2026-10-29:** 987 of 1,183 visible products have a real
+description, and 196 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
