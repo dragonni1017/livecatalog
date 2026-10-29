@@ -52,8 +52,8 @@ of runtime logs.
 - **Auto-assign** right after submit, in order of preference:
   1. the rep who placed it (`rep_user_id`);
   2. the rep on this buyer's most recent order (same `customer_email`);
-  3. **decision needed:** leave unassigned (the sales inbox covers it), or
-     rotate through the reps.
+  3. otherwise **leave it unassigned** (decided 2026-10-29); the sales
+     inbox covers it. No rotation.
 - `/rep/quotes` also lists orders assigned to the signed-in rep.
 
 ### PR 3: age on screen
@@ -61,17 +61,24 @@ of runtime logs.
   is one extra field in the existing PATCH and doesn't change its side
   effects.
 - /admin/orders: a "Waiting" age on each `new` order, amber after 1 business
-  day and red after 3 (**decision**). A "Needs follow-up" filter, oldest
+  day and red after 3 business days (decided 2026-10-29). A "Needs follow-up" filter, oldest
   first, with the owner shown.
 - Dashboard card: "N waiting · oldest X days · $Y", linking to the filter.
 
 
 ## Before building
 
-- [ ] Look in the sales inbox for the 2026-10-25 order email. If it's not
-      there, email delivery is broken and that gets fixed first.
-- [ ] Confirm which of the 27 are tests (a read-only query finds 9
-      whose email or name looks like a test, all from June/August) before the first dismiss.
+Both checks were waived by the user on 2026-10-29 ("don't worry about the
+inbox or the test orders"):
+
+- [x] ~~Look in the sales inbox for the 2026-10-25 order email.~~ Waived.
+- [x] ~~Confirm which of the 27 are tests before the first dismiss.~~ Waived.
+      A read-only query on 2026-10-29 found 9 placed by staff for testing.
+      Whoever dismisses picks them on screen.
+
+Found on 2026-10-29, not yet in a PR: three real orders have a mistyped
+customer email domain, so the status emails will bounce (ORD-2026-0030,
+0035 and 0037). Possible follow-up: flag likely domain typos at checkout.
 
 ## Out of scope
 Any new email (a daily digest was proposed and declined 2026-10-26). New
