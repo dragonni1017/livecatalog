@@ -5,6 +5,10 @@ and an unanswered request is impossible to miss on screen. **No new emails**
 (decided 2026-10-26: no daily reminders or other notifications). Everything
 here is in the admin and rep screens.
 
+**Status 2026-10-29: built and live.** Part 1 #203 (migration 0069 + dismiss),
+part 2 #204 (owner), part 3 #205 (age, Needs follow-up view, dashboard card).
+Details and gotchas: docs/memory/project-order-follow-up-20261029.md.
+
 ## Why
 
 On 2026-10-26, 27 orders were still `new`, the oldest from 2026-06-23. 9 look
