@@ -705,8 +705,16 @@ cellophane. Add it to the bad-photo exclusion list.
   S162776 "Candy" box says Crystal Squish Stretch Ball.
 - Case count: F287780 (label 150 pcs/cs, name 48/pk, QuickBooks 36/pk).
 
-**Progress 2026-10-29:** 1,026 of 1,183 visible products have a real
-description, and 157 remain.
+**Batch 38 (2026-10-29, applied: 17 live, 1,043 in all).** The file is
+`data/description-batch-38-log.csv`. 17 audit rows (written before the apply)
+were matched against the live text, and the live prod-40598 page was checked.
+11 old descriptions were blank (the prod-40xxx ids).
+
+- P273647-50CM-CHK is named 20" (50cm), but its photo label is the 16" base
+  P273647, so no size was given.
+
+**Progress 2026-10-29:** 1,043 of 1,183 visible products have a real
+description, and 140 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
