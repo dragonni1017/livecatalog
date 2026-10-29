@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic'
 export default async function AdminOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string }>
+  searchParams: Promise<{ email?: string; view?: string }>
 }) {
-  const { email } = await searchParams
+  const { email, view } = await searchParams
+  // One "now" for the whole render, so server and client agree on ages.
+  const nowIso = new Date().toISOString()
   const db = getAdminClient()
   const { data } = await db
     .from('order_requests')
@@ -56,7 +58,7 @@ export default async function AdminOrdersPage({
         </div>
 
         {/* Table with filters/search */}
-        <OrdersTable orders={orders} initialSearch={email} />
+        <OrdersTable orders={orders} initialSearch={email} initialFollowUp={view === 'followup'} nowIso={nowIso} />
       </div>
     </div>
   )
