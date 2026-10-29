@@ -739,8 +739,25 @@ the bad-photo exclusion list.
   (taupe), F287976 "Light Grey" (mauve), F287979 "Light Cream" (tan kraft),
   F287981 "Salmon" (rose pink). Lavedar typo (F287906).
 
-**Progress 2026-10-29:** 1,122 of 1,183 visible products have a real
-description, and 61 remain.
+**Batch 41 (2026-10-29, applied: 39 live, 1,161 in all).** The file is
+`data/description-batch-41-log.csv`. This took the whole remaining queue (38)
+plus F288013, which batch 40 had left out: the "Gold Dotted" series
+(F288013 white, F288014 black, F288015 pink) all show rows of tiny foil hearts,
+so its photo is probably right after all; the descriptions say "foil hearts"
+without a color. 39 audit rows (written before the apply) were matched against
+the live text, and the live prod-20317 page was checked. 33 old descriptions
+were blank.
+
+- "Love Flower" papers F288006-F288009: labels 60/cs, QuickBooks 50 pks/cs.
+  F287989 "Light Purple" looks white. S146946 is named just "Slime".
+  Dumbling typo (S121035, S121034, S162815; S162815 also has a trailing space).
+
+**Queue done 2026-10-29.** 1,161 of 1,183 visible products have a real
+description. The 22 left are exactly the bad-photo exclusion list (wrong,
+blurry or mismatched photos) and need new photos before they can be written:
+D701004, D701018, D701098, D701114, E273127, F286809, F286877-2, F286965,
+F287429, F287526, F287575, F561926, H424270, K229473, LL666, P257216, P257251,
+P273606-2, P273668, P273807-25CM, S162757, T641505.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
