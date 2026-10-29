@@ -650,8 +650,20 @@ descriptions were blank (prod-03031 among them, so not only prod-40xxx ids).
   F287769 (name cs.50, really 1,000 pcs), P273819 (label 24, QuickBooks 48),
   T641209 (name 50bg/cs and cs.48).
 
-**Progress 2026-10-28:** 917 of 1,183 visible products have a real
-description, and 266 remain.
+**Batch 33 (2026-10-29, applied: 23 live, 940 in all).** The file is
+`data/description-batch-33-log.csv`. 23 audit rows (written before the apply)
+were matched against the live text, and the live prod-02635 page was checked.
+Five old descriptions were blank (the prod-40xxx ids). P273807-25CM was left
+out: its photo is the P273807-46CM lying panda.
+
+- Name/photo conflicts: S162591 (box says Glow in the Dark Tofu Balls, name
+  says color changing, "Colorchainging" typo), S146905 "Monkey" faces look
+  like bears, P257181 "Mixed Animal" shows only unicorns, F287881 has a
+  leftover "120psc/cs".
+- Case count: P273761 (label and name 180, QuickBooks 240).
+
+**Progress 2026-10-29:** 940 of 1,183 visible products have a real
+description, and 243 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
