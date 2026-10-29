@@ -336,8 +336,428 @@ bad-photo exclusions.
 - G333153 is named "Floral Pattern", but the photo shows gold dots.
 - F283918, K229398 and F287694 have no QuickBooks entry.
 
-**Progress 2026-10-27:** 364 of 1,183 visible products have a real
-description, and 819 remain.
+**Batch 14 (2026-10-28, applied: 28 live, 392 in all).** The file is
+`data/description-batch-14.csv`. All 28 were read back (3,099 characters),
+and the live prod-01332 page was checked. Two got no description: F287526's
+photo is a tiny blurred placeholder, and E273127's is blurry.
+
+- **Reversal log, from this batch on.** The products PATCH route writes no
+  audit entry for a description edit, so each change was logged twice: the
+  local `data/description-batch-14-log.csv` (old and new text, with
+  `-undo.json` as a ready PATCH payload), and 28 `audit_log` rows (`action
+  = 'product_description_updated'`, `old_value`/`new_value`, `performed_by`
+  naming the batch). The old text was the name plus "/cs" (P273810-60cm's
+  was blank).
+- **Wrong-size photo:** P273810-60cm (24") uses the 46cm photo, so the size
+  is left out.
+- **Pack and case conflicts:** E273133's label says 3 pcs/pk and 288 pk/cs
+  against 12/pk cs.288 in the name. F287151-S is 140/cs on the label and in
+  QuickBooks, 120 in the name. F287833 is 16 sets on the label and in the
+  name, 12 in QuickBooks.
+- T642163 "Floral" shows butterflies (print left unnamed). K229406 is
+  another "Brown Bear" capybara. 3D801241's 2.4" "Large" size was left out,
+  like 3D801240. F287154's name has leftover "9*6.06*1.5 24ea".
+- Lead: G333155's gold-rectangle photo looks like the one on G333153
+  "Floral Pattern" (batch 13).
+- The storefront product URL is `/product/<id>` (singular).
+
+**Batch 15 (2026-10-28, applied: 30 live, 422 in all).** The file is
+`data/description-batch-15.csv`. All 30 were read back (3,368 characters),
+and the live prod-01232 page was checked. Logged the same way as batch 14:
+30 `audit_log` rows plus `data/description-batch-15-log.csv` and
+`-undo.json`. Every old description was checked to be exactly name + "/cs"
+before applying.
+
+- **Name doesn't match the photo (left out):** K229410 "Starfish" charms
+  are seashells. K229414 "Pink & White Dog" shows black and pink dogs.
+- **Counts:** E273134 is 144/cs on the label and in QuickBooks, 288 in the
+  name. F287672: label 150 pcs/cs, QuickBooks 150 pk/cs, name 48/pk.
+- F287156's name size (7.5*4*7.1) disagrees with the label (7.5" x 4.5" x
+  1.5"), so its description has no size. Tiny 3D keychain label sizes
+  (3D801249, 3D801248) were left out.
+- For the next name-fix round: D701047 16' (feet) for 16" (inches); typos
+  "Erase" (E273136), "Monter" (E273134), "Turlte" (3D801248),
+  "Rectaungular" (G333166, G333167); leftover sizes in F287155/F287156 and
+  F287154 (batch 14).
+
+**Batch 16 (2026-10-28, applied: 28 live, 450 in all).** The file is
+`data/description-batch-16.csv`. All 28 were read back (2,926 characters),
+and the live prod-00534 page was checked. Logged like batch 15 (28
+`audit_log` rows, log CSV, undo JSON). P257216 and T641505 got no
+description (blurry); add them to the bad-photo exclusions.
+
+- F287859 "Butterfly-Pattern" shows a flower border (pattern left unnamed).
+- 3D801255 is 72/cs on the label and in the name, 12 in QuickBooks.
+- QuickBooks colours are incomplete: F287297 "pink & red" and F287298 "red"
+  also show purple (and pink).
+- Character look-alikes (the K229418 fish) are described generically, not
+  by character name.
+- Name-fix list: "Rectaungular" again (G333170).
+
+**Batch 17 (2026-10-28, applied: 29 live, 479 in all).** The file is
+`data/description-batch-17.csv`. 29 audit rows were matched against the
+live text (2,975 characters), and the live prod-00933 page was checked.
+S162757 got no description (blurry); add it to the bad-photo exclusions.
+
+- **Better logging order, use from now on:** write the `audit_log` rows
+  *before* the apply, with `old_value = p.description` read in the same
+  INSERT and `new_value` the proposed text (dollar-quoted `$d$...$d$`).
+  Afterwards check `products.description = audit_log.new_value` for every
+  row. This keeps exact old text even when it isn't name + "/cs": F287104
+  and F287110 ended "cs.36/cs", matching the label's 36/cs. Their current
+  names say "cs.3pk", which looks like a later bad rename.
+- **QuickBooks case counts for the 3D range look wrong:** 3D801256/57/59
+  are 72/cs on the label and in the name, while QuickBooks says 12 (240 for
+  3D801256). Same as 3D801255 in batch 16.
+- Other case conflicts: F287438 (label and QuickBooks 80, name 72);
+  F287430 (label and QuickBooks 600 pks, name cs.50pk); T641834 (name 480,
+  QuickBooks 60).
+- K229420's QuickBooks sales description says "Soccer Bling Keychain" for
+  a heart keychain. P251933's label says 13" against the 14'' name (size
+  left out).
+
+**Batch 18 (2026-10-28, applied: 29 live, 508 in all).** The file is
+`data/description-batch-18.csv`. 29 audit rows (written before the apply)
+were matched against the live text (2,848 characters), and the live
+prod-00182 page was checked. LL666 got no description (blurry); add it to
+the bad-photo exclusions.
+
+- **Encoding trap:** `XLSX.readFile` on a CSV decodes it as Latin-1, so
+  "appliqués" came out "appliquÃ©s" in the payload. It was caught before
+  anything was written, and no earlier batch had non-ASCII text (checked
+  the files and audit_log). Read batch CSVs with
+  `XLSX.read(fs.readFileSync(f,'utf8'),{type:'string'})`, and keep
+  descriptions ASCII.
+- **F287772 and F287773 share the name "Matte Light Purple Pull Flower
+  Ribbon".** F287772's photo is deep purple, so its name is wrong.
+- **B325097's photo label reads B425097**; it's still a belt bag, so check
+  that the photo belongs to this SKU.
+- Chenille again: F287656 and F287660 labels say 100 pcs/pk against 10/pk.
+  F287660 "Dark Red" looks brown (colour left out).
+- QuickBooks 3D-range counts again: 3D801264 (QuickBooks 216 against 60),
+  D751002 (QuickBooks 48 against 96).
+- P257222 "Rainbow Bear" has a horn (animal left out). P257236 "Tote Bag"
+  is a paper gift bag filed under Bags/Purses.
+- Name-fix list: "Sequence" for Sequin (B325069).
+
+**Batch 19 (2026-10-28, applied: 30 live, 538 in all).** The file is
+`data/description-batch-19.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,174 characters), and the live
+prod-40557 page was checked. Every photo was usable. Three newer products
+(prod-40557, prod-40648, prod-40531) had blank descriptions rather than
+name copies; their undo restores blank.
+
+- **Name doesn't match the photo:** B325101 "Backpack" is a handbag with
+  top handles. F286921 "Purple Rose" shows pink roses (colour left out).
+  F287969 "BLACK" shows white, black and pink sets.
+- **Case counts:** F287691 and F287692 (label and QuickBooks 200, name 192),
+  P257237 (label and QuickBooks 50, name 48), P273648-40cm (label and
+  QuickBooks 12, name 24), D751077 (label 192, name and QuickBooks 96).
+- P273676-100cm: label 32" against 100cm in the name (size left out).
+- Name-fix list: P273676-L 12' (feet), "See-Though" (B325105), "Flora" for
+  Floral (F286938), "Mall" probably Small (T642285).
+
+**Batch 20 (2026-10-28, applied: 30 live, 568 in all).** The file is
+`data/description-batch-20.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,963 characters), and the live
+prod-01469 page was checked. Every photo was usable. Three had older name
+copies (prod-00636, prod-00337, prod-00568), and their exact text is in the
+audit rows and the log.
+
+- **Name doesn't match the photo (left out):** S146893 "Squirrel" looks
+  like a chick. P257260 "Heart Puppy" looks like a bear or cat. F287792
+  "Butterfly Print" shows birds and hearts. F286940 "Red And Peach" shows
+  hot and light pink. FD250019 "Light Green" is mid green.
+- S146927 "Mermaid Slime": the photo also shows a dinosaur display. The
+  label says 72/bx x 8 = 576 against the name's cs.144.
+- Case counts: F287698 (200 against 192), D751119 (240 against 192),
+  T641826 (50 against 48), D751121 (QuickBooks 70 against 140). P273689's
+  QuickBooks entry says 36cm and 36/cs.
+- K229433's "number 5 bottle" resembles a perfume brand; it's described
+  generically.
+- Name-fix list: "Flora" for Floral again (F286940).
+
+**Batch 21 (2026-10-28, applied: 30 live, 598 in all).** The file is
+`data/description-batch-21.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,625 characters), and the live
+prod-02674 page was checked. Every photo was usable. prod-00116 and
+prod-00339 had older name copies, kept exactly in the audit rows and the
+log.
+
+- **K229438's photo label reads K229430** (the bear-ear keychain), though
+  it shows flower keychains.
+- Case counts: F287850 and F287849 (label and QuickBooks 40, name 36),
+  P257265 and P257262 (50 against 48), T641916 (label 264, name and
+  QuickBooks 360).
+- Sizes left out: T641667 (label 19.3", name 21"). F287863's label size
+  equals the QuickBooks carton size, so it isn't the product size.
+- Name-fix list: P273701 10' (feet).
+
+**Batch 22 (2026-10-28, applied: 30 live, 628 in all).** The file is
+`data/description-batch-22.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,791 characters), and the live
+prod-01527 page was checked. Every photo was usable.
+
+- **Copy-detector trap:** a short description whose words all appear in
+  the name ("Green flower lei." for "Solid Green Flower Lei") counts as a
+  name copy under `isNameCopyDescription` and would be hidden. It was caught
+  before applying, and batches 14-22 were all re-checked clean. Run every
+  batch file through the same word-subset check before applying.
+- **The QuickBooks sales descriptions of K229440 and K229420 are swapped:**
+  the soccer ball says "Open Heart" and the heart says "Soccer".
+- P273725 "Fat Cat 20'": label 13.5" (size left out); QuickBooks 12/cs
+  against the label's 18.
+- Case counts: S162748 (QuickBooks 24 against 36), T641923 (label 75
+  against 84), T641919 (QuickBooks 48 against 24), P282115 (QuickBooks 120
+  against 240), F287851 (label 40 against 36).
+- K229439 is another "Brown Bear" capybara. F286983's pattern resembles a
+  luxury monogram (described generically).
+- Name-fix list: "Rafia" for Raffia (G333158).
+
+**Batch 23 (2026-10-28, applied: 30 live, 658 in all).** The file is
+`data/description-batch-23.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,970 characters), and the live
+prod-02056 page was checked. Every photo was usable, and every description
+passed the copy check.
+
+- F286984 and F286983 share the name "5 leaf Plastic Floral Paper" (one
+  white, one black).
+- P273740 "in Deer Hoodie" shows a pineapple-like hood (hoodie animal left
+  out). S162759 is another "Brown Bear" capybara.
+- Case counts: T642071 (QuickBooks 192 against 156), F287855 (label and
+  QuickBooks 50 against 48). P256993's name inverts its pack layout (18/pk
+  40bx; really 40 per display x 18).
+- H424183's headbands carry a brand-like embroidered name, left out.
+
+**Batch 24 (2026-10-28, applied: 30 live, 688 in all).** The file is
+`data/description-batch-24.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,241 characters), and the live
+prod-02271 page was checked. Every photo was usable, every description
+passed the copy check, and every old description was the standard copy.
+
+- F286631's QuickBooks sales description is for another product ("Heart
+  Shape Box Set with Clear Top - 16/cs").
+- F287146 "Burgundy" glitter looks bright red-pink (colour left out).
+  P273741-40cm is another "Brown Bear" capybara.
+- Pack and case counts: G333163 (label 80/pk against 100), F287317 (label
+  30 pks/cs against 50).
+- K229447 and K229448 designs resemble luxury brands (described generically).
+
+**Batch 25 (2026-10-28, applied: 29 live, 717 in all).** The file is
+`data/description-batch-25.csv`. 29 audit rows (written before the apply)
+were matched against the live text (2,716 characters), and the live
+prod-02833 page was checked. P257251 got no description (blurry); add it to
+the bad-photo exclusions.
+
+- C801021 (a makeup brush set) is filed under Drinkware & Cups; its name
+  says "3 Color" but the photo shows one.
+- P273777-40cm's photo label reads P273776-40cm. P273759-40cm is another
+  "Brown Bear" capybara.
+- Pack and case counts: K229454 (QuickBooks 120 against 240), F287318
+  (label and QuickBooks 30 pks against 50), F287507 (QuickBooks 50 against
+  60), P257247 (label 24 markers per pack against 100/pk in the name).
+- Brand-like designs (tweed charm purse, race cars, "Tetris" in a name)
+  are described generically.
+
+**Batch 26 (2026-10-28, applied: 30 live, 747 in all).** The file is
+`data/description-batch-26.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,828 characters), and the live
+prod-40588 page was checked. Every photo was usable. prod-40588's old
+description was blank, and prod-02535 had an older name copy; both are kept
+exactly in the audit rows and the log.
+
+- **T641581 and T641585 are named "Single Plate", but the photos and boxes
+  show bowls.**
+- Case counts: F286505 (QuickBooks 200 against 180), T641868 (QuickBooks
+  600 against the name's 300).
+- Name-fix list: "Motocycle" (E273146), "GIft" (T641868).
+
+**Batch 27 (2026-10-28, applied: 30 live, 777 in all).** The file is
+`data/description-batch-27.csv`. 30 audit rows (written before the apply)
+were matched against the live text (2,751 characters), and the live
+prod-02827 page was checked. Every photo was usable. prod-03026 and
+prod-03023 had blank old descriptions (undo restores blank).
+
+- **Three more "Single Plate" products are bowls** (T641586, T641588,
+  T641593), making five with batch 26's T641581 and T641585. The whole
+  T6415xx "Single Plate" series probably needs renaming to bowls.
+- Sizes left out where the label and name disagree: P273690 (label 14",
+  name "40m", QuickBooks 25cm), P273815-60cm (label 27.5", name 24"),
+  T641790 (label 40", name 29.5").
+- Case counts: T641139 and T641820 (QuickBooks and label 50, names 48).
+- Name-fix list: "Cristmas" (P257192); T641790's name is truncated ("C...").
+
+**Batch 28 (2026-10-28, applied: 30 live, 807 in all).** The file is
+`data/description-batch-28.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,108 characters), and the live
+prod-40522 page was checked. Ten old descriptions were blank (newer
+products), and prod-02571 had an older name copy; all are kept exactly.
+
+- **"Brown Bear" = capybara is confirmed:** P257278's "Brown Bear" pen
+  display box is printed "CAPY BARA".
+- **Photo doesn't match the product:** F286809-GR "Gray" shows the black
+  set (label F286809-BLK). 3D801313 "Dino Toy" shows a shaggy horned cow or
+  yak. T641666's photo label reads T641166. K229468's reads K229467.
+- **Names that don't describe the product:** T642233 "Butterfly Leather
+  Patch" and T642236 "Rectangular Fish Scale Pattern" are compact mirrors.
+  T642241 "Spraying Painting Color" is a lace print. T642180 "Limbing" is
+  probably Bling.
+- Case counts: T641850 (label and QuickBooks 54 against 48), T641666
+  (label 96, QuickBooks 108).
+
+**Batch 29 (2026-10-28, applied: 30 live, 837 in all).** The file is
+`data/description-batch-29.csv`. 30 audit rows (written before the apply)
+were matched against the live text (3,037 characters), and the live
+prod-02812 page was checked. Four old descriptions were blank and two
+(pull bows) were older name copies; all are kept exactly.
+
+- S162753 is another "Brown Bear" capybara. F286610 "Four Colored" shows
+  two colours.
+- Case counts: F287848 (label and QuickBooks 40 against 36). F286459's
+  handwritten label looks like 30/cs against 40 (hard to read).
+
+**Batch 30 (2026-10-28, applied: 30 live, 867 in all).** The file is
+`data/description-batch-30.csv`. 30 audit rows (written before the apply)
+were matched against the live text, and the live prod-40590 page was
+checked. Twelve old descriptions were blank; the rest were name copies.
+
+- **More compact mirrors named "Leather Patch":** T642235 "Leopart Print
+  Leather Patch" (also a typo) and T642234 "Rectangular Rhinestone Leather
+  Patch", like T642233 in batch 28. P273856 "Husky Weighted Panda" is a
+  husky. K229475 "Mini Bear" shows puppies (label reads K329475).
+- Labels: K229381 reads K299381. S121030-25CM shows the small 3.35" S121030,
+  so no size was given. F288019 is named 11 1/4" but labelled 12".
+- Case counts: S146887 (label 12 x 12 = 144, QuickBooks 288).
+
+**Batch 31 (2026-10-28, applied: 23 live, 890 in all).** The file is
+`data/description-batch-31.csv`. Only 23 qualified under the 3-per-category
+cap, since few categories are left; raise it to 4 next time. 23 audit rows
+(written before the apply) were matched against the live text (2,477
+characters), and the live prod-40591 page was checked. Two old descriptions
+were blank; the rest were name copies.
+
+- Names: T642214 "Shapped" typo; P273623 has a stray dash.
+
+**Batch 32 (2026-10-28, applied: 27 live, 917 in all).** The file is
+`data/description-batch-32.csv`; the cap is now 4 per category. 27 audit
+rows (written before the apply) were matched against the live text (3,100
+characters), and the live prod-02270 page was checked. Five old
+descriptions were blank (prod-03031 among them, so not only prod-40xxx ids).
+
+- P273744 is another "Brown Bear" capybara. P273803-60cm uses the 46CM photo.
+  T641716 starts with stray "XR009) (". B325120 "2 Style" shows one style.
+- Case counts: P273583 (name 12 x 50 = 600, label and QuickBooks 360),
+  F287769 (name cs.50, really 1,000 pcs), P273819 (label 24, QuickBooks 48),
+  T641209 (name 50bg/cs and cs.48).
+
+**Batch 33 (2026-10-29, applied: 23 live, 940 in all).** The file is
+`data/description-batch-33-log.csv`. 23 audit rows (written before the apply)
+were matched against the live text, and the live prod-02635 page was checked.
+Five old descriptions were blank (the prod-40xxx ids). P273807-25CM was left
+out: its photo is the P273807-46CM lying panda.
+
+- Name/photo conflicts: S162591 (box says Glow in the Dark Tofu Balls, name
+  says color changing, "Colorchainging" typo), S146905 "Monkey" faces look
+  like bears, P257181 "Mixed Animal" shows only unicorns, F287881 has a
+  leftover "120psc/cs".
+- Case count: P273761 (label and name 180, QuickBooks 240).
+
+**Batch 34 (2026-10-29, applied: 24 live, 964 in all).** The file is
+`data/description-batch-34-log.csv`. 24 audit rows (written before the apply)
+were matched against the live text, and the live prod-40638 page was checked.
+14 old descriptions were blank (the prod-40xxx ids).
+
+- Name/photo conflicts: T641221 "85cm Robot" is a rainbow spaceman-shaped
+  push-pop board, FD400109 "Cream" looks peach, K229520 "4 color" shows 6,
+  K229479 has a stray "Sketching". Typos: Cyrstal (P257207), Dumbling (S121030).
+- Ribbon labels say 1.57" where names say 1.5" (FD400110, FD400079,
+  FD400004-G, FD400109). P273846 label 30/pk x 4 vs name 12/pk (both 120/cs).
+
+**Batch 35 (2026-10-29, applied: 23 live, 987 in all).** The file is
+`data/description-batch-35-log.csv`. 23 audit rows (written before the apply)
+were matched against the live text, and the live prod-40540 page was checked.
+14 old descriptions were blank (the prod-40xxx ids).
+
+- PF20200931-WT and PF20200931 look like the same item listed twice (the
+  PF20200931 photo label reads PF20200931-WT). P273819-45CM uses the small
+  P273819 photo. F287747 "Dark Purple" looks lavender; FD400065 "Dark Red"
+  looks raspberry. Crsytal typo (P257212).
+- Case counts: P257285 (label 24/cs, QuickBooks 48), P257280 (label 12
+  boxes/cs, name and QuickBooks 18).
+
+**Batch 36 (2026-10-29, applied: 20 live, 1,007 in all).** The file is
+`data/description-batch-36-log.csv`. 20 audit rows (written before the apply)
+were matched against the live text, and the live prod-02530 page was checked.
+13 old descriptions were blank (the prod-40xxx ids).
+
+- P273836-60CM uses the 46CM photo. PIneapple typo (P257189).
+- Case counts: F287680-BAG (label and name 240, QuickBooks 180), F287781
+  (label 150 pcs/cs, name 48/pk x 150), P273848 (label 72/cs, QuickBooks 48).
+
+**Batch 37 (2026-10-29, applied: 19 live, 1,026 in all).** The file is
+`data/description-batch-37-log.csv`. 19 audit rows (written before the apply)
+were matched against the live text, and the live prod-40613 page was checked.
+13 old descriptions were blank (the prod-40xxx ids). F287575 ("Green Pull
+Flower Ribbon with Gold Stripes") was left out: its photo is clear rose-print
+cellophane. Add it to the bad-photo exclusion list.
+
+- P257311 "Fur Notebook With Color Pencils" is a filled pencil case set.
+  S162776 "Candy" box says Crystal Squish Stretch Ball.
+- Case count: F287780 (label 150 pcs/cs, name 48/pk, QuickBooks 36/pk).
+
+**Batch 38 (2026-10-29, applied: 17 live, 1,043 in all).** The file is
+`data/description-batch-38-log.csv`. 17 audit rows (written before the apply)
+were matched against the live text, and the live prod-40598 page was checked.
+11 old descriptions were blank (the prod-40xxx ids).
+
+- P273647-50CM-CHK is named 20" (50cm), but its photo label is the 16" base
+  P273647, so no size was given.
+
+**Batch 39 (2026-10-29, applied: 40 live, 1,083 in all).** The file is
+`data/description-batch-39-log.csv`. From this batch on the selection cap is
+12 per category and 40 per batch (the user asked for bigger batches; the
+4-per-category cap had shrunk batches to 16). 40 audit rows (written before
+the apply) were matched against the live text, and the live prod-40553 page
+was checked. 20 old descriptions were blank (the prod-40xxx ids).
+
+- P273854 "Potted Water Chestnut" shows calla-lily-style flowers. F287738
+  "Red" looks rose pink with red trim. Three-colo typo (K229510).
+- Case counts: P273859-35CM (label 12/cs, QuickBooks 24), F287820 (name 1/pk,
+  QuickBooks 20/pk), F287778 (label 150 pcs/cs, name 48/pk), F287746 (name
+  1/pk, label 20/pk x 30), P273854 (label 72/cs, QuickBooks 60).
+
+**Batch 40 (2026-10-29, applied: 39 live, 1,122 in all).** The file is
+`data/description-batch-40-log.csv`. The 12-per-category cap only gave 24, so
+16 more came from beyond the cap. Photos were viewed as labelled 2x2 contact
+sheets (sharp from node_modules, scratchpad montage.cjs). 39 audit rows
+(written before the apply) were matched against the live text, and the live
+prod-40637 page was checked. 25 old descriptions were blank. F288013 ("White
+Gold Dotted") was left out: its photo shows red hearts like F287683. Add it to
+the bad-photo exclusion list.
+
+- Solid-paper names that do not match the photo color: F287826 "Light Green"
+  (taupe), F287976 "Light Grey" (mauve), F287979 "Light Cream" (tan kraft),
+  F287981 "Salmon" (rose pink). Lavedar typo (F287906).
+
+**Batch 41 (2026-10-29, applied: 39 live, 1,161 in all).** The file is
+`data/description-batch-41-log.csv`. This took the whole remaining queue (38)
+plus F288013, which batch 40 had left out: the "Gold Dotted" series
+(F288013 white, F288014 black, F288015 pink) all show rows of tiny foil hearts,
+so its photo is probably right after all; the descriptions say "foil hearts"
+without a color. 39 audit rows (written before the apply) were matched against
+the live text, and the live prod-20317 page was checked. 33 old descriptions
+were blank.
+
+- "Love Flower" papers F288006-F288009: labels 60/cs, QuickBooks 50 pks/cs.
+  F287989 "Light Purple" looks white. S146946 is named just "Slime".
+  Dumbling typo (S121035, S121034, S162815; S162815 also has a trailing space).
+
+**Queue done 2026-10-29.** 1,161 of 1,183 visible products have a real
+description. The 22 left are exactly the bad-photo exclusion list (wrong,
+blurry or mismatched photos) and need new photos before they can be written:
+D701004, D701018, D701098, D701114, E273127, F286809, F286877-2, F286965,
+F287429, F287526, F287575, F561926, H424270, K229473, LL666, P257216, P257251,
+P273606-2, P273668, P273807-25CM, S162757, T641505.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
