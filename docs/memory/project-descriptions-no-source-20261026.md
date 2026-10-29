@@ -752,12 +752,26 @@ were blank.
   F287989 "Light Purple" looks white. S146946 is named just "Slime".
   Dumbling typo (S121035, S121034, S162815; S162815 also has a trailing space).
 
-**Queue done 2026-10-29.** 1,161 of 1,183 visible products have a real
-description. The 22 left are exactly the bad-photo exclusion list (wrong,
-blurry or mismatched photos) and need new photos before they can be written:
-D701004, D701018, D701098, D701114, E273127, F286809, F286877-2, F286965,
-F287429, F287526, F287575, F561926, H424270, K229473, LL666, P257216, P257251,
-P273606-2, P273668, P273807-25CM, S162757, T641505.
+**Queue done 2026-10-29.** 1,161 of 1,183 visible products had a real
+description, leaving the 22 on the bad-photo exclusion list.
+
+**Photos and batch 42 (2026-10-29, applied: 4 live, 1,165 in all).** 4 of the 22
+had a correct photo on disk that never reached the site: K229473 (site showed
+capybaras), and F561926, H424270, S162757, whose site images were 60x60
+thumbnails. They were uploaded to Cloudinary (public_id = SKU, overwrite) by a
+local script mirroring /admin/api/cleanup/photos, because the Chrome extension
+was disconnected. Production Vercel had no CLOUDINARY_* env vars until
+2026-10-29, so the Cleanup photo upload had never worked live. Backups, log
+and undo are in data/photo-backup-20261029 and data/photo-upload-20261029. Batch 42
+(`data/description-batch-42-log.csv`) then described the 4, applied by a local
+script with audit rows first (same write as PATCH /admin/api/products). H424270
+"Circle Rhinestone Mirrors" is a mirror with a pop-up hairbrush.
+
+**Still need a new photo (18):** D701004, D701018, D701098, D701114, E273127,
+F286809, F286877-2, F286965, F287429, F287526, F287575, LL666, P257216, P257251,
+P273606-2, P273668, P273807-25CM, T641505. F286809's local files are all gift
+box sets (-BLK/-GR/-PK/-WT) while the name says flower paper: SKU or name is
+wrong.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
