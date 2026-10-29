@@ -64,11 +64,26 @@ export async function POST(request: NextRequest) {
     // Approve.
     const { data: product, error: prodErr } = await db
       .from('products')
-      .select('id, sku, name, price_cents')
+      .select('id, sku, name, price_cents, held_price_cents')
       .eq('id', item.product_id)
       .maybeSingle()
     if (prodErr) throw prodErr
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+
+    const markApproved = () =>
+      db
+        .from('price_review_items')
+        .update({ status: 'approved', decided_cents: req.cents, decided_at: new Date().toISOString() })
+        .eq('id', item.id)
+
+    // Already at exactly this price and hold (an earlier approve whose row
+    // wasn't marked, or a price held by an earlier run): just mark the row.
+    // No second audit row, no second write.
+    if (product.price_cents === req.cents && product.held_price_cents === req.cents) {
+      const { error } = await markApproved()
+      if (error) throw error
+      return NextResponse.json({ ok: true, alreadyApplied: true })
+    }
 
     const { error: auditErr } = await db.from('audit_log').insert({
       action: 'product_price_held',
@@ -89,13 +104,23 @@ export async function POST(request: NextRequest) {
       .select('id')
     if (updErr) throw updErr
     if (!updated?.length) {
+      // The audit row above said a hold was coming; record that it didn't
+      // happen, so the log stays truthful (audit rows are never deleted).
+      await logAudit({
+        action: 'product_price_hold_aborted',
+        entity_type: 'product',
+        entity_id: product.id,
+        entity_label: `${product.name} (${product.sku})`,
+        old_value: String(product.price_cents),
+        new_value: String(req.cents),
+        performed_by: `admin: price review ${item.batch}; price changed before the update, nothing written`,
+      })
       return NextResponse.json({ error: 'The price changed while you were looking. Reload and try again.' }, { status: 409 })
     }
 
-    const { error: markErr } = await db
-      .from('price_review_items')
-      .update({ status: 'approved', decided_cents: req.cents, decided_at: new Date().toISOString() })
-      .eq('id', item.id)
+    // The price is set. If marking the row fails, a retry takes the
+    // "already applied" path above instead of writing again.
+    const { error: markErr } = await markApproved()
     if (markErr) throw markErr
 
     return NextResponse.json({ ok: true })
