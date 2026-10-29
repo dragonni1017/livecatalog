@@ -10,11 +10,14 @@ import { Category, Product } from '@/lib/types'
 import { parseCaseSize, parseSoldBy } from '@/lib/catalog-filters'
 import { resolveCategorySlug } from '@/lib/category-slugs'
 import { permanentRedirect } from 'next/navigation'
+import { searchWords, suggestSearch, wordOrFilter } from '@/lib/search-terms'
+import { loadSearchVocabulary } from '@/lib/search-vocab'
 
 export const dynamic = 'force-dynamic'
 
 const PER_PAGE_OPTIONS = [20, 50, 100]
 const DEFAULT_PER_PAGE = 20
+const SEARCH_FIELDS = ['name', 'description', 'sku', 'barcode'] as const
 
 interface CatalogPageProps {
   searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string; soldby?: string; case?: string }>
@@ -110,13 +113,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
   // Multi-word search: each word must appear in name, description, SKU, or
   // barcode, so "blue widget" matches "Widget, Blue" regardless of word
-  // order, and scanning/typing a barcode finds the product directly. Strip
-  // chars that would break PostgREST's filter syntax.
-  if (q?.trim()) {
-    for (const word of q.trim().split(/\s+/)) {
-      const w = word.replace(/[%,()]/g, '')
-      if (w) query = query.or(`name.ilike.%${w}%,description.ilike.%${w}%,sku.ilike.%${w}%,barcode.ilike.%${w}%`)
-    }
+  // order, and scanning/typing a barcode finds the product directly. Each
+  // word also matches its singular/plural ("speakers" finds "Speaker").
+  for (const word of searchWords(q)) {
+    query = query.or(wordOrFilter(word, SEARCH_FIELDS))
   }
 
   // Sorting
@@ -146,6 +146,25 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const pagedProducts = (productsData ?? []) as Product[]
   const totalProducts = count ?? 0
   const totalPages = Math.ceil(totalProducts / pageSize)
+
+  // "Did you mean": a misspelled search ("swuishy") gets the closest words
+  // from product names, offered only if that search finds something.
+  let didYouMean: { q: string; href: string } | null = null
+  if (totalProducts === 0 && q?.trim()) {
+    const vocab = await loadSearchVocabulary()
+    const fixed = vocab ? suggestSearch(q, vocab) : null
+    if (fixed) {
+      let check = supabase.from('products').select('id').eq('is_active', true).eq('manually_hidden', false)
+      for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS))
+      const { data: hit } = await check.limit(1)
+      if (hit?.length) {
+        // Same filters as now, first page, corrected words.
+        const params = new URLSearchParams(pageUrl(1).split('?')[1] ?? '')
+        params.set('q', fixed)
+        didYouMean = { q: fixed, href: `/?${params.toString()}` }
+      }
+    }
+  }
 
   // Build URL helper preserving existing params
   function pageUrl(p: number) {
@@ -299,7 +318,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </Suspense>
         </div>
 
-        <ProductGrid products={pagedProducts} />
+        <ProductGrid products={pagedProducts} didYouMean={didYouMean} />
 
         {/* Pagination controls */}
         {totalPages > 1 && (

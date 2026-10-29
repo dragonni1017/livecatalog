@@ -4,11 +4,12 @@ import EmptyState from './EmptyState'
 
 interface ProductGridProps {
   products: Product[]
+  didYouMean?: { q: string; href: string } | null
 }
 
-export default function ProductGrid({ products }: ProductGridProps) {
+export default function ProductGrid({ products, didYouMean }: ProductGridProps) {
   if (products.length === 0) {
-    return <EmptyState />
+    return <EmptyState didYouMean={didYouMean} />
   }
 
   return (

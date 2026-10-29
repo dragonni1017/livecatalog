@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-export default function EmptyState() {
+export default function EmptyState({ didYouMean }: { didYouMean?: { q: string; href: string } | null }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
@@ -20,6 +20,15 @@ export default function EmptyState() {
         </svg>
       </div>
       <h3 className="mb-2 text-lg font-semibold text-gray-900">No products found</h3>
+      {didYouMean && (
+        <p className="mb-2 text-base text-gray-700">
+          Did you mean{' '}
+          <Link href={didYouMean.href} className="font-semibold italic text-red-600 underline hover:text-red-700">
+            {didYouMean.q}
+          </Link>
+          ?
+        </p>
+      )}
       <p className="mb-6 text-sm text-gray-500">
         Try adjusting your search or filter to find what you&apos;re looking for.
       </p>
