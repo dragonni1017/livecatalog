@@ -662,8 +662,19 @@ out: its photo is the P273807-46CM lying panda.
   leftover "120psc/cs".
 - Case count: P273761 (label and name 180, QuickBooks 240).
 
-**Progress 2026-10-29:** 940 of 1,183 visible products have a real
-description, and 243 remain.
+**Batch 34 (2026-10-29, applied: 24 live, 964 in all).** The file is
+`data/description-batch-34-log.csv`. 24 audit rows (written before the apply)
+were matched against the live text, and the live prod-40638 page was checked.
+14 old descriptions were blank (the prod-40xxx ids).
+
+- Name/photo conflicts: T641221 "85cm Robot" is a rainbow spaceman-shaped
+  push-pop board, FD400109 "Cream" looks peach, K229520 "4 color" shows 6,
+  K229479 has a stray "Sketching". Typos: Cyrstal (P257207), Dumbling (S121030).
+- Ribbon labels say 1.57" where names say 1.5" (FD400110, FD400079,
+  FD400004-G, FD400109). P273846 label 30/pk x 4 vs name 12/pk (both 120/cs).
+
+**Progress 2026-10-29:** 964 of 1,183 visible products have a real
+description, and 219 remain.
 
 **Name fixes from the batches, applied 2026-10-27.** 13 renames went
 through `fix-product-names.ts --plan=data/product-name-fixes-typos-20261027.csv`.
