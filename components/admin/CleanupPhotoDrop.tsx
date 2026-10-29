@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
-import { IMAGE_RE, matchFilesToProducts, toPhotoFile, type PhotoFile, type PhotoMatch } from '@/lib/photo-matching'
+import { IMAGE_RE, matchFilesToProducts, stemOf, toPhotoFile, type PhotoFile, type PhotoMatch } from '@/lib/photo-matching'
 
 // Folder / drag-drop photo upload for /admin/cleanup.
 //
@@ -149,6 +149,43 @@ export default function CleanupPhotoDrop({ products }: { products: Product[] }) 
   const dupes = entries.flatMap((e) => e.dupes.map((d) => ({ sku: e.product.sku, name: d.name })))
   const todo = replace ? entries : fresh
   const todoFileCount = todo.reduce((n, e) => n + uploadsFor(e).length, 0)
+
+  // Phone camera: a captured photo is named like IMG_1234.jpg, which matches
+  // nothing, so it is renamed to the chosen SKU (SKU.jpg, then SKU-2.jpg …
+  // for extra angles, the same convention as the folder drop) and ADDED to
+  // the list rather than replacing it.
+  const [cameraSku, setCameraSku] = useState('')
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  function onCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const shot = e.target.files?.[0]
+    e.target.value = '' // let the same input fire again for the next photo
+    setCameraError(null)
+    if (!shot) return
+    const product = bySku.get(cameraSku.trim().toUpperCase())
+    if (!product) {
+      setCameraError('Type a SKU from the catalog first.')
+      return
+    }
+    const ext = shot.type === 'image/png' ? '.png' : shot.type === 'image/webp' ? '.webp' : shot.type === 'image/jpeg' ? '.jpg' : null
+    if (!ext) {
+      setCameraError('That photo format can’t be used (JPG, PNG or WebP only). On iPhone: Settings → Camera → Formats → Most Compatible.')
+      return
+    }
+    const sku = product.sku.trim()
+    setFiles((prev) => {
+      // Exact "SKU" or "SKU-<n>" only: some SKUs end in a number themselves (P273606-2).
+      const SKU = sku.toUpperCase()
+      const taken = prev.filter((f) => {
+        const s = stemOf(f.name).toUpperCase()
+        return s === SKU || (s.startsWith(SKU + '-') && /^\d+$/.test(s.slice(SKU.length + 1)))
+      }).length
+      const name = `${sku}${taken === 0 ? '' : `-${taken + 1}`}${ext}`
+      const file = new File([shot], name, { type: shot.type })
+      return [...prev, { ...toPhotoFile(name), file, key: `camera/${name}/${Date.now()}` }]
+    })
+    setOutcome(null)
+    setError(null)
+  }
 
   function accept(list: { file: File; path: string }[]) {
     const images = list.filter((f) => IMAGE_RE.test(f.file.name))
@@ -302,6 +339,42 @@ export default function CleanupPhotoDrop({ products }: { products: Product[] }) 
             <input type="file" multiple accept=".jpg,.jpeg,.png,.webp" className="hidden" onChange={onPick} />
           </label>
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+        <span className="text-gray-600">Or take a photo:</span>
+        <input
+          value={cameraSku}
+          onChange={(e) => setCameraSku(e.target.value)}
+          list="cleanup-photo-skus"
+          placeholder="SKU"
+          autoCapitalize="characters"
+          className="w-32 rounded-md border border-gray-300 px-2 py-1 font-mono text-xs uppercase focus:border-gray-900 focus:outline-none"
+        />
+        <datalist id="cleanup-photo-skus">
+          {products.map((p) => (
+            <option key={p.sku} value={p.sku} />
+          ))}
+        </datalist>
+        <label
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+            bySku.has(cameraSku.trim().toUpperCase())
+              ? 'cursor-pointer bg-gray-900 text-white hover:bg-gray-700'
+              : 'cursor-not-allowed bg-gray-200 text-gray-500'
+          }`}
+        >
+          Take photo
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            disabled={!bySku.has(cameraSku.trim().toUpperCase())}
+            onChange={onCapture}
+          />
+        </label>
+        <span className="text-xs text-gray-400">Renamed to the SKU and added to the list below. Take more for extra angles.</span>
+        {cameraError && <span className="w-full text-xs text-red-600">{cameraError}</span>}
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
