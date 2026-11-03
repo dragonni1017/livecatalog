@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { searchWords, wordOrFilter } from '@/lib/search-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,13 +17,15 @@ export async function GET(request: NextRequest) {
   const { getAdminClient } = await import('@/lib/supabase')
   const db = getAdminClient()
 
-  const { data, error } = await db
+  // Per word, plural-tolerant, like the grid search: "floral boxes" finds
+  // "Box, Floral".
+  let query = db
     .from('products')
     .select('id, sku, name, price_cents, image_url, category:categories!products_category_id_fkey(name)')
-    .or(`name.ilike.%${q}%,sku.ilike.%${q}%,barcode.ilike.%${q}%`)
     .eq('is_active', true)
     .eq('manually_hidden', false)
-    .limit(6)
+  for (const word of searchWords(q)) query = query.or(wordOrFilter(word, ['name', 'sku', 'barcode']))
+  const { data, error } = await query.limit(6)
 
   if (error) {
     console.error('[suggest] query failed:', error.message)
