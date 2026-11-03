@@ -2,6 +2,7 @@ import Link from 'next/link'
 import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
 import { getAdminClient } from '@/lib/supabase'
 import { summarizeWaiting, type WaitingSummary } from '@/lib/order-age'
+import { loadHiddenSearchDemand } from '@/lib/hidden-search-demand-load'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ export default async function AdminDashboard() {
   let pricesToReview = 0
   let namesToReview = 0
   let pricesForErply = 0
+  let hiddenSearched = { products: 0, searches: 0 }
   try {
     const db = getAdminClient()
 
@@ -30,6 +32,10 @@ export default async function AdminDashboard() {
       .select('id')
       .eq('status', 'pending')
     if (!nameError) namesToReview = nameRows?.length ?? 0
+
+    // Hidden products customers searched for by exact SKU/barcode (null on error hides the card).
+    const demand = await loadHiddenSearchDemand(db)
+    if (demand) hiddenSearched = { products: demand.length, searches: demand.reduce((n, r) => n + r.times, 0) }
 
     // Price review queue (migration 0070). Errors (e.g. table not there yet) just hide the card.
     const { data: reviewRows, error: reviewError } = await db
@@ -131,6 +137,23 @@ export default async function AdminDashboard() {
                 </p>
               </div>
               <svg className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          )}
+          {hiddenSearched.products > 0 && (
+            <Link
+              href="/admin/zero-results#hidden"
+              className="flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-6 py-5 shadow-sm hover:border-amber-400 hover:shadow-md transition-all group"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-amber-900">Hidden products customers searched for</h2>
+                <p className="text-sm text-amber-800 mt-0.5">
+                  {hiddenSearched.products} hidden product{hiddenSearched.products === 1 ? '' : 's'} searched by SKU{' '}
+                  {hiddenSearched.searches} time{hiddenSearched.searches === 1 ? '' : 's'}, most searched first
+                </p>
+              </div>
+              <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
