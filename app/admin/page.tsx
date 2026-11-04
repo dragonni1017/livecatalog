@@ -3,8 +3,20 @@ import BulkVisibilityActions from '@/components/admin/BulkVisibilityActions'
 import { getAdminClient } from '@/lib/supabase'
 import { summarizeWaiting, type WaitingSummary } from '@/lib/order-age'
 import { loadHiddenSearchDemand } from '@/lib/hidden-search-demand-load'
+import { lastSeen, queueAge, type QueueAge } from '@/lib/queue-age'
 
 export const dynamic = 'force-dynamic'
+
+// How long a review queue has sat; red once a full work week has gone by untouched.
+function AgeNote({ age }: { age: QueueAge | null }) {
+  if (!age) return null
+  return (
+    <span className={age.stale ? 'font-semibold text-red-700' : 'text-amber-700'}>
+      {' · '}
+      {age.text}
+    </span>
+  )
+}
 
 export default async function AdminDashboard() {
   let qbPending = 0
@@ -15,7 +27,10 @@ export default async function AdminDashboard() {
   let pricesToReview = 0
   let namesToReview = 0
   let pricesForErply = 0
-  let hiddenSearched = { products: 0, searches: 0 }
+  let hiddenSearched = { products: 0, searches: 0, last: null as string | null }
+  let namesAge: QueueAge | null = null
+  let pricesAge: QueueAge | null = null
+  const nowIso = new Date().toISOString()
   try {
     const db = getAdminClient()
 
@@ -29,20 +44,32 @@ export default async function AdminDashboard() {
     // Name review queue (migration 0071). Errors (e.g. table not there yet) just hide the card.
     const { data: nameRows, error: nameError } = await db
       .from('name_review_items')
-      .select('id')
+      .select('id, created_at')
       .eq('status', 'pending')
-    if (!nameError) namesToReview = nameRows?.length ?? 0
+    if (!nameError) {
+      namesToReview = nameRows?.length ?? 0
+      namesAge = queueAge((nameRows ?? []).map((r) => r.created_at), nowIso)
+    }
 
     // Hidden products customers searched for by exact SKU/barcode (null on error hides the card).
     const demand = await loadHiddenSearchDemand(db)
-    if (demand) hiddenSearched = { products: demand.length, searches: demand.reduce((n, r) => n + r.times, 0) }
+    if (demand) {
+      hiddenSearched = {
+        products: demand.length,
+        searches: demand.reduce((n, r) => n + r.times, 0),
+        last: lastSeen(demand.map((r) => r.lastSearched), nowIso),
+      }
+    }
 
     // Price review queue (migration 0070). Errors (e.g. table not there yet) just hide the card.
     const { data: reviewRows, error: reviewError } = await db
       .from('price_review_items')
-      .select('id')
+      .select('id, created_at')
       .eq('status', 'pending')
-    if (!reviewError) pricesToReview = reviewRows?.length ?? 0
+    if (!reviewError) {
+      pricesToReview = reviewRows?.length ?? 0
+      pricesAge = queueAge((reviewRows ?? []).map((r) => r.created_at), nowIso)
+    }
 
 
     // Quote requests still waiting for a first response (order follow-up part 3).
@@ -116,6 +143,7 @@ export default async function AdminDashboard() {
                 <h2 className="text-base font-semibold text-amber-900">Price review</h2>
                 <p className="text-sm text-amber-800 mt-0.5">
                   {pricesToReview} price{pricesToReview === 1 ? '' : 's'} to decide, each with a suggestion
+                  <AgeNote age={pricesAge} />
                 </p>
               </div>
               <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,6 +179,7 @@ export default async function AdminDashboard() {
                 <p className="text-sm text-amber-800 mt-0.5">
                   {hiddenSearched.products} hidden product{hiddenSearched.products === 1 ? '' : 's'} searched by SKU{' '}
                   {hiddenSearched.searches} time{hiddenSearched.searches === 1 ? '' : 's'}, most searched first
+                  {hiddenSearched.last && <span className="text-amber-700"> · last searched {hiddenSearched.last}</span>}
                 </p>
               </div>
               <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +196,7 @@ export default async function AdminDashboard() {
                 <h2 className="text-base font-semibold text-amber-900">Name review</h2>
                 <p className="text-sm text-amber-800 mt-0.5">
                   {namesToReview} suggested rename{namesToReview === 1 ? '' : 's'} to decide
+                  <AgeNote age={namesAge} />
                 </p>
               </div>
               <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
