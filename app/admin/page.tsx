@@ -29,6 +29,8 @@ export default async function AdminDashboard() {
   let pricesForErply = 0
   let hiddenSearched = { products: 0, searches: 0, last: null as string | null }
   let namesAge: QueueAge | null = null
+  let caseCountsToReview = 0
+  let caseCountsAge: QueueAge | null = null
   let pricesAge: QueueAge | null = null
   const nowIso = new Date().toISOString()
   try {
@@ -49,6 +51,16 @@ export default async function AdminDashboard() {
     if (!nameError) {
       namesToReview = nameRows?.length ?? 0
       namesAge = queueAge((nameRows ?? []).map((r) => r.created_at), nowIso)
+    }
+
+    // Case-count review queue (migration 0072). Errors (e.g. table not there yet) just hide the card.
+    const { data: caseRows, error: caseError } = await db
+      .from('case_count_review_items')
+      .select('id, created_at')
+      .eq('status', 'pending')
+    if (!caseError) {
+      caseCountsToReview = caseRows?.length ?? 0
+      caseCountsAge = queueAge((caseRows ?? []).map((r) => r.created_at), nowIso)
     }
 
     // Hidden products customers searched for by exact SKU/barcode (null on error hides the card).
@@ -180,6 +192,23 @@ export default async function AdminDashboard() {
                   {hiddenSearched.products} hidden product{hiddenSearched.products === 1 ? '' : 's'} searched by SKU{' '}
                   {hiddenSearched.searches} time{hiddenSearched.searches === 1 ? '' : 's'}, most searched first
                   {hiddenSearched.last && <span className="text-amber-700"> · last searched {hiddenSearched.last}</span>}
+                </p>
+              </div>
+              <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          )}
+          {caseCountsToReview > 0 && (
+            <Link
+              href="/admin/case-count-review"
+              className="flex items-center justify-between rounded-xl bg-amber-50 border border-amber-200 px-6 py-5 shadow-sm hover:border-amber-400 hover:shadow-md transition-all group"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-amber-900">Case-count review</h2>
+                <p className="text-sm text-amber-800 mt-0.5">
+                  {caseCountsToReview} case count{caseCountsToReview === 1 ? '' : 's'} that disagree with a shipment or QuickBooks
+                  <AgeNote age={caseCountsAge} />
                 </p>
               </div>
               <svg className="w-5 h-5 text-amber-400 group-hover:text-amber-600 transition-colors flex-shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
