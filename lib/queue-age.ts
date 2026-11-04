@@ -10,6 +10,8 @@ export const STALE_BUSINESS_DAYS = 5
 export interface QueueAge {
   text: string
   stale: boolean
+  /** Calendar days the oldest item has waited (0 = today). */
+  days: number
 }
 
 const days = (n: number) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`)
@@ -23,6 +25,7 @@ export function queueAge(createdAts: (string | null | undefined)[], nowIso: stri
   return {
     text: age.calendarDays === 0 ? 'added today' : `oldest waiting ${days(age.calendarDays)}`,
     stale: age.businessDays >= STALE_BUSINESS_DAYS,
+    days: age.calendarDays,
   }
 }
 
