@@ -1,6 +1,6 @@
 ---
 name: project-price-review-screen-20261029
-description: 2026-10-29 /admin/price-review (0070, #208) and /admin/name-review (0071, #211) replace the price and name spreadsheets (approve with audit first); prod env Erply set, WooCommerce and Cloudinary NOT set; checkout email typo prompt (#207); Cleanup phone-camera photo
+description: 2026-10-29 /admin/price-review (0070, #208) and /admin/name-review (0071, #211) replace the price and name spreadsheets (approve with audit first); prod env Erply set, WooCommerce NOT set, Cloudinary set 2026-11-04; checkout email typo prompt (#207); Cleanup phone-camera photo
 type: project
 ---
 
@@ -34,8 +34,9 @@ the three known bad orders (ORD-2026-0030, 0035, 0037).
 - WooCommerce: **not set**. A rename from the site writes Erply and the
   catalog and reports Woo as "SKIPPED — WooCommerce not configured here".
   Run `scripts/fix-product-names.ts` locally to catch Woo up.
-- `CLOUDINARY_*`: **not set**, so the /admin/cleanup photo upload has never
-  worked live. The user believed they had added it, but the env list showed
+- `CLOUDINARY_*`: **set in production 2026-11-04** (see
+  [[project-search-and-photo-queue-20261104]]). On 2026-10-29 it was **not set**, so the
+  /admin/cleanup photo upload had never worked live. The user believed they had added it, but the env list showed
   none, in production or preview. Re-check with the Vercel MCP
   `filter_project_envs` (names only) before telling anyone uploads work.
   On 2026-10-29 four photos went up through a local script instead
