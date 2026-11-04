@@ -10,15 +10,16 @@ describe('queueAge', () => {
     expect(queueAge(['2026-11-03T20:00:00Z', '2026-10-29T20:00:00Z', null], NOW)).toEqual({
       text: 'oldest waiting 6 days',
       stale: false,
+      days: 6,
     })
   })
   it('is stale after a full work week', () => {
     // Oct 28 (Wed) -> Nov 4 (Wed): 5 business days.
-    expect(queueAge(['2026-10-28T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 7 days', stale: true })
+    expect(queueAge(['2026-10-28T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 7 days', stale: true, days: 7 })
   })
   it('is not stale inside a work week', () => {
-    expect(queueAge(['2026-11-02T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 2 days', stale: false })
-    expect(queueAge(['2026-11-03T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 1 day', stale: false })
+    expect(queueAge(['2026-11-02T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 2 days', stale: false, days: 2 })
+    expect(queueAge(['2026-11-03T20:00:00Z'], NOW)).toEqual({ text: 'oldest waiting 1 day', stale: false, days: 1 })
   })
   it('says "added today" for today, in Los Angeles time', () => {
     // 07:00 UTC on Nov 4 is still Nov 3 in Los Angeles.
