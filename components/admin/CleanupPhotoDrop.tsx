@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
+import ShowAfterPhoto, { type HiddenAfterPhoto } from './ShowAfterPhoto'
 import { IMAGE_RE, matchFilesToProducts, stemOf, toPhotoFile, type PhotoFile, type PhotoMatch } from '@/lib/photo-matching'
 
 // Folder / drag-drop photo upload for /admin/cleanup.
@@ -42,6 +43,8 @@ interface Outcome {
   updated: number
   skipped: string[]
   failures: string[]
+  /** Updated but still hidden (the route never unhides). */
+  hiddenNow: HiddenAfterPhoto[]
 }
 
 // Products per signature + save round trip. Small so that a signature is
@@ -229,7 +232,7 @@ export default function CleanupPhotoDrop({ products }: { products: Product[] }) 
     setBusy(true)
     setError(null)
     setOutcome(null)
-    const total: Outcome = { updated: 0, skipped: [], failures: [] }
+    const total: Outcome = { updated: 0, skipped: [], failures: [], hiddenNow: [] }
     setProgress({ done: 0, total: todo.length })
 
     try {
@@ -291,6 +294,7 @@ export default function CleanupPhotoDrop({ products }: { products: Product[] }) 
             total.updated += json.updated
             total.skipped.push(...json.skipped)
             total.failures.push(...json.failures)
+            total.hiddenNow.push(...(json.hiddenNow ?? []))
           }
         }
 
@@ -447,6 +451,7 @@ export default function CleanupPhotoDrop({ products }: { products: Product[] }) 
           {outcome.skipped.length > 0 && (
             <p className="mt-1 text-xs text-gray-500">Skipped: {outcome.skipped.join(', ')}</p>
           )}
+          <ShowAfterPhoto products={outcome.hiddenNow} />
           {outcome.failures.length > 0 && (
             <ul className="mt-2 list-disc pl-5 text-xs text-red-600">
               {outcome.failures.map((f, i) => (

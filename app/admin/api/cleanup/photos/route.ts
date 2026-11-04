@@ -6,7 +6,7 @@ import { rawCloudinaryPublicId, skuCandidatesForPublicId } from '@/lib/cleanup'
 
 export const dynamic = 'force-dynamic'
 
-// POST { items: [{ sku, urls[] }], replace } -> { updated, skipped[], failures[] }
+// POST { items: [{ sku, urls[] }], replace } -> { updated, skipped[], failures[], hiddenNow[] }
 //
 // Records photos the browser has ALREADY uploaded to Cloudinary (signed by
 // ./photo-signature). Catalog-only: writes products.image_url / image_urls
@@ -23,6 +23,9 @@ export const dynamic = 'force-dynamic'
 //  - Unless `replace` is set, a product that has gained an image since the
 //    screen loaded is skipped, not overwritten -- re-checked here, and again
 //    in the UPDATE's own WHERE so a concurrent write can't slip between.
+//
+// hiddenNow: updated products that are still hidden, so the screen can offer
+// to show them. Nothing is unhidden here.
 
 const MAX_ITEMS = 100
 const MAX_URLS_PER_ITEM = 20
@@ -65,20 +68,22 @@ export async function POST(request: NextRequest) {
 
     const db = getAdminClient()
     const skus = [...new Set(items.map((i) => i.sku))]
-    const products = new Map<string, { id: string; sku: string; image_url: string | null }>()
+    type Found = { id: string; sku: string; name: string | null; image_url: string | null; manually_hidden: boolean | null; price_cents: number | null }
+    const products = new Map<string, Found>()
     for (let i = 0; i < skus.length; i += 200) {
       const { data, error } = await db
         .from('products')
-        .select('id, sku, image_url')
+        .select('id, sku, name, image_url, manually_hidden, price_cents')
         .in('sku', skus.slice(i, i + 200))
       if (error) throw error
-      for (const p of data ?? []) products.set(String(p.sku), p as { id: string; sku: string; image_url: string | null })
+      for (const p of data ?? []) products.set(String(p.sku), p as Found)
     }
 
     const actor = await getActorEmail()
     let updated = 0
     const skipped: string[] = []
     const failures: string[] = []
+    const hiddenNow: { id: string; sku: string; name: string; priced: boolean }[] = []
 
     for (const item of items) {
       const product = products.get(item.sku)
@@ -124,6 +129,9 @@ export async function POST(request: NextRequest) {
       }
 
       updated++
+      if (product.manually_hidden) {
+        hiddenNow.push({ id: product.id, sku: product.sku, name: product.name ?? '', priced: (product.price_cents ?? 0) > 0 })
+      }
       await logAudit({
         action: 'cleanup_photo_set',
         entity_type: 'product',
@@ -136,7 +144,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ ok: failures.length === 0, updated, skipped, failures })
+    return NextResponse.json({ ok: failures.length === 0, updated, skipped, failures, hiddenNow })
   } catch (err) {
     console.error('[admin/cleanup/photos] error:', err)
     return NextResponse.json({ error: 'Failed to save the photos.' }, { status: 500 })
