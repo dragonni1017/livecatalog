@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
+import { historyLine, type CreditHistory } from '@/lib/credit-history'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 export interface CreditApplication {
@@ -54,7 +55,41 @@ function termsLabel(value: string | null): string {
   return TERMS_LABEL[value] ?? value
 }
 
-export default function CreditApplicationTable({ initialApplications }: { initialApplications: CreditApplication[] }) {
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+// What we already know about the applicant: quotes on the site and whether
+// they're a catalog / Erply / QuickBooks customer. No payment history here.
+function HistoryBlock({ h }: { h: CreditHistory }) {
+  return (
+    <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-blue-800">What we already know</p>
+      <ul className="mt-1.5 space-y-0.5 text-gray-800">
+        <li>
+          {h.quotes === 0
+            ? 'No quote requests on the site from this email.'
+            : `${h.quotes} quote request${h.quotes === 1 ? '' : 's'} on the site (${fmtDate(h.firstQuote!)} to ${fmtDate(h.lastQuote!)}): ${h.converted} converted${h.converted ? ` for ${(h.convertedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}${h.open ? `, ${h.open} still open` : ''}.`}
+        </li>
+        <li>QuickBooks: {h.quickBooks ? `listed as ${h.quickBooks.name} (matched by ${h.quickBooks.by})` : 'not found in the customer list'}.</li>
+        <li>Erply: {h.erply ? `customer${h.erply.tier ? `, tier ${h.erply.tier}` : ''}` : 'not linked'}.</li>
+        {h.catalogCustomer && (
+          <li>Catalog account since {fmtDate(h.catalogCustomer.since)}{h.catalogCustomer.tier ? `, price tier ${h.catalogCustomer.tier}` : ''}.</li>
+        )}
+        {h.earlierApplications.length > 0 && (
+          <li>Applied before: {h.earlierApplications.map((a) => `${fmtDate(a.created_at)} (${a.status})`).join(', ')}.</li>
+        )}
+      </ul>
+      <p className="mt-1.5 text-xs text-gray-500">Payment history isn&apos;t in this system; check the customer&apos;s A/R in QuickBooks before approving.</p>
+    </div>
+  )
+}
+
+export default function CreditApplicationTable({
+  initialApplications,
+  history = {},
+}: {
+  initialApplications: CreditApplication[]
+  history?: Record<string, CreditHistory>
+}) {
   const [applications, setApplications] = useState(initialApplications)
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>(
     initialApplications.some((a) => a.status === 'pending') ? 'pending' : 'all',
@@ -189,6 +224,7 @@ export default function CreditApplicationTable({ initialApplications }: { initia
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900">{app.company_name}</p>
                         {app.address && <p className="text-xs text-gray-400">{app.address}</p>}
+                        {history[app.id] && <p className="mt-0.5 text-xs text-blue-700">{historyLine(history[app.id])}</p>}
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-gray-900">{app.contact_name}</p>
@@ -250,6 +286,7 @@ export default function CreditApplicationTable({ initialApplications }: { initia
                     {isExpanded && (
                       <tr className="bg-gray-50/60">
                         <td colSpan={6} className="px-4 py-4">
+                          {history[app.id] && <HistoryBlock h={history[app.id]} />}
                           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                             <div>
                               <span className="text-xs text-gray-500">Years in business</span>
