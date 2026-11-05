@@ -7,6 +7,8 @@ import EnteredInQbToggle from '@/components/admin/EnteredInQbToggle'
 import { tierLabel } from '@/lib/order-rules'
 import { DISMISS_REASON_LABELS, isDismissReason } from '@/lib/order-dismiss'
 import { isWaiting, waitAge } from '@/lib/order-age'
+import { cleanupHints, describeHint } from '@/lib/order-cleanup'
+import QuietCloseControls from '@/components/admin/QuietCloseControls'
 import type { OrderStatus } from '@/lib/types'
 
 export interface OrderRow {
@@ -83,6 +85,8 @@ export default function OrdersTable({
   // Needs follow-up: waiting orders only (new, not dismissed), oldest first.
   const [followUp, setFollowUp] = useState(initialFollowUp)
   const waitingCount = useMemo(() => orders.filter(isWaiting).length, [orders])
+  // Later quote from the same customer etc., for closing old ones (lib/order-cleanup.ts).
+  const hints = useMemo(() => cleanupHints(orders), [orders])
   const [status, setStatus] = useState<OrderStatus | 'all'>('all')
   const [qb, setQb] = useState<'all' | 'entered' | 'pending'>('all')
   const [search, setSearch] = useState(initialSearch ?? '')
@@ -208,6 +212,9 @@ export default function OrdersTable({
                   <td className="px-4 py-3 text-gray-800">
                     <div className="font-medium">{o.customer_company || o.customer_name}</div>
                     {o.customer_company && <div className="text-xs text-gray-500">{o.customer_name}</div>}
+                    {isWaiting(o) && describeHint(hints.get(o.id)) && (
+                      <div className="mt-1 max-w-[16rem] text-xs text-amber-700">{describeHint(hints.get(o.id))}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{o.order_items?.[0]?.count ?? 0}</td>
                   <td className="px-4 py-3 font-semibold text-gray-900">{formatPrice(o.subtotal_cents)}</td>
@@ -220,6 +227,11 @@ export default function OrdersTable({
                       <div className="flex flex-col items-start">
                         <OrderStatusBadge status={o.status} />
                         {isWaiting(o) && <WaitBadge createdAt={o.created_at} nowIso={nowIso} />}
+                        {followUp && isWaiting(o) && (
+                          <div className="mt-2">
+                            <QuietCloseControls id={o.id} canDuplicate={(hints.get(o.id)?.later.length ?? 0) > 0 || !!hints.get(o.id)?.possibleDuplicateOf} />
+                          </div>
+                        )}
                       </div>
                     )}
                   </td>
