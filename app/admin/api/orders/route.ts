@@ -15,12 +15,18 @@ function isMockMode(): boolean {
 
 // PATCH /admin/api/orders — change an order's status and/or its
 // "entered in QuickBooks" flag. Accepts { id, status? } and/or { id, enteredInQb? }.
+// { notify: false } with a status skips ONLY the customer email (closing old
+// quotes handled outside the site); QuickBooks queueing and stock are unchanged.
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const id: string = body.id
     const hasStatus = body.status !== undefined
     const hasEntered = body.enteredInQb !== undefined
+    if (body.notify !== undefined && typeof body.notify !== 'boolean') {
+      return NextResponse.json({ error: 'notify must be true or false' }, { status: 400 })
+    }
+    const notify = body.notify !== false
 
     if (!id || (!hasStatus && !hasEntered)) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
@@ -87,11 +93,11 @@ export async function PATCH(request: NextRequest) {
       entity_type: 'order',
       entity_id: id,
       old_value: hasStatus ? (current?.status ?? undefined) : (current != null ? String(current.entered_in_qb) : undefined),
-      new_value: hasStatus ? body.status : String(body.enteredInQb),
+      new_value: hasStatus ? (notify ? body.status : `${body.status} (no customer email)`) : String(body.enteredInQb),
     })
 
     // Best-effort customer notification — never blocks the response
-    if (hasStatus && (body.status === 'contacted' || body.status === 'converted' || body.status === 'lost')) {
+    if (notify && hasStatus && (body.status === 'contacted' || body.status === 'converted' || body.status === 'lost')) {
       await notifyOrderStatusChange({ orderId: id, status: body.status, db })
     }
 
