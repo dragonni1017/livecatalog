@@ -39,7 +39,7 @@ is "hidden on purpose" in the WooCommerce export's readiness rule: 60 on
 $0); Keep hidden / Put back are audit rows `show_review_kept_hidden` /
 `show_review_reopened` via POST /admin/api/show-review, latest wins, no table.
 
-**Next.Js route files** may only export handlers and config (`dynamic`):
+**Next.js route files** may only export handlers and config (`dynamic`):
 shared loaders and constants go in lib/ (hit twice: woo-export, show-review).
 
 **Why:** each is a non-obvious rule or a correction of something earlier
