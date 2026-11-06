@@ -8,6 +8,7 @@ import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { meaningfulDescription } from '@/lib/product-description'
 import { rankRelated } from '@/lib/related-products'
+import { DEPARTMENTS, departmentOf, departmentSlug } from '@/lib/category-groups'
 import { getDisplaySettings } from '@/lib/display-settings'
 import { getActivePriceTiers } from '@/lib/rep-tier'
 import StockBadge from '@/components/catalog/StockBadge'
@@ -175,9 +176,23 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Details */}
           <div className="flex flex-col gap-4 p-8">
             {product.category && settings.show_category_detail && (
-              <nav className="flex items-center gap-1.5 text-xs text-gray-500">
+              <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                 <Link href="/" className="hover:text-red-600">All Products</Link>
                 <span>/</span>
+                {/* The category's department (lib/category-groups.ts), when it has more than one category. */}
+                {(() => {
+                  const deptName = departmentOf(product.category.name)
+                  const dept = DEPARTMENTS.find((d) => d.name === deptName)
+                  if (!dept || dept.categories.length < 2) return null
+                  return (
+                    <>
+                      <Link href={`/?dept=${departmentSlug(dept.name)}`} className="hover:text-red-600">
+                        {dept.name}
+                      </Link>
+                      <span>/</span>
+                    </>
+                  )
+                })()}
                 <Link
                   href={`/?category=${product.category.slug}`}
                   className="font-medium text-red-600 hover:text-red-700"
