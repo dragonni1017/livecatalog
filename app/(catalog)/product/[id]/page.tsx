@@ -7,6 +7,7 @@ import { Product } from '@/lib/types'
 import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { meaningfulDescription } from '@/lib/product-description'
+import { rankRelated } from '@/lib/related-products'
 import { getDisplaySettings } from '@/lib/display-settings'
 import { getActivePriceTiers } from '@/lib/rep-tier'
 import StockBadge from '@/components/catalog/StockBadge'
@@ -81,8 +82,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
   // ProductDetailPrice/AddToCartButton.
   const tiers = await getActivePriceTiers()
 
-  // "More in this category" — a few other in-catalog products from the same
-  // category, so a product page isn't a dead end.
+  // "More in this category" — other in-catalog products from the same
+  // category, so a product page isn't a dead end. Ranked, not alphabetical:
+  // similar names, in stock and with a photo first (lib/related-products.ts).
+  // The biggest category has 161 showing, so 200 covers it.
   let related: Product[] = []
   if (product.category_id) {
     const { data } = await supabase
@@ -92,9 +95,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
       .eq('manually_hidden', false)
       .eq('category_id', product.category_id)
       .neq('id', product.id)
-      .order('name')
-      .limit(6)
-    related = (data ?? []) as Product[]
+      .order('id')
+      .limit(200)
+    related = rankRelated(product, (data ?? []) as Product[])
   }
 
   // "Customers also ordered" — products most frequently co-purchased with this one.
