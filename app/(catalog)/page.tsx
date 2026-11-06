@@ -6,6 +6,8 @@ import CollectionStrip from '@/components/catalog/CollectionStrip'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
+import { departmentBySlug, departmentSlug } from '@/lib/category-groups'
+import { catalogHref, filterChips, type CatalogState } from '@/lib/catalog-url'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
 import { parseCaseSize, parseSoldBy } from '@/lib/catalog-filters'
@@ -21,13 +23,14 @@ const DEFAULT_PER_PAGE = 20
 const SEARCH_FIELDS = ['name', 'description', 'sku', 'barcode'] as const
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; category?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string; soldby?: string; case?: string }>
+  searchParams: Promise<{ q?: string; category?: string; dept?: string; page?: string; sort?: string; instock?: string; per?: string; minPrice?: string; maxPrice?: string; soldby?: string; case?: string }>
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const {
     q,
     category,
+    dept: deptParam,
     page: pageParam,
     sort: sortParam,
     instock,
@@ -60,7 +63,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   // The collection strip only shows on the plain landing view: no search,
   // category, filter, sort or later page, so it doesn't crowd browsing.
   const isLandingView =
-    !q && !category && !sortParam && !instock && !minPrice && !maxPrice && !soldBy && !caseSize && currentPage === 1
+    !q && !category && !deptParam && !sortParam && !instock && !minPrice && !maxPrice && !soldBy && !caseSize && currentPage === 1
   const [{ data: categoriesData }, collections, stripCards] = await Promise.all([
     supabase.from('categories').select('*').order('name'),
     loadLiveCollections(getAdminClient()),
@@ -101,6 +104,17 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       .eq('category_id', categoryMatch.id)
     const memberIds = (memberRows ?? []).map((r) => r.product_id)
     query = query.in('id', memberIds.length > 0 ? memberIds : ['__none__'])
+  }
+
+  // A whole department (?dept=, lib/category-groups.ts), when no single
+  // category is picked. Filtered on the primary category_id: for every
+  // department that matches the product_categories membership count exactly
+  // (checked 2026-11-06), and it keeps the request short, where a product-id
+  // list for Florals & Gifts would pass 1,000 ids.
+  const department = categoryMatch ? null : departmentBySlug(deptParam)
+  if (department) {
+    const deptIds = categories.filter((c) => department.categories.includes(c.name)).map((c) => c.id)
+    query = query.in('category_id', deptIds.length > 0 ? deptIds : ['__none__'])
   }
 
   if (inStock) query = query.gt('stock_qty', 0)
@@ -171,36 +185,23 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     }
   }
 
-  // Build URL helper preserving existing params
-  function pageUrl(p: number) {
-    const params = new URLSearchParams()
-    if (q) params.set('q', q)
-    if (category) params.set('category', category)
-    if (sort !== 'sku') params.set('sort', sort)
-    if (inStock) params.set('instock', '1')
-    if (soldBy) params.set('soldby', soldBy)
-    if (caseSize) params.set('case', caseSize.value)
-    if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
-    if (minPrice) params.set('minPrice', minPrice)
-    if (maxPrice) params.set('maxPrice', maxPrice)
-    if (p > 1) params.set('page', String(p))
-    const qs = params.toString()
-    return qs ? `/?${qs}` : '/'
+  // Every catalog link keeps the same filters (lib/catalog-url.ts).
+  const urlState: CatalogState = {
+    q,
+    category: categoryMatch?.slug,
+    dept: department ? departmentSlug(department.name) : undefined,
+    sort,
+    inStock,
+    soldBy: soldBy ?? undefined,
+    caseSize: caseSize?.value,
+    per: pageSize,
+    minPrice,
+    maxPrice,
   }
-
-  // Build clear-price URL (preserve all other params, drop minPrice/maxPrice)
-  const clearPriceUrl = (() => {
-    const params = new URLSearchParams()
-    if (q) params.set('q', q)
-    if (category) params.set('category', category)
-    if (sort !== 'sku') params.set('sort', sort)
-    if (inStock) params.set('instock', '1')
-    if (soldBy) params.set('soldby', soldBy)
-    if (caseSize) params.set('case', caseSize.value)
-    if (pageSize !== DEFAULT_PER_PAGE) params.set('per', String(pageSize))
-    const qs = params.toString()
-    return qs ? `/?${qs}` : '/'
-  })()
+  function pageUrl(p: number) {
+    return catalogHref({ ...urlState, page: p })
+  }
+  const chips = filterChips(urlState, { category: categoryMatch?.name, dept: department?.name })
 
   const activeCategory = categoryMatch?.slug
 
@@ -227,7 +228,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
               </div>
             </>
           }>
-            <CategoryNav categories={categories} activeSlug={activeCategory} collections={collections} counts={categoryCounts} />
+            <CategoryNav categories={categories} activeSlug={activeCategory} activeDept={department ? departmentSlug(department.name) : undefined} collections={collections} counts={categoryCounts} />
           </Suspense>
         </div>
       </aside>
@@ -239,6 +240,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         <form method="get" className="mb-3 flex flex-wrap items-center gap-3">
           {q && <input type="hidden" name="q" value={q} />}
           {category && <input type="hidden" name="category" value={category} />}
+          {department && !category && <input type="hidden" name="dept" value={departmentSlug(department.name)} />}
           {sort !== 'sku' && <input type="hidden" name="sort" value={sort} />}
           {inStock && <input type="hidden" name="instock" value="1" />}
           {soldBy && <input type="hidden" name="soldby" value={soldBy} />}
@@ -280,15 +282,25 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           </div>
         </form>
 
-        {/* Active price filter chip */}
-        {(minPrice || maxPrice) && (
-          <div className="mb-3 flex items-center gap-2 text-sm">
-            <span className="text-gray-500">
-              Price: {minPrice ? `$${minPrice}` : 'any'} – {maxPrice ? `$${maxPrice}` : 'any'}
-            </span>
-            <Link href={clearPriceUrl} className="text-red-600 hover:text-red-700 text-xs underline">
-              Clear price filter
-            </Link>
+        {/* What's applied, each removable in one click */}
+        {chips.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            {chips.map((chip) => (
+              <Link
+                key={chip.label}
+                href={chip.href}
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700 hover:border-red-400"
+                aria-label={`Remove ${chip.label}`}
+              >
+                {chip.label}
+                <span aria-hidden="true" className="text-red-400">✕</span>
+              </Link>
+            ))}
+            {chips.length > 1 && (
+              <Link href={catalogHref({ sort, per: pageSize })} className="text-xs text-gray-500 underline hover:text-gray-700">
+                Clear all
+              </Link>
+            )}
           </div>
         )}
 

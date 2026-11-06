@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Category } from '@/lib/types'
-import { departmentOf, groupCategories, type CategoryCounts } from '@/lib/category-groups'
+import { departmentOf, departmentSlug, groupCategories, type CategoryCounts } from '@/lib/category-groups'
 
 interface CategoryNavProps {
   categories: Category[]
@@ -13,13 +13,15 @@ interface CategoryNavProps {
   collections?: { slug: string; name: string }[]
   /** Products showing per category/department (lib/category-counts.ts); null = no numbers, nothing hidden. */
   counts?: CategoryCounts | null
+  /** ?dept= slug when a whole department is being viewed. */
+  activeDept?: string
 }
 
 // The 43 categories grouped into departments (lib/category-groups.ts), with
 // counts, empty categories hidden. Desktop: a sidebar whose departments open
 // and close. Phones: the specials stay as pills, and one "Categories" button
 // opens the same grouped list as wrapped pills instead of a 50-item strip.
-export default function CategoryNav({ categories, activeSlug, collections = [], counts = null }: CategoryNavProps) {
+export default function CategoryNav({ categories, activeSlug, collections = [], counts = null, activeDept }: CategoryNavProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -30,16 +32,19 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
 
   const departments = groupCategories(categories, counts, activeSlug)
   const activeCat = categories.find((c) => c.slug === activeSlug)
-  const [open, setOpen] = useState<Set<string>>(() => new Set(activeCat ? [departmentOf(activeCat.name)] : []))
+  const activeDeptName = departments.find((d) => departmentSlug(d.name) === activeDept)?.name
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(activeCat ? [departmentOf(activeCat.name)] : activeDeptName ? [activeDeptName] : []),
+  )
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  function handleCategoryClick(slug: string | null) {
+  // A category and a whole department are alternatives: picking one clears the other.
+  function handleCategoryClick(slug: string | null, dept: string | null = null) {
     const params = new URLSearchParams(searchParams.toString())
-    if (slug) {
-      params.set('category', slug)
-    } else {
-      params.delete('category')
-    }
+    params.delete('category')
+    params.delete('dept')
+    if (slug) params.set('category', slug)
+    else if (dept) params.set('dept', dept)
     params.delete('page') // reset to page 1 on category change
     router.push(`/?${params.toString()}`)
     // Query-string-only navigation (same pathname) doesn't trigger Next's
@@ -58,7 +63,7 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
     })
   }
 
-  const allActive = !activeSlug && !isNewArrivals && !isBestSellers && !activeCollection
+  const allActive = !activeSlug && !activeDeptName && !isNewArrivals && !isBestSellers && !activeCollection
   const pill = (active: boolean) =>
     `shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
       active ? 'bg-red-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-600'
@@ -74,8 +79,8 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
       {/* Phones: specials as pills, plus one button that opens the grouped list */}
       <div className="lg:hidden">
         <div className="flex gap-2 overflow-x-auto pb-1">
-          <button type="button" onClick={() => setMobileOpen((v) => !v)} aria-expanded={mobileOpen} className={pill(mobileOpen || !!activeSlug)}>
-            {activeCat ? activeCat.name : 'Categories'} {mobileOpen ? '▴' : '▾'}
+          <button type="button" onClick={() => setMobileOpen((v) => !v)} aria-expanded={mobileOpen} className={pill(mobileOpen || !!activeSlug || !!activeDeptName)}>
+            {activeCat ? activeCat.name : activeDeptName ? `All ${activeDeptName}` : 'Categories'} {mobileOpen ? '▴' : '▾'}
           </button>
           <Link href="/new-arrivals" className={`flex items-center gap-1.5 ${pill(isNewArrivals)}`}>
             <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
@@ -101,6 +106,11 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
                   {d.name} {d.count != null && <span className="font-normal text-gray-400">({d.count})</span>}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
+                  {d.categories.length > 1 && (
+                    <button type="button" onClick={() => handleCategoryClick(null, departmentSlug(d.name))} className={pill(activeDeptName === d.name)}>
+                      All {d.name}
+                    </button>
+                  )}
                   {d.categories.map((cat) => (
                     <button key={cat.id} type="button" onClick={() => handleCategoryClick(cat.slug)} className={pill(activeSlug === cat.slug)}>
                       {cat.name}
@@ -147,7 +157,7 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
             )
           }
           const isOpen = open.has(d.name)
-          const holdsActive = d.categories.some((c) => c.slug === activeSlug)
+          const holdsActive = d.categories.some((c) => c.slug === activeSlug) || activeDeptName === d.name
           return (
             <div key={d.name}>
               <button type="button" onClick={() => toggle(d.name)} aria-expanded={isOpen} className={row(holdsActive && !isOpen)}>
@@ -159,6 +169,10 @@ export default function CategoryNav({ categories, activeSlug, collections = [], 
               </button>
               {isOpen && (
                 <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-gray-200 pl-2">
+                  <button type="button" onClick={() => handleCategoryClick(null, departmentSlug(d.name))} className={row(activeDeptName === d.name)}>
+                    <span>All {d.name}</span>
+                    {num(d.count)}
+                  </button>
                   {d.categories.map((cat) => (
                     <button key={cat.id} type="button" onClick={() => handleCategoryClick(cat.slug)} className={row(activeSlug === cat.slug)}>
                       <span>{cat.name}</span>
