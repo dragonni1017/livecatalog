@@ -5,6 +5,7 @@ import { supabase, getAdminClient } from '@/lib/supabase'
 import { COLLECTION_FIELDS, isLive, loadCollectionProductIds, loadLiveCollections, type Collection } from '@/lib/collections'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadCategoryCounts } from '@/lib/category-counts'
 import { Product } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -50,6 +51,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           .in('id', ids)
       : Promise.resolve({ data: [] }),
   ])
+  const categoryCounts = await loadCategoryCounts(categories ?? [])
 
   // Keep the admin's chosen order; hidden/inactive products simply drop out.
   const rank = new Map(ids.map((id, i) => [id, i]))
@@ -63,7 +65,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             Categories
           </p>
           <Suspense fallback={<div className="h-9 w-full rounded-md bg-gray-100 animate-pulse" />}>
-            <CategoryNav categories={categories ?? []} collections={collections} />
+            <CategoryNav categories={categories ?? []} collections={collections} counts={categoryCounts} />
           </Suspense>
         </div>
       </aside>

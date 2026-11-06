@@ -5,6 +5,7 @@ import { loadCollectionStrip, loadLiveCollections } from '@/lib/collections'
 import CollectionStrip from '@/components/catalog/CollectionStrip'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadCategoryCounts } from '@/lib/category-counts'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
 import { parseCaseSize, parseSoldBy } from '@/lib/catalog-filters'
@@ -66,6 +67,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     isLandingView ? loadCollectionStrip(getAdminClient()) : Promise.resolve([]),
   ])
   const categories = (categoriesData ?? []) as Category[]
+  // Products per category/department for the grouped menu (cached 10 min).
+  const categoryCounts = await loadCategoryCounts(categories)
 
   // Build product query
   let query = supabase
@@ -224,7 +227,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
               </div>
             </>
           }>
-            <CategoryNav categories={categories} activeSlug={activeCategory} collections={collections} />
+            <CategoryNav categories={categories} activeSlug={activeCategory} collections={collections} counts={categoryCounts} />
           </Suspense>
         </div>
       </aside>
