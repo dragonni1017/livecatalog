@@ -30,6 +30,8 @@ export interface WaitingInput {
   caseCounts: string[] | null
   names: string[] | null
   prices: string[] | null
+  /** owner_questions still open (migration 0073); optional so older callers needn't pass it. */
+  ownerQuestions?: string[] | null
   /** Held prices have no timestamp; count only. */
   pricesForErply: number | null
   /** lastSearched of each hidden product searched by SKU. */
@@ -57,6 +59,7 @@ export function buildWaitingQueues(i: WaitingInput): WaitingQueue[] {
   timed('case-counts', 'Case counts to decide', 'Warehouse', i.caseCounts, ['product'], '/admin/case-count-review')
   timed('names', 'Product renames to decide', 'Owner', i.names, ['rename'], '/admin/name-review')
   timed('prices', 'Prices to decide', 'Price setter', i.prices, ['price'], '/admin/price-review')
+  timed('owner-questions', 'Owner questions to answer', 'Owner', i.ownerQuestions ?? null, ['question'], '/admin/owner-questions')
   if (i.pricesForErply != null) {
     add({
       key: 'erply',

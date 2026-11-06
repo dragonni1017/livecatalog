@@ -30,7 +30,7 @@ async function photosToTake(db: Db): Promise<number | null> {
 
 export async function loadWaitingQueues(db: Db, nowIso: string): Promise<WaitingQueue[]> {
   const pending = (table: string) => db.from(table).select('created_at').eq('status', 'pending')
-  const [quotes, qb, credit, certs, shipments, caseCounts, names, prices, held, hidden, photos] = await Promise.all([
+  const [quotes, qb, credit, certs, shipments, caseCounts, names, prices, held, hidden, photos, ownerQs] = await Promise.all([
     times(db.from('order_requests').select('created_at').eq('status', 'new').is('dismissed_at', null)),
     times(db.from('order_requests').select('created_at').eq('entered_in_qb', false).neq('status', 'lost').is('dismissed_at', null)),
     times(pending('credit_applications')),
@@ -42,6 +42,7 @@ export async function loadWaitingQueues(db: Db, nowIso: string): Promise<Waiting
     db.from('products').select('id').not('held_price_cents', 'is', null).then(({ data, error }) => (error ? null : (data ?? []).length)),
     loadHiddenSearchDemand(db).then((d) => (d ? d.map((r) => r.lastSearched) : null)),
     photosToTake(db),
+    times(db.from('owner_questions').select('created_at').eq('status', 'open')),
   ])
   return buildWaitingQueues({
     nowIso,
@@ -56,5 +57,6 @@ export async function loadWaitingQueues(db: Db, nowIso: string): Promise<Waiting
     pricesForErply: held,
     hiddenSearched: hidden,
     photosToTake: photos,
+    ownerQuestions: ownerQs,
   })
 }
