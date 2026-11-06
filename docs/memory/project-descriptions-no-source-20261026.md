@@ -794,3 +794,17 @@ because they need a decision rather than a typo fix: P273766 "Sneaker"
 Set" (hair clips), IC44200's category, and every pack or case-count
 conflict. The flag rate fell from 12-17 per batch to 4-7
 as the batches reached newer photos with clear labels.
+
+**Batches 43-45 (2026-11-06): hidden products customers searched for.** The
+102 hidden products searched by exact SKU (lib/hidden-search-demand.ts) had no
+real descriptions. 83 now do (30 + 26 + 27; files
+`data/description-batch-43*`, `-44*`, `-45*`; same apply script as batch 42:
+audit rows first, update guarded on the old value, read back, undo JSON).
+They stay hidden; the owner decides whether to show them. Left: 16 with no
+photo, and 3 whose labeled photo is a different product (F287578 shows
+F287578-PAPER, F287815 shows black sheets, T642003 shows a clip-on fan).
+The 21 flags went to the owner sheet's "Photo proofread (Nov 6)" tab: pack
+layout per box against the name's one big pack (case totals agree),
+"Brown Bear" that is a capybara again, a 46 cm photo on the 60 cm SKU, and
+D701056's label size against its 16" name. A character print (L842099) is
+described without naming the character.
