@@ -43,6 +43,16 @@ export interface NavDepartment<C extends NavCategory = NavCategory> {
   categories: (C & { count: number | null })[]
 }
 
+/** URL slug for a department: "Florals & Gifts" -> "florals-gifts". */
+export function departmentSlug(name: string): string {
+  return name.toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/** The department a ?dept= slug names, or null. */
+export function departmentBySlug(slug: string | undefined): Department | null {
+  return slug ? (DEPARTMENTS.find((d) => departmentSlug(d.name) === slug) ?? null) : null
+}
+
 /** Department name for a category name ("More" when unlisted). */
 export function departmentOf(categoryName: string): string {
   return DEPARTMENTS.find((d) => d.categories.includes(categoryName))?.name ?? 'More'
