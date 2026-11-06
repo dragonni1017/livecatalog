@@ -9,6 +9,7 @@
 // its next run (and the catalog's held prices aren't in Erply yet).
 
 import { isNameCopyDescription } from './product-description.ts'
+import { wooCategoryPath } from './woo-categories.ts'
 
 export interface ExportProduct {
   id: string
@@ -68,8 +69,10 @@ export function wooRow(p: ExportProduct, categoryName: string | null, o: ExportO
     'visible',
     shortDescription(desc),
     asHtml(desc),
-    // A comma inside a WooCommerce category name must be escaped with a backslash.
-    ...(o.categories ? [(categoryName ?? '').replace(/,/g, '\\,')] : []),
+    // WooCommerce's full category path (lib/woo-categories.ts), never the bare
+    // catalog name, which the importer would create as a new top-level
+    // category. A comma inside a name must be escaped with a backslash.
+    ...(o.categories ? [(wooCategoryPath(categoryName) ?? '').replace(/,/g, '\\,')] : []),
     ...(o.images ? [images.join(', ')] : []),
   ]
 }
@@ -77,22 +80,34 @@ export function wooRow(p: ExportProduct, categoryName: string | null, o: ExportO
 export interface ExportResult {
   ready: string[][]
   almost: { sku: string; name: string; missing: Missing[]; stock: number }[]
+  /** With the Categories column on: ready products whose catalog category has no WooCommerce path, left out of the file. */
+  unmappedCategory: { sku: string; category: string }[]
 }
 
 export function buildExport(products: ExportProduct[], categoryOf: (p: ExportProduct) => string | null, o: ExportOptions): ExportResult {
   const ready: string[][] = []
   const almost: ExportResult['almost'] = []
+  const unmappedCategory: ExportResult['unmappedCategory'] = []
   for (const p of products) {
     if (!p.is_active || !(p.sku ?? '').trim()) continue
     const cat = categoryOf(p)
     const missing = missingFor(p, cat)
-    if (missing.length === 0) ready.push(wooRow(p, cat, o))
-    else almost.push({ sku: p.sku!.trim(), name: p.name, missing, stock: p.stock_qty ?? 0 })
+    if (missing.length > 0) {
+      almost.push({ sku: p.sku!.trim(), name: p.name, missing, stock: p.stock_qty ?? 0 })
+      continue
+    }
+    // An empty Categories cell could clear the product's categories on import,
+    // so a product without a WooCommerce path is left out rather than blanked.
+    if (o.categories && !wooCategoryPath(cat)) {
+      unmappedCategory.push({ sku: p.sku!.trim(), category: cat ?? '' })
+      continue
+    }
+    ready.push(wooRow(p, cat, o))
   }
   ready.sort((a, b) => a[0].localeCompare(b[0]))
   // Closest to ready first (fewest things missing), then most stock.
   almost.sort((a, b) => a.missing.length - b.missing.length || b.stock - a.stock || a.sku.localeCompare(b.sku))
-  return { ready, almost }
+  return { ready, almost, unmappedCategory }
 }
 
 const cell = (v: string | number) => {

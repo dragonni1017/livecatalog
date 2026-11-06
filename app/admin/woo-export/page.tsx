@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import { buildExport, type Missing } from '@/lib/woo-export'
 import { loadExportData } from '@/lib/woo-export-load'
+import { WOO_CATEGORY_PATHS } from '@/lib/woo-categories'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,10 +10,13 @@ export const dynamic = 'force-dynamic'
 // store, two CSV downloads, and how to import them (lib/woo-export.ts).
 
 const MISSING_ORDER: Missing[] = ['photo', 'price', 'category', 'description', 'hidden on purpose']
+const GUESSES = Object.entries(WOO_CATEGORY_PATHS).filter(([, w]) => w.guess)
 
 export default async function WooExportPage() {
   const { products, categoryOf } = await loadExportData(getAdminClient())
   const { ready, almost } = buildExport(products, categoryOf, { images: false, categories: false })
+  // With Categories on, ready products whose category has no WooCommerce path are left out.
+  const { unmappedCategory } = buildExport(products, categoryOf, { images: false, categories: true })
   const byMissing = new Map<Missing, number>()
   for (const a of almost) for (const m of a.missing) byMissing.set(m, (byMissing.get(m) ?? 0) + 1)
   const oneAway = almost.filter((a) => a.missing.length === 1 && a.missing[0] !== 'hidden on purpose').length
@@ -67,9 +71,16 @@ export default async function WooExportPage() {
             <span>
               Categories{' '}
               <span className="text-gray-500">
-                (WooCommerce creates any category whose name doesn&apos;t match exactly; on Nov 5, 13 of the 35 catalog
-                categories had no exact match there, e.g. &quot;Toys &amp; Novelties&quot;, so line the names up first)
+                (sends WooCommerce&apos;s own category path, e.g. &quot;Florals/Gifts &gt; Papers&quot;, so the importer
+                files each product under an existing category instead of creating a new one. Best guesses, worth a
+                look: {GUESSES.map(([name, w]) => `${name} → ${w.path}`).join('; ')})
               </span>
+              {unmappedCategory.length > 0 && (
+                <span className="block text-amber-700">
+                  {unmappedCategory.length} ready product{unmappedCategory.length === 1 ? '' : 's'} would be left out with
+                  this on: no WooCommerce category for {[...new Set(unmappedCategory.map((u) => u.category))].join(', ')}.
+                </span>
+              )}
             </span>
           </label>
           <label className="mt-2 flex items-start gap-2">
