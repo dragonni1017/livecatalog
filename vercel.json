@@ -4,6 +4,10 @@
     {
       "path": "/api/sync",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/waiting-digest",
+      "schedule": "0 15 * * 1"
     }
   ]
 }
