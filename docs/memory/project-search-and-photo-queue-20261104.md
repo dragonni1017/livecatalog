@@ -32,7 +32,11 @@ photo work: `/admin/photo-shot-list` (`lib/photo-shot-list.ts`) ranks by
 upcoming holiday, then SKUs searched with no result
 (`lib/hidden-search-demand.ts`), then newest arrival. A photo upload never
 unhides; since #217 the Cleanup upload result offers a Show button per
-still-hidden product (audited PATCH, refuses $0). Whether to show the hidden
+still-hidden product (PATCH /admin/api/products, refuses $0). CORRECTION
+2026-11-06: that PATCH logged NOTHING but deletes until #232, so Show/Hidden
+clicks from these screens before then left no audit row; it now logs
+product_visibility_changed and product_updated (lib/product-audit.ts).
+Whether to show the hidden
 products is still the owner's call, see
 [[project-price-review-screen-20261029]].
 
