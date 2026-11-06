@@ -48,11 +48,11 @@ describe('wooRow / wooHeader', () => {
     expect(wooHeader(none)).toEqual(['SKU', 'Published', 'Visibility in catalog', 'Short description', 'Description'])
     expect(wooRow(p({ description: 'Tom & Jerry <set>' }), 'Plush', none)).toEqual(['A1', '1', 'visible', 'Tom & Jerry <set>', '<p>Tom &amp; Jerry &lt;set&gt;</p>'])
   })
-  it('adds categories (commas escaped) and all images when asked', () => {
+  it('adds the WooCommerce category path and all images when asked', () => {
     const o = { images: true, categories: true }
     expect(wooHeader(o).slice(-2)).toEqual(['Categories', 'Images'])
-    const r = wooRow(p(), 'Bows, Ribbons', o)
-    expect(r.slice(-2)).toEqual(['Bows\\, Ribbons', 'https://res.cloudinary.com/x/image/upload/A1.jpg, https://res.cloudinary.com/x/image/upload/A1-2.jpg'])
+    const r = wooRow(p(), 'Bows', o)
+    expect(r.slice(-2)).toEqual(['Florals/Gifts > Bows', 'https://res.cloudinary.com/x/image/upload/A1.jpg, https://res.cloudinary.com/x/image/upload/A1-2.jpg'])
   })
 })
 
@@ -78,5 +78,29 @@ describe('buildExport', () => {
 describe('toCsv', () => {
   it('quotes commas, quotes and newlines, with a BOM and CRLF', () => {
     expect(toCsv(['a', 'b'], [['x,y', 'say "hi"\nok']])).toBe('﻿a,b\r\n"x,y","say ""hi""\nok"\r\n')
+  })
+})
+
+describe('WooCommerce category paths', () => {
+  it('sends the full WooCommerce path, never the bare catalog name', async () => {
+    const { wooCategoryPath, WOO_CATEGORY_PATHS } = await import('@/lib/woo-categories')
+    expect(wooCategoryPath('Papers')).toBe('Florals/Gifts > Papers')
+    expect(wooCategoryPath('Plush')).toBe('Toys > Plush Toys')
+    expect(wooCategoryPath('Nope')).toBeNull()
+    expect(wooCategoryPath(null)).toBeNull()
+    // Every path is trimmed and uses WooCommerce's " > " separator.
+    for (const { path } of Object.values(WOO_CATEGORY_PATHS)) expect(path).toMatch(/^\S(.*\S)?$/)
+    expect(Object.keys(WOO_CATEGORY_PATHS)).toHaveLength(43)
+  })
+
+  it('uses the path in the Categories column and leaves out a product with no mapping', () => {
+    const o = { images: false, categories: true }
+    const { ready, unmappedCategory } = buildExport(
+      [p({ id: '1', sku: 'A1', category_id: 'papers' }), p({ id: '2', sku: 'B2', category_id: 'mystery' })],
+      (x) => (x.category_id === 'papers' ? 'Papers' : 'Mystery Shelf'),
+      o,
+    )
+    expect(ready.map((r) => [r[0], r[5]])).toEqual([['A1', 'Florals/Gifts > Papers']])
+    expect(unmappedCategory).toEqual([{ sku: 'B2', category: 'Mystery Shelf' }])
   })
 })
