@@ -30,11 +30,90 @@ export function searchVariants(word: string): string[] {
   return [...out]
 }
 
-/** PostgREST .or() clause: any variant of the word in any of the fields. */
-export function wordOrFilter(word: string, fields: readonly string[]): string {
-  return searchVariants(word)
-    .flatMap((v) => fields.map((f) => `${f}.ilike.%${v}%`))
-    .join(',')
+/**
+ * Words customers search for that the catalog calls something else, from the
+ * zero-result searches (data/synonym-candidates.mts, 2026-11-06). Each value
+ * is OR'd with the word, so a synonym only ever broadens. Single words only:
+ * they go into a PostgREST filter. Brand and character names (Hello Kitty,
+ * Pokemon...) are deliberately absent: those aren't products we sell.
+ */
+export const SEARCH_SYNONYMS: Record<string, string[]> = {
+  // "Stationery & Office" is a category; no product name says stationery.
+  stationary: ['stationery'],
+  journal: ['notebook'],
+  diary: ['notebook'],
+  memo: ['notebook'],
+  notepad: ['notebook'],
+  pipecleaner: ['chenille'],
+  stuffed: ['plush'],
+  stuff: ['plush'],
+  animal: ['plush'],
+  crunchy: ['crunch'],
+  dubble: ['double'],
+  foxtail: ['tail'],
+  skincare: ['beauty'],
+  skin: ['beauty'],
+  facial: ['beauty'],
+  makeup: ['beauty'],
+  mug: ['cup'],
+  // Common misspellings of squishy that "Did you mean" can't reach.
+  squshi: ['squish'],
+  squshy: ['squish'],
+  squshie: ['squish'],
+  squisy: ['squish'],
+  sqishy: ['squish'],
+  squishi: ['squish'],
+  swuishy: ['squish'],
+  swuish: ['squish'],
+  // Spanish.
+  papel: ['paper'],
+  flor: ['flower'],
+  flores: ['flower'],
+  peluche: ['plush'],
+  llavero: ['keychain'],
+  taza: ['cup'],
+  vaso: ['cup'],
+}
+
+/** The word's plural variants plus any synonyms (and their variants). */
+export function searchTerms(word: string): string[] {
+  const out = new Set<string>()
+  for (const v of searchVariants(word)) {
+    out.add(v)
+    for (const s of SEARCH_SYNONYMS[v] ?? []) for (const sv of searchVariants(s)) out.add(sv)
+  }
+  return [...out]
+}
+
+export interface SearchCategory {
+  id: string
+  name: string
+}
+
+/**
+ * Categories whose name contains one of the word's terms as a word, so
+ * "stationery" finds the "Stationery & Office" category and "supplies"
+ * finds "Floral Supplies". Terms under 4 letters never match a category.
+ */
+export function categoryIdsFor(word: string, categories: readonly SearchCategory[]): string[] {
+  const terms = searchTerms(word).filter((t) => t.length >= 4)
+  if (!terms.length) return []
+  return categories
+    .filter((c) => c.name.toLowerCase().split(/[^a-z]+/).some((cw) => terms.some((t) => cw === t || cw === `${t}s` || (t.length >= 5 && cw.startsWith(t)))))
+    .map((c) => c.id)
+}
+
+/**
+ * PostgREST .or() clause: any term of the word (plurals, synonyms) in any of
+ * the fields, or, when categories are given, a product in a category whose
+ * name contains it.
+ */
+export function wordOrFilter(word: string, fields: readonly string[], categories?: readonly SearchCategory[]): string {
+  const parts = searchTerms(word).flatMap((v) => fields.map((f) => `${f}.ilike.%${v}%`))
+  // Category ids are plain text ids (cat-NNN); anything that could break the filter is skipped.
+  const ids = categories ? categoryIdsFor(word, categories).filter((id) => /^[\w-]+$/.test(id)) : []
+  if (ids.length) parts.push(`category_id.in.(${ids.join(',')})`)
+  return parts.join(',')
 }
 
 /** Word counts from product names, the vocabulary "Did you mean" draws on. */
@@ -49,7 +128,8 @@ export function buildVocabulary(names: Iterable<string>): Map<string, number> {
 }
 
 function isKnown(word: string, vocab: Map<string, number>): boolean {
-  const variants = searchVariants(word)
+  // Synonyms count, so "Did you mean" never re-corrects a word a synonym already handles.
+  const variants = searchTerms(word)
   for (const v of vocab.keys()) if (variants.some((x) => v.includes(x))) return true
   return false
 }

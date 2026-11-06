@@ -24,7 +24,11 @@ export async function GET(request: NextRequest) {
     .select('id, sku, name, price_cents, image_url, category:categories!products_category_id_fkey(name)')
     .eq('is_active', true)
     .eq('manually_hidden', false)
-  for (const word of searchWords(q)) query = query.or(wordOrFilter(word, ['name', 'sku', 'barcode']))
+  // Synonyms and category names too (lib/search-terms.ts), so "stationary"
+  // finds Stationery & Office products here as on the grid. A failed category
+  // lookup just leaves category matching out.
+  const { data: cats } = await db.from('categories').select('id, name')
+  for (const word of searchWords(q)) query = query.or(wordOrFilter(word, ['name', 'sku', 'barcode'], cats ?? []))
   const { data, error } = await query.limit(6)
 
   if (error) {
