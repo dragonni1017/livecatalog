@@ -3,6 +3,7 @@ import { supabase, getAdminClient } from '@/lib/supabase'
 import { NEW_ARRIVAL_DAYS, newArrivalsSinceMs } from '@/lib/new-arrivals'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadCategoryCounts } from '@/lib/category-counts'
 import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
@@ -34,6 +35,7 @@ export default async function NewArrivalsPage() {
       .order('name')
       .limit(500),
   ])
+  const categoryCounts = await loadCategoryCounts(categories ?? [])
   const products = (data ?? []) as unknown as Product[]
 
   return (
@@ -57,7 +59,7 @@ export default async function NewArrivalsPage() {
               </div>
             </>
           }>
-            <CategoryNav categories={categories ?? []} collections={collections} />
+            <CategoryNav categories={categories ?? []} collections={collections} counts={categoryCounts} />
           </Suspense>
         </div>
       </aside>

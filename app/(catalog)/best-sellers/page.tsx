@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
+import { loadCategoryCounts } from '@/lib/category-counts'
 import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
 
@@ -28,6 +29,7 @@ export default async function BestSellersPage() {
       .gte('created_at', thirtyDaysAgo)
       .limit(500),
   ])
+  const categoryCounts = await loadCategoryCounts(categories ?? [])
 
   // Aggregate view counts in JS and take the top 40 IDs
   const viewCounts: Record<string, number> = {}
@@ -80,7 +82,7 @@ export default async function BestSellersPage() {
               </div>
             </>
           }>
-            <CategoryNav categories={categories ?? []} collections={collections} />
+            <CategoryNav categories={categories ?? []} collections={collections} counts={categoryCounts} />
           </Suspense>
         </div>
       </aside>
