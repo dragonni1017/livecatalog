@@ -7,6 +7,7 @@ import {
   parseMeasurementInput,
 } from '@/lib/measurements'
 import { touchesZeroPriceRule, zeroPriceBlock, ZERO_PRICE_BLOCK_TEXT } from '@/lib/visibility-guard'
+import { auditJson, productChange } from '@/lib/product-audit'
 
 function isMockMode(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -257,6 +258,15 @@ export async function PATCH(request: NextRequest) {
       if (block) return NextResponse.json({ error: ZERO_PRICE_BLOCK_TEXT[block] }, { status: 400 })
     }
 
+    // The current values of what's being edited, for the audit entry below
+    // (lib/product-audit.ts). Literal select so the typed client keeps the row shape.
+    const { data: before, error: beforeError } = await db
+      .from('products')
+      .select('sku, name, manually_hidden, price_cents, description, image_url, image_urls, category_id, unit_type, volume_tiers, low_stock_threshold, case_length_in, case_width_in, case_height_in, case_weight_lb')
+      .eq('id', id)
+      .maybeSingle()
+    if (beforeError) throw beforeError
+
     updates.updated_at = new Date().toISOString()
     let write = db.from('products').update(updates).eq('id', id)
     // The check above read the row; these filters make the UPDATE hold to it
@@ -284,6 +294,28 @@ export async function PATCH(request: NextRequest) {
         .eq('id', id)
         .not('held_price_cents', 'is', null)
       if (holdError) throw holdError
+    }
+
+    // Log what changed. Best-effort (logAudit never throws): the edit is saved either way.
+    if (before) {
+      const { logAudit } = await import('@/lib/audit')
+      const change = productChange(before as Record<string, unknown>, updates)
+      const label = String((before as { sku?: string }).sku ?? id)
+      const by = (await getSessionUser())?.email ?? 'admin'
+      if (change.visibility) {
+        await logAudit({ action: 'product_visibility_changed', entity_type: 'product', entity_id: id, entity_label: label, old_value: change.visibility.old, new_value: change.visibility.new, performed_by: by })
+      }
+      if (Object.keys(change.fields).length) {
+        await logAudit({
+          action: 'product_updated',
+          entity_type: 'product',
+          entity_id: id,
+          entity_label: label,
+          old_value: auditJson(Object.fromEntries(Object.entries(change.fields).map(([k, v]) => [k, v.old]))),
+          new_value: auditJson(Object.fromEntries(Object.entries(change.fields).map(([k, v]) => [k, v.new]))),
+          performed_by: by,
+        })
+      }
     }
 
     if (newCategoryIds !== null) {
