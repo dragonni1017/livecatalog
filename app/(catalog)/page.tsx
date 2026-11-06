@@ -114,9 +114,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   // Multi-word search: each word must appear in name, description, SKU, or
   // barcode, so "blue widget" matches "Widget, Blue" regardless of word
   // order, and scanning/typing a barcode finds the product directly. Each
-  // word also matches its singular/plural ("speakers" finds "Speaker").
+  // word also matches its singular/plural ("speakers" finds "Speaker"),
+  // its synonyms ("journal" finds notebooks) and category names
+  // ("stationery" finds the Stationery & Office category); lib/search-terms.ts.
   for (const word of searchWords(q)) {
-    query = query.or(wordOrFilter(word, SEARCH_FIELDS))
+    query = query.or(wordOrFilter(word, SEARCH_FIELDS, categories))
   }
 
   // Sorting
@@ -155,7 +157,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     const fixed = vocab ? suggestSearch(q, vocab) : null
     if (fixed) {
       let check = supabase.from('products').select('id').eq('is_active', true).eq('manually_hidden', false)
-      for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS))
+      for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS, categories))
       const { data: hit } = await check.limit(1)
       if (hit?.length) {
         // Same filters as now, first page, corrected words.
