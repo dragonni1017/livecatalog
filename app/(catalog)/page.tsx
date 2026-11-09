@@ -6,7 +6,10 @@ import CollectionStrip from '@/components/catalog/CollectionStrip'
 import ProductGrid from '@/components/catalog/ProductGrid'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
-import { departmentBySlug, departmentSlug } from '@/lib/category-groups'
+import { departmentBySlug, departmentSlug, groupCategories } from '@/lib/category-groups'
+import { loadDepartmentPhotos } from '@/lib/department-tiles'
+import DepartmentTiles from '@/components/catalog/DepartmentTiles'
+import RecentlyViewed from '@/components/catalog/RecentlyViewed'
 import { catalogHref, filterChips, type CatalogState } from '@/lib/catalog-url'
 import CatalogControls from '@/components/catalog/CatalogControls'
 import { Category, Product } from '@/lib/types'
@@ -72,6 +75,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const categories = (categoriesData ?? []) as Category[]
   // Products per category/department for the grouped menu (cached 10 min).
   const categoryCounts = await loadCategoryCounts(categories)
+  // Department tiles on the plain landing view only, like the collection strip.
+  const departmentPhotosMap = isLandingView ? await loadDepartmentPhotos(categories) : null
 
   // Build product query
   let query = supabase
@@ -234,7 +239,9 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       </aside>
 
       <div className="flex-1 min-w-0">
+        {isLandingView && <DepartmentTiles departments={groupCategories(categories, categoryCounts)} photos={departmentPhotosMap} />}
         <CollectionStrip cards={stripCards} />
+        {isLandingView && <RecentlyViewed />}
 
         {/* Price range filter form */}
         <form method="get" className="mb-3 flex flex-wrap items-center gap-3">

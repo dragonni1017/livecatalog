@@ -80,6 +80,32 @@ export function groupCategories<C extends NavCategory>(categories: C[], counts: 
     }))
 }
 
+export interface PhotoCandidate {
+  id: string
+  category_id: string | null
+  image_url: string | null
+  needs_photo: boolean | null
+  stock_qty: number | null
+}
+
+/**
+ * One photo per department for the home page tiles: the in-stock product
+ * with a real photo and the most stock (ties: lowest id, so it's stable).
+ */
+export function departmentPhotos(products: PhotoCandidate[], categories: NavCategory[]): Record<string, string> {
+  const nameById = new Map(categories.map((c) => [c.id, c.name]))
+  const best = new Map<string, PhotoCandidate>()
+  for (const p of products) {
+    if (!p.category_id || !(p.image_url ?? '').trim() || p.needs_photo || !((p.stock_qty ?? 0) > 0)) continue
+    const name = nameById.get(p.category_id)
+    if (!name) continue
+    const d = departmentOf(name)
+    const cur = best.get(d)
+    if (!cur || (p.stock_qty ?? 0) > (cur.stock_qty ?? 0) || ((p.stock_qty ?? 0) === (cur.stock_qty ?? 0) && p.id < cur.id)) best.set(d, p)
+  }
+  return Object.fromEntries([...best].map(([d, p]) => [d, p.image_url!]))
+}
+
 /** Counts from visible product ids and product_categories rows (the same membership the category filter uses). */
 export function countCategories(visibleIds: Set<string>, memberships: { product_id: string; category_id: string }[], categories: NavCategory[]): CategoryCounts {
   const nameById = new Map(categories.map((c) => [c.id, c.name]))
