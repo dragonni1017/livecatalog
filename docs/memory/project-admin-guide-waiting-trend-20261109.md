@@ -1,6 +1,6 @@
 ---
 name: project-admin-guide-waiting-trend-20261109
-description: 2026-11-09: admin guide page (#243); Waiting page "since last week" (0074 waiting_snapshots, #245, baseline seeded Nov 9); description batches 46-47 switched to hidden products missing only a description (1,019 left; 116 Show-ready); 14 owner questions incl. new "OK to show?" kind (#246); minimatch override (#244); data/ excluded from local lint/tsc (#247); no admin activity since Nov 4
+description: 2026-11-09: admin guide page (#243); Waiting page "since last week" (0074 waiting_snapshots, #245, baseline seeded Nov 9); description batches 46-48 switched to hidden products missing only a description (987 left; 144 Show-ready); 25 owner questions incl. new "OK to show?" kind (#246); out-of-stock listed last (0076 products.in_stock, #250); reorder already exists; minimatch override (#244); data/ excluded from local lint/tsc (#247); no admin activity since Nov 4
 type: project
 ---
 
@@ -26,12 +26,12 @@ the Waiting page trend before proposing new admin features.
   105, photos 796).
 - **Hidden-demand list counts SKUs typed with spaces** ("f 288022", #242):
   letters-then-digits terms retry with spaces removed.
-- **Description batches 46-47** (local `data/description-batch-4{6,7}-*`,
+- **Description batches 46-48** (local `data/description-batch-4{6,7,8}-*`,
   audit rows + undo files): the "hidden, searched, has photo, no
   description" pool is used up (3 left). Batches now take **hidden products
   missing only a description** (photo, price, category present), most stock
-  first: 1,019 left after batch 47. Each one described joins "Show these?",
-  which had **116** after batch 47. Continues
+  first: 987 left after batch 48. Each one described joins "Show these?",
+  which had **144** after batch 48. Continues
   [[project-descriptions-no-source-20261026]]. Most of this pool reads stock
   1000, which is the known fake value: see [[project-fake-stock-1000-hold]]
   and don't raise it.
@@ -41,7 +41,13 @@ the Waiting page trend before proposing new admin features.
   XX323, B325086, B325099, C266015, C266016), 3 name typos. "OK to show?" was
   added to `OWNER_KINDS` (#246); a kind not in that list still shows under
   "All kinds" but not in the filter. 3D801156's photo is 80x60 and needs a
-  reshoot (not an owner question).
+  reshoot (not an owner question). Batch 48 added 11 more to the same batch
+  (now 25): 3 "OK to show?" for Grinch products (CM0988, CM33231, CM33232;
+  names were changed to "Green"", a licensed character, not described), 7
+  name typos (feet ' written for inches " on D701037, D701048 and the
+  butterfly lamps D701040-D701044; D701043's name is garbled) and D701023
+  "Pearl Pin" whose photo shows rhinestone heads. D701016's photo is 33x60
+  (reshoot).
 - **minimatch override (#244):** `overrides` pins `minimatch ^11.0.1` under
   `@typescript-eslint/typescript-estree` for GHSA-g3hv-75wg-m249 (lint
   tooling only; production deps audited clean). Remove the override once
@@ -53,6 +59,21 @@ the Waiting page trend before proposing new admin features.
 - **Gotcha: SheetJS ESM `XLSX.writeFile` throws "cannot save file"** unless
   `XLSX.set_fs(fs)` is called first (`import * as XLSX from 'xlsx'` in a
   .mjs). Reading with `XLSX.read(buffer)` doesn't need it.
+
+- **Out-of-stock products are listed last** on `/` in every sort, search
+  and filter (#250): `.order('in_stock', desc)` before the chosen sort.
+  `products.in_stock` is a stored generated column (migration 0076,
+  `coalesce(stock_qty,0) > 0`), because PostgREST can't order by an
+  expression. **Any code that drops or recreates that column breaks every
+  catalog listing** (the query errors and the page shows no products).
+  339 of 1,183 shown products were at 0 when it shipped; the fake stock
+  1000 counts as in stock. Best sellers, new arrivals and collections
+  aren't affected. Verified live: "squishy" page 1 = 20 in stock, last
+  page = all out of stock.
+- **Reorder already exists:** `components/catalog/ReorderButton.tsx` on
+  My orders adds a past order's items to the cart at today's prices. Don't
+  propose building it (it was suggested twice on 2026-11-09 before
+  checking).
 
 **Why:** a week of building with no admin use; the guide and the trend are
 there to get the queues moving and to show whether they do.
