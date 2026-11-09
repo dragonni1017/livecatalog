@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useCart, formatPrice } from '@/lib/cart-context'
 import { resolveCdnImage } from '@/lib/image'
 import { meetsOrderMinimum, MIN_ORDER_SUBTOTAL_CENTS } from '@/lib/order-rules'
 import { track } from '@/lib/track'
+import { blockedFieldReason, type QuoteBlockReason } from '@/lib/quote-form-events'
 import { addressSummary, sameAddress, type AddressInput, type CustomerAddress } from '@/lib/customer-addresses'
 import { normalizeUsState } from '@/lib/us-states'
 import { TAX_ESTIMATE_NOTE, type TaxEstimate } from '@/lib/sales-tax'
@@ -80,6 +81,48 @@ export default function CartPage() {
     }
     track({ type: 'cart_view' })
   }, [hydrated, items.length])
+
+  // Funnel steps inside the quote form (lib/quote-form-events.ts): the first
+  // click into it (once per browser session, like cart_view), and each time
+  // Submit is refused, with why. The browser's own required-field check stops
+  // a submit before handleSubmit runs, so its 'invalid' events are caught here
+  // too; only the first refused field of one attempt is recorded.
+  const blockedReported = useRef(false)
+  const reportBlocked = useCallback((source: QuoteBlockReason) => {
+    if (blockedReported.current) return
+    blockedReported.current = true
+    setTimeout(() => {
+      blockedReported.current = false
+    }, 0)
+    track({ type: 'quote_submit_blocked', source })
+  }, [])
+  const quoteFormRef = useCallback(
+    (form: HTMLFormElement | null) => {
+      if (!form) return
+      const onFocus = () => {
+        form.removeEventListener('focusin', onFocus)
+        try {
+          if (sessionStorage.getItem('tracked_quote_form')) return
+          sessionStorage.setItem('tracked_quote_form', '1')
+        } catch {
+          // sessionStorage unavailable: still track, just without dedupe.
+        }
+        track({ type: 'quote_form_started' })
+      }
+      const onInvalid = (e: Event) => {
+        const el = e.target as HTMLInputElement | HTMLSelectElement
+        const label = el.labels?.[0]?.textContent ?? el.closest('div')?.querySelector('label')?.textContent ?? el.id
+        reportBlocked(blockedFieldReason(label ?? '', 'validity' in el && el.validity.typeMismatch))
+      }
+      form.addEventListener('focusin', onFocus)
+      form.addEventListener('invalid', onInvalid, true)
+      return () => {
+        form.removeEventListener('focusin', onFocus)
+        form.removeEventListener('invalid', onInvalid, true)
+      }
+    },
+    [reportBlocked],
+  )
 
   // Restore any in-progress notes / ship-by date from a previous visit this
   // order, same one-time-hydration pattern as the cart itself (lib/cart-context).
@@ -403,18 +446,24 @@ export default function CartPage() {
     setError(null)
     if (!contact.name.trim() || !contact.email.trim()) {
       setError('Name and email are required.')
+      reportBlocked(!contact.name.trim() ? 'missing_name' : 'missing_email')
       return
     }
     if (!contact.shipAddress1?.trim() || !contact.shipCity?.trim() || !contact.shipState?.trim() || !contact.shipZip?.trim()) {
       setError('A shipping address (street, city, state, ZIP) is required.')
+      reportBlocked(
+        !contact.shipAddress1?.trim() ? 'missing_street' : !contact.shipCity?.trim() ? 'missing_city' : !contact.shipState?.trim() ? 'missing_state' : 'missing_zip',
+      )
       return
     }
     if (items.length === 0) {
       setError('Your cart is empty.')
+      reportBlocked('empty_cart')
       return
     }
     if (belowMinimum) {
       setError(`Minimum order is ${formatPrice(MIN_ORDER_SUBTOTAL_CENTS)}. Add more items to submit.`)
+      reportBlocked('below_minimum')
       return
     }
     setSubmitting(true)
@@ -476,6 +525,7 @@ export default function CartPage() {
       track({ type: 'quote_submitted' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      reportBlocked('submit_failed')
     } finally {
       setSubmitting(false)
     }
@@ -651,7 +701,7 @@ export default function CartPage() {
 
         {/* Checkout form + summary */}
         <div className="lg:col-span-1">
-          <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <form ref={quoteFormRef} onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-600">Subtotal</span>
               <span className={promoDiscount || showTax ? 'text-sm text-gray-700' : 'text-lg font-bold text-gray-900'}>{formatPrice(orderSubtotal)}</span>

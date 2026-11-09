@@ -35,7 +35,7 @@ describe('/api/track', () => {
   })
 
   it('accepts each funnel step with a visitor id', async () => {
-    for (const type of ['add_to_cart', 'cart_view', 'quote_submitted']) {
+    for (const type of ['add_to_cart', 'cart_view', 'quote_submitted', 'quote_form_started', 'quote_submit_blocked']) {
       const r = await send({ type, visitorId: VID })
       expect(r.status, type).toBe(200)
       expect(r.json.mock, type).toBe(true)

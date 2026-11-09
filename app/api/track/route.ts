@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientIp, createRateLimiter } from '@/lib/rate-limit'
+import { isQuoteBlockReason } from '@/lib/quote-form-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,9 +14,13 @@ function isMockMode(): boolean {
   return !url || url === 'your-supabase-url' || url.includes('placeholder')
 }
 
-const TYPES = new Set(['view', 'search', 'search_no_results', 'add_to_cart', 'cart_view', 'quote_submitted'])
-// Funnel steps with no payload beyond the visitor id (see lib/track.ts).
-const FUNNEL_TYPES = new Set(['add_to_cart', 'cart_view', 'quote_submitted'])
+const TYPES = new Set([
+  'view', 'search', 'search_no_results', 'add_to_cart', 'cart_view', 'quote_submitted',
+  'quote_form_started', 'quote_submit_blocked',
+])
+// Funnel steps with no payload beyond the visitor id (see lib/track.ts);
+// quote_submit_blocked also carries its reason as `source` (migration 0075).
+const FUNNEL_TYPES = new Set(['add_to_cart', 'cart_view', 'quote_submitted', 'quote_form_started', 'quote_submit_blocked'])
 // lib/track.ts sends a UUID, or a short fallback id where crypto.randomUUID
 // is missing. Anything else is dropped to null rather than rejecting the event.
 const VISITOR_ID = /^[A-Za-z0-9-]{8,64}$/
@@ -43,7 +48,10 @@ export async function POST(request: NextRequest) {
       ? body.visitorId
       : null
 
-    const source = typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : null
+    const source =
+      type === 'quote_submit_blocked'
+        ? (isQuoteBlockReason(body.source) ? body.source : null)
+        : typeof body.source === 'string' && SOURCES.has(body.source) ? body.source : null
 
     let productId: string | null = null
     let term: string | null = null

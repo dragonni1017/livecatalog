@@ -31,6 +31,35 @@ describe('summarizeFunnel', () => {
   it('QR: only scanners count toward the QR follow-through', () => {
     expect(qr).toMatchObject({ addedToCart: 2, openedCart: 1, submittedQuote: 1 })
   })
+  it('leaves out the form step and reasons before any are tracked', () => {
+    expect(steps.map((s) => s.label)).not.toContain('Started the quote form')
+    expect(summarizeFunnel(rows).blocked).toEqual([])
+  })
+  it('form step and why Submit was refused, by distinct visitor', () => {
+    const r = summarizeFunnel([
+      ...rows,
+      e('a', 'quote_form_started'),
+      e('c', 'quote_form_started'),
+      e('f', 'quote_form_started'),
+      e('f', 'quote_submit_blocked', 'missing_zip'),
+      e('f', 'quote_submit_blocked', 'missing_zip'),
+      e('g', 'quote_submit_blocked', 'missing_zip'),
+      e('g', 'quote_submit_blocked', 'invalid_email'),
+      e('h', 'quote_submit_blocked'),
+    ])
+    expect(r.steps.map((s) => [s.label, s.visitors])).toEqual([
+      ['Visited (viewed, searched or used the cart)', 8],
+      ['Added to cart', 4],
+      ['Opened cart', 2],
+      ['Started the quote form', 3],
+      ['Submitted a quote', 2],
+    ])
+    expect(r.blocked).toEqual([
+      { reason: 'missing_zip', visitors: 2 },
+      { reason: 'invalid_email', visitors: 1 },
+      { reason: 'missing_other', visitors: 1 },
+    ])
+  })
   it('empty input', () => {
     expect(summarizeFunnel([])).toEqual({
       steps: [
@@ -40,6 +69,7 @@ describe('summarizeFunnel', () => {
         { label: 'Submitted a quote', visitors: 0 },
       ],
       qr: { scans: 0, visitors: 0, addedToCart: 0, openedCart: 0, submittedQuote: 0 },
+      blocked: [],
     })
   })
 })
