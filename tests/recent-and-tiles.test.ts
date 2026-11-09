@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { addRecent, parseRecent, RECENT_MAX } from '@/lib/recently-viewed'
+import { addRecent, parseRecent, RECENT_MAX, type RecentItem } from '@/lib/recently-viewed'
 import { departmentPhotos } from '@/lib/category-groups'
 
-const item = (id: string) => ({ id, name: `Product ${id}`, image_url: `https://x/${id}.jpg` })
+const item = (id: string): RecentItem => ({ id, name: `Product ${id}`, image_url: `https://x/${id}.jpg` })
 
 describe('recently viewed', () => {
   it('puts the newest first without duplicates, capped', () => {
