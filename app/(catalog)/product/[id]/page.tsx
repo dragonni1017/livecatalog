@@ -8,6 +8,7 @@ import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { meaningfulDescription } from '@/lib/product-description'
 import { rankRelated } from '@/lib/related-products'
+import RecentlyViewed, { RememberViewed } from '@/components/catalog/RecentlyViewed'
 import { DEPARTMENTS, departmentOf, departmentSlug } from '@/lib/category-groups'
 import { getDisplaySettings } from '@/lib/display-settings'
 import { getActivePriceTiers } from '@/lib/rep-tier'
@@ -150,6 +151,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, settings)) }}
       />
       <TrackView productId={product.id} />
+      <RememberViewed item={{ id: product.id, name: displayName, image_url: product.image_url ?? null }} />
       <div className="mb-6">
         <Link
           href="/"
@@ -330,6 +332,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
         </section>
       )}
+
+      <RecentlyViewed excludeId={product.id} />
     </div>
   )
 }
