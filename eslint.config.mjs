@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local-only scratch scripts (gitignored; never in CI or on Vercel).
+    "data/**",
   ]),
 ]);
 
