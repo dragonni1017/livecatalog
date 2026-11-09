@@ -14,6 +14,7 @@ export const OWNER_KINDS = [
   'Size',
   'Name typo',
   'Name vs photo',
+  'OK to show?',
 ] as const
 
 export type OwnerQuestionAction =
