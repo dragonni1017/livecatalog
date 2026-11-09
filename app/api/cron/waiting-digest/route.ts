@@ -3,6 +3,7 @@ import { hasBearerSecret } from '@/lib/request-auth'
 import { isSmtpConfigured, sendMail } from '@/lib/email'
 import { digestFor, parseDigestRecipients } from '@/lib/waiting-digest'
 import { loadWaitingQueues } from '@/lib/waiting-load'
+import { saveWaitingSnapshot } from '@/lib/waiting-snapshots'
 
 // GET /api/cron/waiting-digest  (Vercel Cron, Mondays; vercel.json)
 //   ?dry=1  build the emails and return them without sending
@@ -11,6 +12,8 @@ import { loadWaitingQueues } from '@/lib/waiting-load'
 // check is the only guard, and it fails closed (lib/request-auth.ts).
 // Dormant until WAITING_DIGEST_TO is set: with it unset, nothing is sent
 // and the route says so. See lib/waiting-digest.ts for the format.
+// Either way it saves the week's queue counts (waiting_snapshots) first, so
+// /admin/waiting has a "since last week" even if nobody opened it.
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +22,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const dry = new URL(request.url).searchParams.get('dry') === '1'
+
+  let queues: Awaited<ReturnType<typeof loadWaitingQueues>> | null = null
+  try {
+    const { getAdminClient } = await import('@/lib/supabase')
+    const db = getAdminClient()
+    const nowIso = new Date().toISOString()
+    queues = await loadWaitingQueues(db, nowIso)
+    if (!dry) await saveWaitingSnapshot(db, queues, nowIso)
+  } catch (err) {
+    console.error('[cron/waiting-digest] snapshot failed:', err)
+  }
 
   const { recipients, problems } = parseDigestRecipients(process.env.WAITING_DIGEST_TO)
   if (recipients.size === 0) {
@@ -29,8 +43,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { getAdminClient } = await import('@/lib/supabase')
-    const queues = await loadWaitingQueues(getAdminClient(), new Date().toISOString())
+    if (!queues) throw new Error('Could not load the queues')
     const results: { to: string; subject: string | null; result: string; text?: string }[] = []
     for (const [to, scope] of recipients) {
       const mail = digestFor(queues, scope)
