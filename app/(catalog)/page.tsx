@@ -143,7 +143,10 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     query = query.or(wordOrFilter(word, SEARCH_FIELDS, categories))
   }
 
-  // Sorting
+  // Sorting. Out-of-stock products go last in every sort (28% of product
+  // views landed on them, 2026-11-09): products.in_stock is generated from
+  // stock_qty (migration 0076), since PostgREST can't order by an expression.
+  query = query.order('in_stock', { ascending: false })
   switch (sort) {
     case 'price_asc':
       query = query.order('price_cents', { ascending: true })
