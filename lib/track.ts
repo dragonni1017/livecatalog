@@ -6,6 +6,8 @@
 // across the funnel steps. Private windows or blocked storage get a fresh id
 // per page load, which only makes the funnel undercount.
 
+import type { QuoteBlockReason } from './quote-form-events'
+
 const VISITOR_KEY = 'lyu_vid'
 
 export type TrackEvent =
@@ -15,6 +17,8 @@ export type TrackEvent =
   | { type: 'add_to_cart' }
   | { type: 'cart_view' }
   | { type: 'quote_submitted' }
+  | { type: 'quote_form_started' }
+  | { type: 'quote_submit_blocked'; source: QuoteBlockReason }
 
 let memoryVisitorId: string | null = null
 

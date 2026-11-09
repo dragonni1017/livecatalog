@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
-import { summarizeFunnel, type FunnelEvent, type FunnelStep, type QrSummary } from '@/lib/funnel'
+import { summarizeFunnel, type BlockedReason, type FunnelEvent, type FunnelStep, type QrSummary } from '@/lib/funnel'
+import { isQuoteBlockReason, QUOTE_BLOCK_LABELS } from '@/lib/quote-form-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +57,7 @@ const NO_QR: QrSummary = { scans: 0, visitors: 0, addedToCart: 0, openedCart: 0,
 async function loadFunnel(
   db: ReturnType<typeof getAdminClient>,
   since: string | null,
-): Promise<{ steps: FunnelStep[]; qr: QrSummary; trackingSince: string | null; truncated: boolean; error: boolean }> {
+): Promise<{ steps: FunnelStep[]; qr: QrSummary; blocked: BlockedReason[]; trackingSince: string | null; truncated: boolean; error: boolean }> {
   const rows: FunnelEvent[] = []
   let truncated = false
   for (let from = 0; ; from += FUNNEL_PAGE) {
@@ -69,7 +70,7 @@ async function loadFunnel(
     if (since) q = q.gte('created_at', since)
     const { data, error } = await q
     // Before 0056/0062 a column doesn't exist and this errors; report "not set up".
-    if (error) return { steps: [], qr: NO_QR, trackingSince: null, truncated: false, error: true }
+    if (error) return { steps: [], qr: NO_QR, blocked: [], trackingSince: null, truncated: false, error: true }
     rows.push(...((data ?? []) as FunnelEvent[]))
     if (!data || data.length < FUNNEL_PAGE) break
     if (rows.length >= FUNNEL_ROW_CAP) {
@@ -85,10 +86,11 @@ async function loadFunnel(
     .order('created_at', { ascending: true })
     .limit(1)
 
-  const { steps, qr } = summarizeFunnel(rows)
+  const { steps, qr, blocked } = summarizeFunnel(rows)
   return {
     steps,
     qr,
+    blocked,
     trackingSince: (first?.[0] as { created_at: string } | undefined)?.created_at ?? null,
     truncated,
     error: false,
@@ -475,6 +477,21 @@ export default async function AdminAnalyticsPage({
               (includes rep-placed orders and any made before tracking started).
               {funnel.truncated && ' Showing the first 200,000 events only.'}
             </p>
+          )}
+          {!funnel.error && funnel.blocked.length > 0 && (
+            <div className="border-t border-gray-100 px-4 py-3" data-quote-blocked>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Why Submit didn&apos;t go through</p>
+              <ul className="mt-1 space-y-0.5 text-sm text-gray-700">
+                {funnel.blocked.map((b) => (
+                  <li key={b.reason} className="flex justify-between gap-3">
+                    <span>{isQuoteBlockReason(b.reason) ? QUOTE_BLOCK_LABELS[b.reason] : b.reason}</span>
+                    <span className="shrink-0 font-semibold text-gray-900">
+                      {b.visitors.toLocaleString()} visitor{b.visitors === 1 ? '' : 's'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {!funnel.error && (
             <div className="border-t border-gray-100 px-4 py-3" data-qr-summary>
