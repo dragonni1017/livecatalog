@@ -50,3 +50,33 @@ cards (QR)" row on /admin/analytics.
   (no DOM env in vitest), so re-check in a browser if TrackView changes.
 - 0062 was applied BEFORE the code that writes `source`, since a missing
   column fails all tracking silently.
+
+**Quote form steps (2026-11-09, migration 0075, #248).** Two more funnel
+events: `quote_form_started` (first focus in the cart page's form, once per
+session) and `quote_submit_blocked` with the reason in `source` (fixed list
+in `lib/quote-form-events.ts`; `/api/track` stores nothing else). The form
+uses native `required`, so the browser refuses an incomplete Submit before
+`handleSubmit` runs: those are caught by a capture-phase `invalid` listener on
+the form (first field per attempt). /admin/analytics shows the step only once
+some exist, plus a "Why Submit didn't go through" list.
+- **Baseline before it:** 2026-10-12 to 11-09, 71 visitors opened the cart,
+  7 submitted. Order minimum is $0 (`lib/order-rules.ts`), so not the cause.
+  Check the new step after a week or two, then simplify what blocks most.
+- 0075 was verified live by inserting marked rows (visitor_id
+  `claude-check-0075`) and deleting them; an unknown type was still refused.
+
+**Reading this data (2026-11-09 traffic report).**
+- **Vercel Web Analytics is NOT enabled** for the project; the MCP page-view
+  tools return `web_analytics_not_enabled`. `analytics_events` is the only
+  traffic record.
+- **Searches are logged as the visitor types** (`l84`, `l8420`, `l842099`
+  each a row), so raw search and zero-result counts overstate demand; about
+  half of rows were `[no_results]` prefixes of real terms. Count per visitor
+  or per final term, not per row.
+- Scale then: about 60-75 visitors a week; 28% of product views on
+  out-of-stock products; top 200 products = 57% of views; hidden products get
+  almost no views (demand for them shows only in searches). Back-in-stock
+  requests exist already (14, all still at 0 stock). 6 of 26 buyers sent 22
+  of 42 quotes.
+- The report script is local only: `data/traffic-report.mts` (aggregates,
+  prints no customer data).
