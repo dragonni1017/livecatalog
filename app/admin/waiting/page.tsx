@@ -2,18 +2,23 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import { loadWaitingQueues } from '@/lib/waiting-load'
 import { WHO_ORDER, type Who } from '@/lib/waiting-queues'
+import { loadWaitingBaseline, saveWaitingSnapshot } from '@/lib/waiting-snapshots'
+import { queueTrend } from '@/lib/waiting-trend'
 
 export const dynamic = 'force-dynamic'
 
 // "Waiting on you": every queue that needs a person, with its age and who it
 // is for (lib/waiting-queues.ts). Read-only. A queue whose query fails is
-// left out rather than failing the page.
+// left out rather than failing the page. Each load saves today's counts so
+// the page can show the change since last week (lib/waiting-trend.ts).
 
 export default async function WaitingPage({ searchParams }: { searchParams: Promise<{ who?: string }> }) {
   const { who: whoParam } = await searchParams
   const who = (WHO_ORDER as string[]).includes(whoParam ?? '') ? (whoParam as Who) : null
   const db = getAdminClient()
-  const all = await loadWaitingQueues(db, new Date().toISOString())
+  const nowIso = new Date().toISOString()
+  const [all, baseline] = await Promise.all([loadWaitingQueues(db, nowIso), loadWaitingBaseline(db, nowIso)])
+  await saveWaitingSnapshot(db, all, nowIso)
   const shown = who ? all.filter((q) => q.who === who) : all
   const whoCounts = new Map<Who, number>()
   for (const q of all) whoCounts.set(q.who, (whoCounts.get(q.who) ?? 0) + 1)
@@ -67,6 +72,7 @@ export default async function WaitingPage({ searchParams }: { searchParams: Prom
                         <span className={q.age.stale ? 'font-semibold text-red-700' : ''}> · {q.age.text}</span>
                       )}
                       {q.note && <span> · {q.note}</span>}
+                      <TrendNote trend={queueTrend(q.key, q.count, baseline)} />
                     </span>
                   </span>
                   <span className="shrink-0 text-sm text-gray-400 group-hover:text-red-500">Open →</span>
@@ -78,4 +84,10 @@ export default async function WaitingPage({ searchParams }: { searchParams: Prom
       </div>
     </div>
   )
+}
+
+function TrendNote({ trend }: { trend: ReturnType<typeof queueTrend> }) {
+  if (!trend) return null
+  const cls = trend.direction === 'down' ? 'text-green-700' : trend.direction === 'up' ? 'text-amber-700' : ''
+  return <span className={cls}> · {trend.text}</span>
 }
