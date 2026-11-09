@@ -41,3 +41,17 @@ describe('hiddenSearchDemand', () => {
     expect(rows).toEqual([])
   })
 })
+
+describe('hiddenSearchDemand with spaced SKUs', () => {
+  it('matches "l 842099" to L842099, but not a spaced phrase of words', () => {
+    const rows = hiddenSearchDemand(
+      [
+        { term: '[no_results] l 842099', created_at: '2026-11-09T18:13:00Z' },
+        { term: '[no_results] L842099', created_at: '2026-11-01T00:00:00Z' },
+        { term: '[no_results] lamp 842099 extra', created_at: '2026-11-02T00:00:00Z' },
+      ],
+      [{ id: 'p1', sku: 'L842099', name: 'Lamp', barcode: null }],
+    )
+    expect(rows.map((r) => [r.product.sku, r.times, r.lastSearched])).toEqual([['L842099', 2, '2026-11-09T18:13:00Z']])
+  })
+})

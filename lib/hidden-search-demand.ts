@@ -41,7 +41,10 @@ export function hiddenSearchDemand<P extends DemandProduct>(
   }
   const rows = new Map<string, HiddenDemandRow<P>>()
   for (const e of events) {
-    const p = byCode.get(searchedTerm(e.term))
+    const t = searchedTerm(e.term)
+    // Customers type SKUs with spaces ("f 288022", seen 2026-11-09): try the
+    // term with the spaces taken out when it's letters-then-digits.
+    const p = byCode.get(t) ?? (/^[a-z]{1,4}\s+\d/.test(t) ? byCode.get(t.replace(/\s+/g, '')) : undefined)
     if (!p) continue
     const row = rows.get(p.id)
     if (!row) rows.set(p.id, { product: p, times: 1, lastSearched: e.created_at })
