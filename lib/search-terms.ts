@@ -73,6 +73,9 @@ export const SEARCH_SYNONYMS: Record<string, string[]> = {
   llavero: ['keychain'],
   taza: ['cup'],
   vaso: ['cup'],
+  // From the Nov 6-9 searches: "papel seda" is tissue paper, "platos" plates.
+  seda: ['tissue'],
+  plato: ['plate'],
 }
 
 /** The word's plural variants plus any synonyms (and their variants). */

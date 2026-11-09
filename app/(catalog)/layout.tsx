@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import SearchInput from '@/components/catalog/SearchInput'
 import CartIndicator from '@/components/catalog/CartIndicator'
+import MobileQuoteBar from '@/components/catalog/MobileQuoteBar'
 import FavoritesLink from '@/components/catalog/FavoritesLink'
 import AccountNav from '@/components/catalog/AccountNav'
 import TierSwitcher from '@/components/catalog/TierSwitcher'
@@ -91,6 +92,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       </main>
 
       <Footer />
+      <MobileQuoteBar />
     </div>
     </FavoritesProvider>
   )
