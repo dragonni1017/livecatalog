@@ -324,6 +324,15 @@ try {
     check('anon key reads 0 rate rows (server-read only)', (anonRates ?? []).length === 0)
   }
 
+  // ── Search "Did you mean" ────────────────────────────────────────────────
+  // A correctable typo 500'd from 2026-11-06 to -11 (pageUrl() called before
+  // urlState was declared in app/(catalog)/page.tsx).
+  section('Search typo suggestion')
+  const typo = await fetch(`${HOST}/?q=ribbn`)
+  const typoHtml = await typo.text()
+  check('a correctable typo loads (no 500)', typo.status === 200, String(typo.status))
+  check('it offers "Did you mean ribbon"', /Did you mean/.test(typoHtml) && /q=ribbon/.test(typoHtml), typoHtml.slice(0, 120))
+
   // ── Funnel tracking ──────────────────────────────────────────────────────
   section('Funnel tracking')
   for (const type of ['add_to_cart', 'cart_view', 'quote_submitted']) {
