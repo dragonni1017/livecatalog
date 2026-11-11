@@ -61,7 +61,6 @@ Future Brainstorm below.
 - Sales-tax calculation by ship-to state
 
 **Inventory & fulfillment**
-- Backorder handling
 - Multi-warehouse stock visibility
 - RMA / returns tracking
 - Shipping-carrier rate quotes + label generation (UPS/FedEx)
