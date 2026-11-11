@@ -18,6 +18,15 @@ export interface LineItem {
   unit_price_cents: number
   qty: number
   line_total_cents: number
+  // Units over stock when built (0 = fully in stock). Quotes may exceed stock;
+  // the rep confirms timing. Saved to order_items.backorder_qty by
+  // saveBackorders() -- submit_order() ignores this key.
+  backorder_qty: number
+}
+
+/** Units of a line not covered by stock (negative stock counts as none). */
+export function backorderQty(qty: number, stockQty: number | null): number {
+  return Math.max(0, qty - Math.max(0, stockQty ?? 0))
 }
 
 // ── 1. Re-fetch authoritative product data and build line items ────────────
@@ -55,13 +64,15 @@ export async function buildLineItems(
       console.warn(`[order-submission] dropped ${p.sku}: no price (base ${p.price_cents}, effective ${unitPrice})`)
       continue
     }
-    if (p.stock_qty < item.qty) {
-      outOfStock.push(`${p.sku} (${p.name}) — ${p.stock_qty} in stock, ${item.qty} requested`)
+    const backorder = backorderQty(item.qty, p.stock_qty)
+    if (backorder > 0) {
+      outOfStock.push(`${p.sku} (${p.name}) — ${backorder} backordered (${Math.max(0, p.stock_qty)} in stock, ${item.qty} requested)`)
     }
     lineItems.push({
       product_id: p.id, sku: p.sku, name: p.name,
       unit_price_cents: unitPrice, qty: item.qty,
       line_total_cents: unitPrice * item.qty,
+      backorder_qty: backorder,
     })
   }
 
@@ -148,4 +159,20 @@ export async function insertOrder(args: InsertOrderArgs): Promise<InsertOrderRes
   }
 
   return { ok: true, orderId, referenceCode }
+}
+
+// ── 4. Record backorders on the saved lines ────────────────────────────────
+// After submit_order() (its signature stays as is): one UPDATE per
+// backordered line, usually none. Best-effort, like the promo/tax columns:
+// the order already stands, and the rep email lists backorders either way.
+export async function saveBackorders(db: Db, orderId: string, lineItems: LineItem[]): Promise<void> {
+  for (const li of lineItems) {
+    if (li.backorder_qty <= 0) continue
+    const { error } = await db
+      .from('order_items')
+      .update({ backorder_qty: li.backorder_qty })
+      .eq('order_id', orderId)
+      .eq('product_id', li.product_id)
+    if (error) console.error(`[order-submission] could not save backorder for ${li.sku}:`, error.message)
+  }
 }

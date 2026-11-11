@@ -336,7 +336,17 @@ export default async function AdminOrderDetailPage({ params }: DetailPageProps) 
                   <td className="px-5 py-3 font-mono text-xs text-gray-600">{it.sku}</td>
                   <td className="px-3 py-3 text-gray-800">{it.name}</td>
                   <td className="px-3 py-3 text-right text-gray-600">{formatPrice(it.unit_price_cents)}</td>
-                  <td className="px-3 py-3 text-right text-gray-600">{it.qty}</td>
+                  <td className="px-3 py-3 text-right text-gray-600">
+                    {it.qty}
+                    {(it.backorder_qty ?? 0) > 0 && (
+                      <span
+                        className="ml-1.5 whitespace-nowrap rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                        title="Over stock when ordered: confirm timing with the customer"
+                      >
+                        {it.backorder_qty! >= it.qty ? 'Backorder' : `${it.backorder_qty} backorder`}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-right font-semibold text-gray-900">{formatPrice(it.line_total_cents)}</td>
                 </tr>
               ))}

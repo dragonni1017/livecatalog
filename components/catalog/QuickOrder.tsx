@@ -65,12 +65,9 @@ export default function QuickOrder() {
           notFound.push(sku)
           continue
         }
-        // Same threshold as AddToCartButton — never add what the normal
-        // per-product flow would block.
-        if (p.stock_qty <= 0) {
-          outOfStock.push(sku)
-          continue
-        }
+        // Sold out still goes on the quote as a backorder, same as
+        // AddToCartButton; listed so the buyer knows.
+        if (p.stock_qty < qty) outOfStock.push(sku)
         addItem(
           { productId: p.id, sku: p.sku, name: p.name, priceCents: p.price_cents, imageUrl: p.image_url },
           qty,
@@ -139,7 +136,7 @@ export default function QuickOrder() {
             )}
             {result.outOfStock.length > 0 && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-700">
-                Out of stock, not added ({result.outOfStock.length}):{' '}
+                Added, but more than we have in stock, so backordered ({result.outOfStock.length}):{' '}
                 <span className="font-mono">{result.outOfStock.join(', ')}</span>
               </p>
             )}

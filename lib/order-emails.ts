@@ -34,7 +34,10 @@ type LineItem = {
   unit_price_cents: number
   qty: number
   line_total_cents: number
+  backorder_qty?: number
 }
+
+const backorderNote = (li: LineItem) => (li.backorder_qty ? ` (${li.backorder_qty} on backorder)` : '')
 
 export async function notifyReps(args: {
   referenceCode: string
@@ -59,7 +62,7 @@ export async function notifyReps(args: {
   const cc = buildRepCcList(contact)
 
   const itemLines = lineItems
-    .map((li) => `  ${li.qty} × ${li.sku} — ${li.name} @ ${formatPriceCents(li.unit_price_cents)} = ${formatPriceCents(li.line_total_cents)}`)
+    .map((li) => `  ${li.qty} × ${li.sku} — ${li.name} @ ${formatPriceCents(li.unit_price_cents)} = ${formatPriceCents(li.line_total_cents)}${backorderNote(li)}`)
     .join('\n')
 
   const text =
@@ -80,7 +83,7 @@ export async function notifyReps(args: {
     `\n` +
     (contact.notes?.trim() ? `Notes\n  ${contact.notes.trim()}\n\n` : '') +
     (outOfStock.length
-      ? `⚠️ Stock warnings (confirm availability before quoting):\n${outOfStock.map((s) => `  ${s}`).join('\n')}\n\n`
+      ? `⚠️ Backorders (over stock when ordered; confirm timing with the customer):\n${outOfStock.map((s) => `  ${s}`).join('\n')}\n\n`
       : '') +
     `Reply to this email to reach the customer directly.\n`
 
@@ -157,7 +160,7 @@ export async function notifyCustomer(args: {
   const subject = `We received your order request — ${referenceCode}`
 
   const itemLines = lineItems
-    .map((li) => `  ${li.qty} × ${li.name} (${li.sku}) @ ${formatPriceCents(li.unit_price_cents)} = ${formatPriceCents(li.line_total_cents)}`)
+    .map((li) => `  ${li.qty} × ${li.name} (${li.sku}) @ ${formatPriceCents(li.unit_price_cents)} = ${formatPriceCents(li.line_total_cents)}${backorderNote(li)}`)
     .join('\n')
 
   const text =

@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth-server'
 import { validateOrderInput, validateOrderMinimum } from '@/lib/order-validation'
 import { notifyReps, notifyCustomer } from '@/lib/order-emails'
 import { isSignedInAsOrderEmail } from '@/lib/order-rules'
-import { buildLineItems, insertOrder } from '@/lib/order-submission'
+import { buildLineItems, insertOrder, saveBackorders } from '@/lib/order-submission'
 import { autoAssignOrder } from '@/lib/order-auto-assign'
 import { TIER_COOKIE } from '@/lib/rep-tier-shared'
 import { resolveCustomerPricing } from '@/lib/customer-pricing'
@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', inserted.orderId)
       if (extrasErr) console.error('[orders] could not record promo/tax on order:', extrasErr.message)
+      await saveBackorders(db, inserted.orderId, lineItems)
     }
     if (!inserted.ok) {
       return NextResponse.json({ error: inserted.error }, { status: inserted.status })
