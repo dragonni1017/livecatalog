@@ -418,7 +418,7 @@ The site sends several types of automated emails:
 | New order submitted | `sale@ly-usa.com` (+ optional CC rep) | Full order details — customer info, all items, quantities, prices, subtotal |
 | New order submitted | Customer | Confirmation with reference code + link to order status page |
 | Order status change | Customer | Notification that their order moved to a new stage |
-| Low stock | `sale@ly-usa.com` | Which products have dropped to/below their threshold |
+| Low stock | `sale@ly-usa.com` (can be switched off; off since 2026-11-11) | Which products have dropped to/below their threshold |
 | Back in stock | Subscribers | Products they requested notification for are back in stock |
 | Abandoned cart | Customer | Reminder that they have items in their cart (24-hour delay) |
 
@@ -438,6 +438,8 @@ When a product's stock drops to or below its threshold, a low-stock alert email 
 **De-duplication:** Each product only alerts once per "restock cycle." Once a product gets the low-stock alert, it won't alert again until it's been restocked above the threshold and then drops below again. This prevents email spam if the same product stays low for days.
 
 **Thresholds:** The default threshold is 5 units. Each product can have its own custom threshold set in the admin products page.
+
+**On/off switch:** The **Low-stock email** checkbox on Admin → Products & Stock turns the email off without a redeploy (`alert_settings` table, migration 0077; `lib/alert-settings.ts`). Each change is audit-logged. While it's off, products that go low are still marked as alerted, so switching it back on only emails products that go low after that, not a backlog. Low-stock badges in admin are unaffected. Switched **off** 2026-11-11.
 
 ---
 
