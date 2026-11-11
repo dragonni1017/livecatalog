@@ -52,7 +52,6 @@ Future Brainstorm below.
 ## Future Brainstorm (unscoped)
 
 **Catalog & browsing**
-- Filter by brand / material / other product attributes (price range already shipped)
 - Product comparison (side-by-side spec view)
 
 **Ordering & quotes**
