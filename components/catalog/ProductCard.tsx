@@ -37,7 +37,9 @@ export default async function ProductCard({ product }: ProductCardProps) {
         className="flex flex-col flex-1"
       >
       {/* Image area */}
-      <div className="aspect-square w-full bg-gray-100 flex items-center justify-center">
+      {/* overflow-hidden keeps it square: otherwise a tall photo's natural
+          height stretches the box past its aspect ratio. */}
+      <div className="aspect-square w-full overflow-hidden bg-gray-100 flex items-center justify-center">
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
