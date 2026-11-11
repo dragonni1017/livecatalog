@@ -22,6 +22,17 @@ body {
   color: var(--foreground);
 }
 
+/* iOS Safari zooms the page into any focused field under 16px and doesn't
+   zoom back out. Unlayered, so it beats Tailwind's text-sm/text-xs on phones;
+   from md up the utilities apply as written. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Thin scrollbar for category sidebar */
 aside ::-webkit-scrollbar {
   width: 4px;

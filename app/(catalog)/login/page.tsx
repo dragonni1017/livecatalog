@@ -171,7 +171,7 @@ function LoginForm() {
                 type="button"
                 onClick={handleForgotPassword}
                 disabled={resetLoading}
-                className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-60 transition-colors"
+                className="py-2 text-xs text-gray-500 hover:text-red-600 disabled:opacity-60 transition-colors"
               >
                 {resetLoading ? 'Sending…' : 'Forgot your password?'}
               </button>
@@ -182,7 +182,7 @@ function LoginForm() {
         {/* Register link */}
         <p className="text-sm text-center mt-6 text-gray-500">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="font-medium text-red-600 hover:text-red-700">
+          <Link href="/register" className="py-2 font-medium text-red-600 hover:text-red-700">
             Create one
           </Link>
         </p>
@@ -190,7 +190,7 @@ function LoginForm() {
         {/* Rep login link */}
         <p className="text-xs text-center mt-3 text-gray-400">
           Sales rep?{' '}
-          <Link href="/rep/login" className="text-gray-500 hover:text-red-600 underline">
+          <Link href="/rep/login" className="py-2 text-gray-500 hover:text-red-600 underline">
             Sign in here
           </Link>
         </p>
