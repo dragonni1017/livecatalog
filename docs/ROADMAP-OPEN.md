@@ -28,6 +28,7 @@ or any other provider. Recorded rather than deleted so it stops resurfacing as
 | Item | What's blocking |
 |---|---|
 | **Catalog access gate** | Built and hardened (#93, 2026-10-02: HMAC cookie, `/api/*` gated too), still dormant — set `CATALOG_ACCESS_CODE` to activate |
+| **Sales-tax estimate by ship-to state** | Built 2026-10-19 (migration 0066, `lib/sales-tax.ts`, Admin → Sales Tax), estimate only and never sent to QuickBooks. Shows nothing until rates are entered: `sales_tax_states` still empty as of 2026-11-11, all 9 orders since saved as `not_collected`. Waiting on whoever owns tax to answer the questions in `docs/SALES-TAX-PLAN.md` |
 
 ---
 
@@ -56,9 +57,6 @@ Future Brainstorm below.
 
 **Ordering & quotes**
 - Manager approval step (rep → manager → admin)
-
-**Pricing & customers**
-- Sales-tax calculation by ship-to state
 
 **Inventory & fulfillment**
 - Backorder handling
