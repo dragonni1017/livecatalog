@@ -105,7 +105,13 @@ export async function POST(request: NextRequest) {
     // them, and the real order will too). The cart marks these lines rather
     // than letting them vanish from the order unannounced.
     const unavailable = [...new Set(items.map((i) => i.productId))].filter((id) => !(id in prices))
-    return NextResponse.json(promo ? { prices, unavailable, promo } : { prices, unavailable })
+    // Units per line over stock, for the cart's Backorder badge. Not the stock
+    // level as such, though qty minus this gives it for a backordered line;
+    // telling the buyer what's backordered can't avoid that.
+    const backorders = Object.fromEntries(
+      built.lineItems.filter((li) => li.backorder_qty > 0).map((li) => [li.product_id, li.backorder_qty]),
+    )
+    return NextResponse.json(promo ? { prices, unavailable, backorders, promo } : { prices, unavailable, backorders })
   } catch (err) {
     console.error('[cart/reprice] error:', err)
     return NextResponse.json({ error: 'Reprice failed' }, { status: 500 })

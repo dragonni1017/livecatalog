@@ -227,6 +227,12 @@ export default function CartPage() {
   // Lines the server can no longer sell (deactivated, hidden, or no price).
   // The order drops them silently, so the cart says so instead.
   const [unavailable, setUnavailable] = useState<Set<string>>(new Set())
+  // Units per line over stock (from the same reprice call). Still on the
+  // request; the rep confirms timing.
+  const [backorders, setBackorders] = useState<Record<string, number>>({})
+  // Re-ask when a quantity changes, so the Backorder badge (and any volume
+  // price break) follows the new qty, not just the qty at page load.
+  const qtyKey = items.map((i) => `${i.productId}:${i.qty}`).join(',')
 
   useEffect(() => {
     function reprice() {
@@ -250,13 +256,18 @@ export default function CartPage() {
             updatePrices(prices)
           }
           if (Array.isArray(data.unavailable)) setUnavailable(new Set(data.unavailable as string[]))
+          if (data.backorders && typeof data.backorders === 'object') setBackorders(data.backorders as Record<string, number>)
         })
         .catch(() => {})
     }
-    if (hydrated) reprice()
+    // Debounced so tapping + several times asks once.
+    const timer = hydrated ? window.setTimeout(reprice, 400) : undefined
     window.addEventListener('pageshow', reprice)
-    return () => window.removeEventListener('pageshow', reprice)
-  }, [hydrated, updatePrices])
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pageshow', reprice)
+    }
+  }, [hydrated, updatePrices, qtyKey])
 
   // "Placed by (rep)" is a dropdown of real rep accounts, not free text —
   // fetch the list once. Public/unauthenticated endpoint, same as the
@@ -622,14 +633,14 @@ export default function CartPage() {
             {items.map((item) => {
               const gone = unavailable.has(item.productId)
               return (
-              <li key={item.productId} className={`flex items-center gap-4 p-4 ${gone ? 'bg-gray-50' : ''}`}>
+              <li key={item.productId} className={`flex flex-wrap items-center gap-x-4 gap-y-3 p-4 sm:flex-nowrap ${gone ? 'bg-gray-50' : ''}`}>
                 <div className={`h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100 ${gone ? 'opacity-40' : ''}`}>
                   {item.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={resolveCdnImage(item.imageUrl, 150) ?? undefined} alt={item.name} className="h-full w-full object-contain" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 grow basis-[calc(100%-5rem)] sm:basis-0">
                   <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
                   <p className="font-mono text-xs text-gray-400">{item.sku}</p>
                   {gone ? (
@@ -642,15 +653,22 @@ export default function CartPage() {
                         Custom price
                       </span>
                     )}
+                    {backorders[item.productId] > 0 && (
+                      <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        {backorders[item.productId] >= item.qty ? 'Backorder' : `${backorders[item.productId]} on backorder`}
+                      </span>
+                    )}
                   </p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* On phones this wraps to a second row, indented under the
+                    name (image w-16 + gap-4 = ml-20). */}
+                <div className="ml-20 flex items-center gap-2 sm:ml-0">
                   <button
                     type="button"
                     aria-label="Decrease quantity"
                     onClick={() => setQty(item.productId, item.qty - 1)}
-                    className="h-7 w-7 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                    className="h-9 w-9 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 sm:h-7 sm:w-7"
                   >
                     −
                   </button>
@@ -659,12 +677,12 @@ export default function CartPage() {
                     type="button"
                     aria-label="Increase quantity"
                     onClick={() => setQty(item.productId, item.qty + 1)}
-                    className="h-7 w-7 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                    className="h-9 w-9 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 sm:h-7 sm:w-7"
                   >
                     +
                   </button>
                 </div>
-                <div className={`w-20 text-right text-sm font-bold ${gone ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                <div className={`ml-auto text-right text-sm font-bold sm:ml-0 sm:w-20 ${gone ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {formatPrice(item.priceCents * item.qty)}
                 </div>
                 <button

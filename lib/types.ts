@@ -186,6 +186,8 @@ export interface OrderItemRecord {
   unit_price_cents: number
   qty: number
   line_total_cents: number
+  // Units over stock when ordered (migration 0078). Undefined before it ran.
+  backorder_qty?: number
 }
 
 // Shape of one row in the imported Excel file

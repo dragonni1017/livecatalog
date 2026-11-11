@@ -59,7 +59,6 @@ Future Brainstorm below.
 - Manager approval step (rep → manager → admin)
 
 **Inventory & fulfillment**
-- Backorder handling
 - Multi-warehouse stock visibility
 - RMA / returns tracking
 - Shipping-carrier rate quotes + label generation (UPS/FedEx)
