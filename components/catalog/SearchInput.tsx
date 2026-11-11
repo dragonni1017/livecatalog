@@ -180,7 +180,7 @@ export default function SearchInput() {
           <button
             type="submit"
             aria-label="Search"
-            className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 hover:text-gray-600"
+            className="absolute inset-y-0 left-0 flex items-center pl-3 pr-2 text-gray-400 hover:text-gray-600"
           >
             <svg
               className="h-4 w-4"

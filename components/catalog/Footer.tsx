@@ -27,7 +27,7 @@ export default function Footer() {
           <div className="text-xs text-gray-500">
             <p className="font-medium text-gray-700">626-552-4120</p>
             <p>www.ly-usa.com</p>
-            <Link href="/credit-application" className="mt-1 inline-block text-red-600 hover:text-red-700 hover:underline">
+            <Link href="/credit-application" className="-mb-2 inline-block py-2 text-red-600 hover:text-red-700 hover:underline">
               Apply for net terms →
             </Link>
           </div>
