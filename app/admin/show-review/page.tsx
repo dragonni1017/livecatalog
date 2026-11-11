@@ -4,7 +4,7 @@ import { resolveCdnImage } from '@/lib/image'
 import { buildExport } from '@/lib/woo-export'
 import { loadExportData } from '@/lib/woo-export-load'
 import { loadHiddenSearchDemand } from '@/lib/hidden-search-demand-load'
-import { keptHidden, orderCandidates, SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN, type DecisionRow } from '@/lib/show-review'
+import { HIDE_ACTION, keptHidden, orderCandidates, SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN, soldOutHidden, VISIBILITY_ACTION, type HideRow } from '@/lib/show-review'
 import ShowReviewCards, { type ShowCard } from '@/components/admin/ShowReviewCards'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +12,8 @@ export const dynamic = 'force-dynamic'
 // "Show these?": hidden products missing nothing but the decision to show
 // them (photo, price, category, real description). Show = the audited
 // visibility PATCH; Keep hidden = an audit-row decision (lib/show-review.ts).
+// Products hidden as sold out are left off while still out of stock: that
+// isn't a decision to make here.
 export default async function ShowReviewPage() {
   const db = getAdminClient()
   const [{ products, categoryOf }, demand] = await Promise.all([loadExportData(db), loadHiddenSearchDemand(db)])
@@ -21,20 +23,23 @@ export default async function ShowReviewPage() {
   const candidates = products.filter((p) => p.sku && onlyHidden.has(p.sku.trim()))
 
   const ids = candidates.map((p) => p.id)
-  const decisions: DecisionRow[] = []
+  const decisions: HideRow[] = []
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await db
       .from('audit_log')
-      .select('entity_id, action, created_at')
-      .in('action', [SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN])
+      .select('entity_id, action, created_at, performed_by')
+      .in('action', [SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN, HIDE_ACTION, VISIBILITY_ACTION])
       .in('entity_id', ids.slice(i, i + 200))
     if (error) throw error
-    decisions.push(...((data ?? []) as DecisionRow[]))
+    decisions.push(...((data ?? []) as HideRow[]))
   }
   const kept = keptHidden(decisions)
+  // Restocked since the sold-out hide: back to being a real decision.
+  const hiddenSoldOut = soldOutHidden(decisions)
+  const soldOut = new Set(candidates.filter((p) => hiddenSoldOut.has(p.id) && (p.stock_qty ?? 0) <= 0).map((p) => p.id))
 
   const cards: ShowCard[] = orderCandidates(
-    candidates.map((p) => ({
+    candidates.filter((p) => !soldOut.has(p.id)).map((p) => ({
       id: p.id,
       sku: p.sku!.trim(),
       name: p.name,
@@ -58,6 +63,7 @@ export default async function ShowReviewPage() {
           {toDecide.length} hidden product{toDecide.length === 1 ? ' has' : 's have'} everything a shown product needs: a photo, a
           price, a category and a description. Only the decision is left. Most searched first. Show puts it on the storefront
           (and in the WooCommerce export); Keep hidden takes it off this list. Both are logged and can be undone.
+          {soldOut.size > 0 && ` ${soldOut.size} more ${soldOut.size === 1 ? 'was' : 'were'} hidden as sold out and ${soldOut.size === 1 ? "isn't" : "aren't"} listed.`}
         </p>
         <div className="mt-6">
           <ShowReviewCards cards={cards} />
