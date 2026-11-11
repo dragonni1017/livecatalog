@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { auditJson, productChange } from '@/lib/product-audit'
-import { keptHidden, orderCandidates, SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN } from '@/lib/show-review'
+import { HIDE_ACTION, keptHidden, orderCandidates, SHOW_REVIEW_KEEP, SHOW_REVIEW_REOPEN, soldOutHidden, VISIBILITY_ACTION } from '@/lib/show-review'
 
 describe('productChange', () => {
   it('separates visibility from other changed fields and skips bookkeeping', () => {
@@ -30,6 +30,20 @@ describe('keptHidden / orderCandidates', () => {
       { entity_id: 'c', action: 'something_else', created_at: '2026-11-03' },
     ])
     expect([...kept]).toEqual(['b'])
+  })
+  it('leaves off products whose latest hide/visibility event is a sold-out hide', () => {
+    const soldOut = soldOutHidden([
+      { entity_id: 'a', action: HIDE_ACTION, created_at: '2026-11-10', performed_by: 'Claude Code: sold-out notes in a file' },
+      { entity_id: 'b', action: HIDE_ACTION, created_at: '2026-11-10', performed_by: 'script: Sold Out per owner' },
+      { entity_id: 'c', action: HIDE_ACTION, created_at: '2026-11-10', performed_by: 'script: wrong photo' },
+      // shown again by the admin, then hidden by hand: a normal hide now
+      { entity_id: 'd', action: HIDE_ACTION, created_at: '2026-11-10', performed_by: 'sold-out notes' },
+      { entity_id: 'd', action: VISIBILITY_ACTION, created_at: '2026-11-11', performed_by: 'owner@example.com' },
+      // a keep/reopen decision doesn't override the reason it was hidden
+      { entity_id: 'a', action: SHOW_REVIEW_REOPEN, created_at: '2026-11-12', performed_by: 'owner@example.com' },
+      { entity_id: null, action: HIDE_ACTION, created_at: '2026-11-10', performed_by: 'sold out' },
+    ])
+    expect([...soldOut].sort()).toEqual(['a', 'b'])
   })
   it('orders most searched, then most stock, then SKU', () => {
     const rows = orderCandidates([
