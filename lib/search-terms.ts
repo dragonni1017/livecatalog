@@ -4,12 +4,16 @@ import { editDistance } from '@/lib/email-typo'
 // mean" suggestions. Pure, so the catalog page and the suggest route share
 // them and tests run offline.
 
+// A heart typed as a word ("i < you", "i <3 you", "I ♥ U"): the products say
+// "I Love You". From the zero-result searches, 2026-11-10/11.
+const HEART = /^(?:<3?|♥|❤️?|♡|💕|💗|💖)$/u
+
 /** Words of a search, with chars that would break PostgREST's filter syntax stripped. */
 export function searchWords(q: string | null | undefined): string[] {
   return (q ?? '')
     .trim()
     .split(/\s+/)
-    .map((w) => w.replace(/[%,()]/g, ''))
+    .map((w) => (HEART.test(w) ? 'love' : w.replace(/[%,()]/g, '')))
     .filter(Boolean)
 }
 
