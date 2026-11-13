@@ -12,6 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isEmailConfigured, sendMail } from './email'
+import { isLowStockEmailEnabled } from './alert-settings'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -22,7 +23,7 @@ export function getThreshold(): number {
 }
 
 export type LowStockResult =
-  | { alerted: number; skipped?: undefined }
+  | { alerted: number; skipped?: undefined; emailOff?: boolean }
   | { skipped: string; alerted?: undefined }
 
 export async function checkLowStockAndNotify(db: DB): Promise<LowStockResult> {
@@ -66,7 +67,10 @@ export async function checkLowStockAndNotify(db: DB): Promise<LowStockResult> {
 
   if (low.length === 0) return { alerted: 0 }
 
-  // 4. One email listing every newly low product.
+  // 4. One email listing every newly low product, unless switched off in
+  //    admin. Off still marks them (step 5), so switching back on doesn't
+  //    send everything that went low in the meantime.
+  const emailOn = await isLowStockEmailEnabled(db)
   const lines = low
     .map((p) => {
       const effectiveThreshold = p.low_stock_threshold ?? threshold
@@ -78,7 +82,7 @@ export async function checkLowStockAndNotify(db: DB): Promise<LowStockResult> {
     `These products are at or below their reorder threshold:\n\n${lines}\n\n` +
     `Reorder as needed. (You won't be alerted again for these until they're restocked above their threshold and drop low again.)\n`
 
-  await sendMail({ to: process.env.REORDER_ALERT_TO!, subject, text })
+  if (emailOn) await sendMail({ to: process.env.REORDER_ALERT_TO!, subject, text })
 
   // 5. Mark them alerted so they don't re-fire next sync.
   const skus = low.map((p) => p.sku)
@@ -87,6 +91,10 @@ export async function checkLowStockAndNotify(db: DB): Promise<LowStockResult> {
     .update({ low_stock_alerted: true, updated_at: now })
     .in('sku', skus)
 
+  if (!emailOn) {
+    console.log(`[low-stock] ${low.length} product(s) newly low; email switched off in admin, not sent`)
+    return { alerted: 0, emailOff: true }
+  }
   console.log(`[low-stock] alerted on ${low.length} product(s) at/below their threshold`)
   return { alerted: low.length }
 }

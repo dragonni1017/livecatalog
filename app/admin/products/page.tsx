@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { getAdminClient } from '@/lib/supabase'
 import BulkStockTable from '@/components/admin/BulkStockTable'
 import ProductCreateButton from '@/components/admin/ProductCreateButton'
+import LowStockEmailToggle from '@/components/admin/LowStockEmailToggle'
+import { isLowStockEmailEnabled } from '@/lib/alert-settings'
+import { isEmailConfigured } from '@/lib/email'
 import { applyAdminProductFilters, resolveCategoryMemberIds, type AdminProductFilterParams } from '@/lib/admin-products'
 
 export const dynamic = 'force-dynamic'
@@ -76,6 +79,7 @@ export default async function AdminProductsPage({
     filters,
     memberIds,
   )
+  const lowStockEmailOn = await isLowStockEmailEnabled(db)
 
   // Category membership for just this page's products (not the whole
   // catalog) -- naturally bounded to DISPLAY_PAGE_SIZE rows worth, so no
@@ -137,6 +141,7 @@ export default async function AdminProductsPage({
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
             <span className="font-semibold text-gray-900">{(noImageCount ?? 0).toLocaleString()}</span> without image
           </span>
+          <LowStockEmailToggle initialEnabled={lowStockEmailOn} recipientSet={isEmailConfigured()} />
         </div>
 
         {/* Filters */}

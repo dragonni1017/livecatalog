@@ -86,7 +86,7 @@ export default function RegisterPage() {
             <div className="text-center space-y-3">
               <p className="text-sm text-gray-700">
                 Account created! Check your email to confirm, then{' '}
-                <Link href="/login" className="font-medium text-red-600 hover:text-red-700">
+                <Link href="/login" className="py-2 font-medium text-red-600 hover:text-red-700">
                   sign in
                 </Link>
                 .
@@ -178,7 +178,7 @@ export default function RegisterPage() {
         {/* Login link */}
         <p className="text-sm text-center mt-6 text-gray-500">
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-red-600 hover:text-red-700">
+          <Link href="/login" className="py-2 font-medium text-red-600 hover:text-red-700">
             Sign in
           </Link>
         </p>

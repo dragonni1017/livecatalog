@@ -33,7 +33,7 @@ export default function AccountNav() {
     return (
       <Link
         href="/account"
-        className="text-xs font-medium text-gray-600 hover:text-red-600"
+        className="px-1 py-2 text-xs font-medium text-gray-600 hover:text-red-600"
       >
         Account
       </Link>
@@ -43,7 +43,7 @@ export default function AccountNav() {
   return (
     <Link
       href="/login"
-      className="text-xs font-medium text-gray-600 hover:text-red-600"
+      className="px-1 py-2 text-xs font-medium text-gray-600 hover:text-red-600"
     >
       Login
     </Link>

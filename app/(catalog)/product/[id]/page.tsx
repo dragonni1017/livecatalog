@@ -155,7 +155,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       <div className="mb-6">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700"
+          className="-my-2 inline-flex items-center gap-1.5 py-2 text-sm font-medium text-red-600 hover:text-red-700"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -179,7 +179,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <div className="flex flex-col gap-4 p-8">
             {product.category && settings.show_category_detail && (
               <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                <Link href="/" className="hover:text-red-600">All Products</Link>
+                <Link href="/" className="-my-2 py-2 hover:text-red-600">All Products</Link>
                 <span>/</span>
                 {/* The category's department (lib/category-groups.ts), when it has more than one category. */}
                 {(() => {
@@ -188,7 +188,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   if (!dept || dept.categories.length < 2) return null
                   return (
                     <>
-                      <Link href={`/?dept=${departmentSlug(dept.name)}`} className="hover:text-red-600">
+                      <Link href={`/?dept=${departmentSlug(dept.name)}`} className="-my-2 py-2 hover:text-red-600">
                         {dept.name}
                       </Link>
                       <span>/</span>
@@ -197,7 +197,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 })()}
                 <Link
                   href={`/?category=${product.category.slug}`}
-                  className="font-medium text-red-600 hover:text-red-700"
+                  className="-my-2 py-2 font-medium text-red-600 hover:text-red-700"
                 >
                   {product.category.name}
                 </Link>
@@ -319,7 +319,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             {product.category && (
               <Link
                 href={`/?category=${product.category.slug}`}
-                className="text-sm font-medium text-red-600 hover:text-red-700"
+                className="-my-2 py-2 text-sm font-medium text-red-600 hover:text-red-700"
               >
                 View all →
               </Link>

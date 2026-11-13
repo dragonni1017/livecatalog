@@ -96,7 +96,7 @@ export default async function MyOrdersPage() {
       {/* Back link */}
       <Link
         href="/"
-        className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="-mt-2 mb-4 inline-flex items-center gap-1 py-2 text-sm text-gray-500 hover:text-gray-700"
       >
         <svg
           className="h-4 w-4"

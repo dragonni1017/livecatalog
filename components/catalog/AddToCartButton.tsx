@@ -8,6 +8,9 @@ import { applyTierDiscount } from '@/lib/order-rules'
 import type { CartItem } from '@/lib/types'
 import type { PriceTier } from '@/lib/rep-tier-shared'
 
+// Sanity cap on a typed quantity, now that stock no longer caps it.
+const MAX_QTY = 9999
+
 interface AddToCartButtonProps {
   product: Omit<CartItem, 'qty'> & { stockQty: number }
   // 'card' is the compact control used inside the ProductCard link; 'detail'
@@ -31,9 +34,13 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
   const effectivePriceCents = applyTierDiscount(product.priceCents, discountPercent)
   const [qty, setQty] = useState(1)
   const [justAdded, setJustAdded] = useState(false)
+  // Sold out or not, it can go on a quote: anything over stock is a backorder
+  // (lib/order-submission.ts backorderQty), flagged in the cart and to the
+  // rep, who confirms timing. Not capped at stock any more.
   const outOfStock = product.stockQty <= 0
-  const max = product.stockQty > 0 ? product.stockQty : 1
-  const canAddCase = !outOfStock && !!unitsPerCase && unitsPerCase > 1 && max >= unitsPerCase
+  const max = MAX_QTY
+  const overStock = qty > Math.max(0, product.stockQty)
+  const canAddCase = !!unitsPerCase && unitsPerCase > 1
 
   // Rep-only: override this line's unit price for just this order (see
   // lib/order-submission.ts -- the server only honors this for a verified
@@ -67,7 +74,6 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
 
   function handleAdd(e: React.MouseEvent) {
     stop(e)
-    if (outOfStock) return
     addItem(
       {
         productId: product.productId,
@@ -101,19 +107,6 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
     setJustAdded(true)
     resetCustomPrice()
     window.setTimeout(() => setJustAdded(false), 1500)
-  }
-
-  if (outOfStock) {
-    return (
-      <span
-        className={
-          (variant === 'detail' ? 'block w-full py-3 text-center ' : 'inline-block px-3 py-1.5 ') +
-          'rounded-md bg-gray-100 text-xs font-semibold text-gray-400'
-        }
-      >
-        Out of Stock
-      </span>
-    )
   }
 
   const detail = variant === 'detail'
@@ -179,13 +172,18 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
         <button
           type="button"
           onClick={handleAdd}
-          aria-label={`Add ${qty} ${product.name} to cart`}
+          aria-label={`${outOfStock ? 'Backorder' : 'Add'} ${qty} ${product.name} to cart`}
           className={
-            'rounded-md bg-red-600 font-semibold text-white transition-colors hover:bg-red-700 ' +
+            'rounded-md font-semibold text-white transition-colors ' +
+            (outOfStock ? 'bg-amber-600 hover:bg-amber-700 ' : 'bg-red-600 hover:bg-red-700 ') +
             (detail ? 'h-11 flex-1 px-4 text-sm' : 'px-3 py-2 text-xs sm:py-1.5')
           }
         >
-          {justAdded ? (detail ? 'Added to cart ✓' : 'Added ✓') : detail ? 'Add to Cart' : 'Add'}
+          {justAdded
+            ? (detail ? 'Added to cart ✓' : 'Added ✓')
+            : outOfStock
+              ? 'Backorder'
+              : detail ? 'Add to Cart' : 'Add'}
         </button>
         {canAddCase && (
           <button
@@ -201,6 +199,11 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
           </button>
         )}
       </div>
+      {overStock && (
+        <p className={(detail ? 'mt-2 text-sm' : 'mt-1 text-xs') + ' text-amber-700'}>
+          {outOfStock ? 'Sold out: added as a backorder. We’ll confirm timing.' : 'More than we have in stock: the rest is backordered.'}
+        </p>
+      )}
 
       {/* Rep-only: set a one-off price for this line, this order only --
           never changes the product's real price or the selected tier. */}

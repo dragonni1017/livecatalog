@@ -10,7 +10,7 @@ export async function checkBackInStockAndNotify(db: DB): Promise<{ notified: num
   // Fetch all pending requests (notified_at is null)
   const { data: requests, error } = await db
     .from('back_in_stock_requests')
-    .select('id, email, product_id, product:products(name, sku, stock_qty)')
+    .select('id, email, product_id, product:products(name, sku, stock_qty, is_active, manually_hidden)')
     .is('notified_at', null)
 
   if (error) {
@@ -19,12 +19,14 @@ export async function checkBackInStockAndNotify(db: DB): Promise<{ notified: num
   }
   if (!requests?.length) return { notified: 0 }
 
-  // Only notify for products that are now back in stock
-  interface ProductSnap { name: string; sku: string; stock_qty: number }
+  // Only notify for products that are back in stock AND on the storefront:
+  // the email links to the product page, which 404s for hidden/inactive
+  // products. Those requests stay pending until the product is shown.
+  interface ProductSnap { name: string; sku: string; stock_qty: number; is_active: boolean; manually_hidden: boolean }
   const toNotify = requests.filter((r) => {
     const raw = r.product
     const p = (Array.isArray(raw) ? raw[0] : raw) as ProductSnap | null
-    return p && p.stock_qty > 0
+    return p && p.stock_qty > 0 && p.is_active && !p.manually_hidden
   })
   if (!toNotify.length) return { notified: 0 }
 

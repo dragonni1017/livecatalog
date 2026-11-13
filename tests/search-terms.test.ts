@@ -7,6 +7,14 @@ describe('searchWords', () => {
     expect(searchWords(undefined)).toEqual([])
     expect(searchWords('%,')).toEqual([])
   })
+  it('reads a heart typed as a word as "love"', () => {
+    expect(searchWords('i < you')).toEqual(['i', 'love', 'you'])
+    expect(searchWords('I <3 you plush')).toEqual(['I', 'love', 'you', 'plush'])
+    expect(searchWords('I ♥ U')).toEqual(['I', 'love', 'U'])
+    expect(searchWords('I ❤️ you')).toEqual(['I', 'love', 'you'])
+    // only a standalone heart; "<" inside a word is left alone
+    expect(searchWords('a<b')).toEqual(['a<b'])
+  })
 })
 
 describe('searchVariants', () => {

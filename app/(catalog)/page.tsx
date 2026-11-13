@@ -174,25 +174,6 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const totalProducts = count ?? 0
   const totalPages = Math.ceil(totalProducts / pageSize)
 
-  // "Did you mean": a misspelled search ("swuishy") gets the closest words
-  // from product names, offered only if that search finds something.
-  let didYouMean: { q: string; href: string } | null = null
-  if (totalProducts === 0 && q?.trim()) {
-    const vocab = await loadSearchVocabulary()
-    const fixed = vocab ? suggestSearch(q, vocab) : null
-    if (fixed) {
-      let check = supabase.from('products').select('id').eq('is_active', true).eq('manually_hidden', false)
-      for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS, categories))
-      const { data: hit } = await check.limit(1)
-      if (hit?.length) {
-        // Same filters as now, first page, corrected words.
-        const params = new URLSearchParams(pageUrl(1).split('?')[1] ?? '')
-        params.set('q', fixed)
-        didYouMean = { q: fixed, href: `/?${params.toString()}` }
-      }
-    }
-  }
-
   // Every catalog link keeps the same filters (lib/catalog-url.ts).
   const urlState: CatalogState = {
     q,
@@ -208,6 +189,27 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   }
   function pageUrl(p: number) {
     return catalogHref({ ...urlState, page: p })
+  }
+
+  // "Did you mean": a misspelled search ("swuishy") gets the closest words
+  // from product names, offered only if that search finds something. Must
+  // stay below urlState: pageUrl() reads it, and calling it earlier threw
+  // a ReferenceError (500) on every correctable typo (2026-11-06 to -11).
+  let didYouMean: { q: string; href: string } | null = null
+  if (totalProducts === 0 && q?.trim()) {
+    const vocab = await loadSearchVocabulary()
+    const fixed = vocab ? suggestSearch(q, vocab) : null
+    if (fixed) {
+      let check = supabase.from('products').select('id').eq('is_active', true).eq('manually_hidden', false)
+      for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS, categories))
+      const { data: hit } = await check.limit(1)
+      if (hit?.length) {
+        // Same filters as now, first page, corrected words.
+        const params = new URLSearchParams(pageUrl(1).split('?')[1] ?? '')
+        params.set('q', fixed)
+        didYouMean = { q: fixed, href: `/?${params.toString()}` }
+      }
+    }
   }
   const chips = filterChips(urlState, { category: categoryMatch?.name, dept: department?.name })
 
