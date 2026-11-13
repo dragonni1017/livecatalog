@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 
 // On/off for the low-stock reorder email (lib/alert-settings.ts). Saves on click.
-export default function LowStockEmailToggle({ initialEnabled }: { initialEnabled: boolean }) {
+// recipientSet: REORDER_ALERT_TO (and SMTP) configured; without it the switch
+// can be on and still send nothing, so say so.
+export default function LowStockEmailToggle({ initialEnabled, recipientSet = true }: { initialEnabled: boolean; recipientSet?: boolean }) {
   const router = useRouter()
   const [enabled, setEnabled] = useState(initialEnabled)
   const [saving, setSaving] = useState(false)
@@ -47,7 +49,11 @@ export default function LowStockEmailToggle({ initialEnabled }: { initialEnabled
         />
         Low-stock email {enabled ? 'on' : 'off'}
       </label>
-      {!enabled && <span className="text-xs text-gray-400">(low stock still shows here)</span>}
+      {!recipientSet ? (
+        <span className="text-xs text-amber-700">(no recipient set in Vercel: REORDER_ALERT_TO, so nothing is sent)</span>
+      ) : (
+        !enabled && <span className="text-xs text-gray-400">(low stock still shows here)</span>
+      )}
       {error && <span className="text-xs text-red-600">{error}</span>}
     </span>
   )

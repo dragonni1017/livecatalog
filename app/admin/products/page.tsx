@@ -4,6 +4,7 @@ import BulkStockTable from '@/components/admin/BulkStockTable'
 import ProductCreateButton from '@/components/admin/ProductCreateButton'
 import LowStockEmailToggle from '@/components/admin/LowStockEmailToggle'
 import { isLowStockEmailEnabled } from '@/lib/alert-settings'
+import { isEmailConfigured } from '@/lib/email'
 import { applyAdminProductFilters, resolveCategoryMemberIds, type AdminProductFilterParams } from '@/lib/admin-products'
 
 export const dynamic = 'force-dynamic'
@@ -140,7 +141,7 @@ export default async function AdminProductsPage({
           <span className="rounded-lg bg-white border border-gray-200 px-4 py-2 text-gray-700">
             <span className="font-semibold text-gray-900">{(noImageCount ?? 0).toLocaleString()}</span> without image
           </span>
-          <LowStockEmailToggle initialEnabled={lowStockEmailOn} />
+          <LowStockEmailToggle initialEnabled={lowStockEmailOn} recipientSet={isEmailConfigured()} />
         </div>
 
         {/* Filters */}
