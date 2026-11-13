@@ -55,3 +55,9 @@ session would otherwise start from the Nov 9 picture (192 held).
 **How to apply:** before any price or visibility work, count
 `held_price_cents is not null` and read today's `audit_log`. Don't assume
 `data/` or git shows everything that changed in live data.
+
+**Update 2026-11-13.** The sold-out question is settled: "Show these?" now
+skips sold-out hides while stock is 0 (#253). The 12 rows the 11-10 per-piece
+pass re-set (e.g. PF20200931 $60, P273658 $29) were later overwritten by the
+user's 2026-11-12 decision to apply every sheet price as typed × 2.4. See
+[[project-price-sheet-base-20261112]]. Held prices: 389.

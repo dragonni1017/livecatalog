@@ -39,6 +39,8 @@ out-of-stock write ([[project-woo-direct-outofstock-write]]).
 
 **Why:** the question "how accurate is the catalog vs WordPress" will come
 back; this is the answer and where the numbers came from.
+**Update 2026-11-13: Woo prices now equal the catalog.** A rerun found 3,146/3,212 Woo prices identical to the catalog, held ones included. They were all modified 2026-11-11 ~19:00 UTC, so someone (likely the Woo team) loaded catalog prices; the 2.40x markup is gone. The 66 differences were the 65 prices changed 2026-11-12 plus one discontinued draft. Stock disagreements dropped to 21. Woo publishes 1,961 products hidden here (1,115 by decision, 764 no photo, 77 sold-out hides, 5 out of stock). The handoff is `Downloads/woocommerce-handoff-for-woo-team-20261113.xlsx`. `data/woo-vs-catalog.mts` now date-stamps its output (it had overwritten the 11-04 report).
+
 **How to apply:** re-run the two `data/` scripts for fresh numbers. Woo-side
 decisions (publish, price plugin, stock) belong to the team that runs the
 WooCommerce site; this repo only reports them.
