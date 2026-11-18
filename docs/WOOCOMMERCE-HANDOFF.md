@@ -55,24 +55,18 @@ dry run. Two questions first:
 Every write saves the old text to a backup CSV and the audit log first, and
 `--undo=<backup.csv>` puts it back.
 
-## 3. For your information (site-side, from the 2026-11-04 comparison)
+## 3. For your information (site-side, from the 2026-11-13 comparison)
 
-- **Same products:** 3,361 SKUs match. Nothing in the catalog is missing from
-  WooCommerce. 7 WooCommerce drafts aren't in the catalog. 145 site names still
+- **Same products:** every catalog SKU is on the site. 145 site names still
   use the old `SKU - name` format.
-- **Prices:** 2,799 of 3,190 site prices are exactly 2.40x the Erply price,
-  which matches the old "Retail = base + 140%" markup. Erply's own data is
-  correct, so the extra markup is applied on the site side (most likely the
-  Wholesale For WooCommerce plugin or the integration's price-list setting).
-  The other 391 are explained: 183 price changes not yet in Erply, 142
-  discontinued, 66 rounding.
-- **Publishing:** the site publishes 3,193 products and the catalog shows
-  1,183. The difference is products hidden here on purpose, with no photo, or
-  priced $0. 22 products shown in the catalog are drafts on the site.
-- **Stock:** 851 products are in stock in Erply but marked out of stock on the
-  site. They are all products without photos that were set out of stock in
-  August.
-- **Broken category links:** 14 homepage/menu links still 404 because no
+- **Prices:** fixed. Since the 2026-11-11 price load, 3,146 of 3,212 site
+  prices equal the catalog. The 66 differences are the 65 prices changed
+  2026-11-12 plus one discontinued draft. The old 2.40x markup is gone.
+- **Publishing:** the site publishes 1,961 products that the catalog hides:
+  1,115 hidden on purpose, 764 with no photo, 77 sold out, 5 out of stock.
+- **Stock:** 21 products disagree on in-stock (down from 872 on 2026-11-04).
+  The per-SKU list is in the 2026-11-13 handoff sheet.
+- **Broken category links (last checked 2026-08-18):** 14 homepage/menu links still 404 because no
   category exists for them: Party Supplies x2, Plate Set x2, Top Sellers x3,
   New Arrivals x3, Sale x4. Either create those categories or point the tiles
   somewhere else (e.g. Sale to an on-sale product query).
@@ -82,5 +76,5 @@ Every write saves the old text to a backup CSV and the audit log first, and
 1. OK/corrections on the four guessed category mappings (section 1).
 2. Confirmation that Erply's description sync is still off, and whether to
    push descriptions: empty only, replace too, or neither (section 2).
-3. Anything from section 3 you want a fresh list for. We can produce SKU
-   lists for any of those groups.
+3. A decision on the 14 broken category links, and anything from section 3
+   you want a fresh SKU list for.
