@@ -1,5 +1,5 @@
 import { isSmtpConfigured, sendMail } from '@/lib/email'
-import { formatPriceCents } from '@/lib/order-rules'
+import { formatPriceCents, SHIPPING_NOTE } from '@/lib/order-rules'
 import type { CheckoutContact } from '@/lib/types'
 import { orderUrl } from '@/lib/order-access'
 import { TAX_ESTIMATE_NOTE, taxTextLines, type OrderTaxFields } from '@/lib/sales-tax'
@@ -170,6 +170,7 @@ export async function notifyCustomer(args: {
     `Items requested\n${itemLines}\n\n` +
     `Subtotal: ${formatPriceCents(subtotalCents)}\n` +
     taxBlock(tax, subtotalCents, TAX_ESTIMATE_NOTE) +
+    `${SHIPPING_NOTE}\n` +
     `\n` +
     `Track your order status: ${orderUrl(referenceCode, accessToken)}\n\n` +
     `This is a request, not a finalized order — pricing and availability are confirmed by our team before anything is charged.\n\n` +

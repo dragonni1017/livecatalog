@@ -8,6 +8,11 @@
 // (e.g. 10000 = $100.00).
 export const MIN_ORDER_SUBTOTAL_CENTS = 0
 
+// Shown in the cart before submitting and repeated in the customer's
+// confirmation email, so nobody is surprised by the shipping bill. Change the
+// wording here and both follow.
+export const SHIPPING_NOTE = 'Shipping isn’t included in these prices. We calculate it and charge it on a separate bill.'
+
 export function meetsOrderMinimum(subtotalCents: number): boolean {
   return subtotalCents >= MIN_ORDER_SUBTOTAL_CENTS
 }
