@@ -7,8 +7,9 @@ import { RESALE_CERT_STATUSES, type ResaleCertStatus } from '@/lib/resale-certif
 export const dynamic = 'force-dynamic'
 
 // Verify / reject / reopen a customer's resale certificate. Under /admin, so
-// middleware.ts already requires the admin role. A record only: nothing
-// downstream reads the status, and no email is sent to the customer.
+// middleware.ts already requires the admin role. A verified certificate for
+// the ship-to state zeroes the sales-tax estimate (lib/sales-tax.ts); no email
+// is sent to the customer.
 
 // PATCH { id, status, review_notes? }
 export async function PATCH(request: NextRequest) {
