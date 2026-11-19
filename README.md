@@ -15,7 +15,7 @@ them into QuickBooks Desktop.
 ```
 Customer / rep browses the catalog
    → adds in-stock items, submits an order request
-   → request is saved to Supabase + emailed to sale@ly-usa.com (customer gets a confirmation)
+   → request is saved to Supabase + emailed to sales@ly-usa.com (customer gets a confirmation)
    → team reviews in /admin/orders (filter, status, "entered in QuickBooks")
    → prints the Sales Order (PDF) and keys it into QuickBooks Desktop
 ```
