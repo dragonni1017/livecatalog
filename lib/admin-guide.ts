@@ -202,7 +202,7 @@ export const ROLES: { who: string; intro: string; tasks: Task[] }[] = [
         href: '/admin/resale-certificates',
         what: 'Tax-exempt certificates customers uploaded.',
         steps: ['Open each one, check it, and click Verify or Reject (Reject asks for a reason).'],
-        after: 'This only records the decision; it doesn’t change any prices or tax on its own.',
+        after: 'Verify makes the customer’s estimated sales tax $0 on orders shipping to that state. Prices don’t change, and the customer isn’t emailed.',
       },
     ],
   },
