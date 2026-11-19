@@ -51,8 +51,10 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
   const customPriceCents = (() => {
     if (!customPrice.trim()) return null
     const cents = Math.round(parseFloat(customPrice) * 100)
-    return Number.isFinite(cents) && cents >= 0 ? cents : null
+    return Number.isFinite(cents) && cents > 0 ? cents : null
   })()
+  // Typed something, but not a price above $0 (the server would ignore it too).
+  const customPriceInvalid = customPrice.trim() !== '' && customPriceCents === null
   const finalPriceCents = isRep && customPriceCents !== null ? customPriceCents : effectivePriceCents
 
   function resetCustomPrice() {
@@ -214,7 +216,7 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
               <span className="text-xs text-gray-500">Custom price $</span>
               <input
                 type="number"
-                min={0}
+                min={0.01}
                 step={0.01}
                 autoFocus
                 value={customPrice}
@@ -231,6 +233,7 @@ export default function AddToCartButton({ product, variant = 'card', unitsPerCas
               >
                 ✕
               </button>
+              {customPriceInvalid && <span className="text-xs text-red-600">Must be more than $0</span>}
             </div>
           ) : (
             <button

@@ -49,7 +49,9 @@ export function validateOrderInput(body: unknown): OrderInputResult {
     .filter((i) => i?.productId && Number.isFinite(i.qty) && i.qty > 0)
     .map((i) => {
       const override = i.unitPriceOverrideCents
-      const validOverride = typeof override === 'number' && Number.isFinite(override) && override >= 0
+      // Above $0 only: nothing is sold at $0 (see lib/visibility-guard.ts), so a
+      // $0 custom price falls back to the line's normal price.
+      const validOverride = typeof override === 'number' && Number.isFinite(override) && override > 0
       return validOverride ? i : { productId: i.productId, qty: i.qty }
     })
   if (items.length === 0) {
