@@ -157,7 +157,7 @@ When the cart is ready, the customer fills out the checkout form:
 Clicking **Submit Order**:
 1. The order is validated server-side (minimum order check, required fields)
 2. The order is saved to Supabase as an `order_request` with all line items snapshotted
-3. A **notification email** goes to `sale@ly-usa.com` with the full order details
+3. A **notification email** goes to `sales@ly-usa.com` with the full order details
 4. A **confirmation email** goes to the customer with a reference code (e.g. ORD-2026-0042) and a link to track their order
 5. The cart is cleared
 6. The customer is redirected to the order status page
@@ -415,7 +415,7 @@ The site sends several types of automated emails:
 
 | Trigger | Recipients | Content |
 |---|---|---|
-| New order submitted | `sale@ly-usa.com` (+ optional CC rep) | Full order details — customer info, all items, quantities, prices, subtotal |
+| New order submitted | `sales@ly-usa.com` (+ optional CC rep) | Full order details — customer info, all items, quantities, prices, subtotal |
 | New order submitted | Customer | Confirmation with reference code + link to order status page |
 | Order status change | Customer | Notification that their order moved to a new stage |
 | Low stock | `sale@ly-usa.com` (can be switched off; off since 2026-11-11) | Which products have dropped to/below their threshold |
