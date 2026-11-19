@@ -42,6 +42,15 @@ low-stock recipient, storefront price display (off), held count, stale
 review items (38 already at the suggested price), and searched codes not in
 the catalog.
 
+**Update 2026-11-18: 54 of the 66 Woo price differences look per-piece.**
+`data/woo-vs-catalog.mts` rerun: 66 Woo prices still differ from the catalog,
+all 11-12 changes. On 54, Woo price ~= pack size x catalog price (e.g.
+T641674 60/pk: Woo $14.50, catalog $0.25), so the CATALOG likely holds a
+per-piece price on a pack-sold product; 5 more change >3x (F286844 $1.25 ->
+$60). Flagged list `Downloads/woocommerce-price-updates-20261118.xlsx`
+("Check before loading") is for the pricing owner; docs/WOOCOMMERCE-HANDOFF.md
+tells the Woo team to hold. Don't ask Woo to load these until confirmed.
+
 **Why:** pricing was checked from several directions over two days; this
 records which reading is right, so it isn't re-derived.
 **How to apply:** treat sheet/review prices as base and compare with
