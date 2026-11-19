@@ -55,20 +55,26 @@ dry run. Two questions first:
 Every write saves the old text to a backup CSV and the audit log first, and
 `--undo=<backup.csv>` puts it back.
 
-## 3. Needs an update: 66 prices
+## 3. On hold: 66 prices (don't change these yet)
 
 Rechecked 2026-11-18: 3,146 of 3,212 site prices equal the catalog (the
-2026-11-11 price load; the old 2.40x markup is gone). The other **66 still
-have the price from before the 2026-11-12 changes**:
+2026-11-11 price load; the old 2.40x markup is gone). The other **66 differ**
+because they changed in the catalog on 2026-11-12 and the site still has the
+earlier price. 58 are higher on the site, 8 lower.
 
-- **58 are higher on the site**, mostly 12-24x. These are pack prices that
-  were corrected in the catalog (e.g. $43.25 on the site, $3.50 in the
-  catalog; several $12 on the site, $0.50 in the catalog).
-- **8 are lower on the site.**
+**Please leave these 66 as they are for now.** The catalog prices may be the
+ones that are wrong:
 
-These prices aren't in Erply, so the Erply integration won't fix them. Please
-load them the same way as on 11-11. The list is the "price differs" rows of
-`woocommerce-vs-catalog-20261118.xlsx` (sent with this handoff).
+- **54:** the site's price is about the pack size times the catalog price
+  (e.g. a 60-pack at $14.50 on the site, $0.25 in the catalog). The catalog
+  looks like it has a per-piece price on a product sold by the pack.
+- **5:** changes of more than 3x either way (e.g. $1.25 -> $60, $23 -> $2.50).
+- **7:** small changes with no obvious problem.
+
+The list is `woocommerce-price-updates-20261118.xlsx`, with a "Check before
+loading" column for each row. Our pricing owner is confirming it. We'll send
+the confirmed prices when that's done. They aren't in Erply, so the Erply
+integration won't change them in the meantime.
 
 ## 4. For your information (site-side, 2026-11-18 comparison)
 
@@ -88,7 +94,7 @@ load them the same way as on 11-11. The list is the "price differs" rows of
 
 ## What we need back
 
-1. The 66 prices updated on the site (section 3).
+1. Leave the 66 prices in section 3 alone until we send confirmed ones.
 2. OK/corrections on the four guessed category mappings (section 1).
 3. Confirmation that Erply's description sync is still off, and whether to
    push descriptions: empty only, replace too, or neither (section 2).
