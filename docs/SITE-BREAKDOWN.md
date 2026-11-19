@@ -1,9 +1,11 @@
 # L&Y USA Live Catalog — Site Breakdown
 
 **Live site:** https://lyusa.app (underlying Vercel deployment: https://livecatalog.vercel.app)  
-**Last updated:** 2026-06-30
+**Last updated:** 2026-11-19 (checked against the code; sections 1-2, 5-8, 10-15, 17-18 and 21-25 rewritten, section 26 added)
 
 This document walks through every part of the website in plain English — what it does, how it works, and where it lives in the codebase. Use it as a reference when you want to understand, change, or explain any feature.
+
+For step-by-step staff instructions (which buttons to click, what can't be undone), see the in-app guide at `/admin/guide` (`lib/admin-guide.ts`).
 
 ---
 
@@ -34,26 +36,29 @@ This document walks through every part of the website in plain English — what 
 23. [Abandoned Cart Reminders](#23-abandoned-cart-reminders)
 24. [Back-in-Stock Notifications](#24-back-in-stock-notifications)
 25. [Infrastructure & Services](#25-infrastructure--services)
+26. [Admin — Other Screens](#26-admin--other-screens)
 
 ---
 
 ## 1. The Big Picture
 
-The site is a **wholesale product catalog** for L&Y USA. It is not a store — no payments are taken online. Instead, customers browse products, build a cart, and **submit a quote request**. The team receives that request by email, reviews it in the admin dashboard, and keys it into QuickBooks Desktop.
+The site is a **wholesale product catalog** for L&Y USA. It is not a store — no payments are taken online. Instead, customers browse products, build a cart, and **submit a quote request**. The team receives that request by email, follows up in the admin dashboard, and when the customer agrees marks it **Converted**, which sends it to QuickBooks Desktop automatically.
 
 **The flow in plain English:**
 
 ```
 Customer visits the site
   → browses products by category or search
-  → adds items to cart
-  → fills out their name / email / company / PO number and submits
-  → L&Y receives an email with the full order
-  → customer gets a confirmation email with a reference code
-  → admin reviews the order, marks it as entered in QuickBooks
+  → adds items to cart (out-of-stock items come through as backorders)
+  → fills out name / email / ship-to address (+ optional PO number) and submits
+  → the sales inbox gets an email with the full order
+  → customer gets a confirmation email with a reference code and a tracking link
+  → staff follow up and set the status: Contacted → Converted (or Lost)
+  → Converted takes the stock out and queues the order for QuickBooks
+  → the QuickBooks Web Connector creates the Sales Order (about every 15 minutes)
 ```
 
-**Product data** comes from an Excel file the admin uploads. There is also a built-in Erply integration that can replace the manual upload when ready.
+**Product data** comes from **Erply** (the inventory system). A nightly sync copies names, prices, stock and active/inactive status into the catalog (Section 18). Photos, categories and descriptions are kept in the catalog itself. New container stock comes in through **Receiving** (Section 26); an Excel import (Section 14) is still available for one-off edits.
 
 ---
 
@@ -64,22 +69,16 @@ Customer visits the site
 
 The homepage is the main catalog. When you land on it you see:
 
-- **Best Sellers** — a small section at the top showing the most-viewed products, pulled from the analytics tracking table.
-- **Category navigation** — a sidebar on desktop, tabs on mobile. Every product category appears here. Clicking a category filters the grid to that category only.
-- **Product grid** — all products displayed as cards (image, name, price, stock badge). Defaults to showing everything; narrows when you filter.
-- **Search bar** — a text input in the header that filters by product name or SKU as you type.
-- **Filters:**
-  - Category (sidebar/tabs)
-  - In-stock only toggle
-  - Price range slider
-- **Pagination** — products load in pages so the browser doesn't have to load 3,000 items at once.
-- **Sort** — you can sort by name or price.
+- **Category navigation** — a sidebar on desktop (New Arrivals, Best Sellers, All Products, then each department with its product count), tabs on mobile. Clicking a category filters the grid to that category only.
+- **Shop by department** — photo tiles for each department.
+- **Product grid** — every visible product as a card (image, name, price, stock badge, quantity stepper, **Add**, **+ 1 case**).
+- **Search bar** — in the header; see Section 4.
+- **Filters:** price **Min / Max** with **Apply**, **In stock only**, **Sold by**, **Case size**, **Sort** (default SKU A–Z), and **Show** N per page.
+- **Pagination** — the grid is paged (20 per page by default; about 1,100 visible products as of 2026-11).
 
-Each product card has an **Add to Cart** button and a **heart icon** to save to favorites.
+Only products that are **active** and **not hidden** appear anywhere on the public site (Section 13).
 
-**Category pages** also exist at `/category/[slug]` — these are the same grid filtered to one category, with their own URL so they can be linked directly.
-
-**New Arrivals** has its own dedicated page at `/new-arrivals`.
+**Category pages** also exist at `/category/[slug]`, and **New Arrivals** and **Best Sellers** have their own pages (`/new-arrivals`, `/best-sellers`).
 
 ---
 
@@ -96,7 +95,8 @@ Clicking any product card opens its detail page. It shows:
 - **Description**
 - **Barcode**
 - **Stock badge** — In Stock / Low Stock / Out of Stock
-- **Add to Cart** button — if out of stock, this becomes a **Notify Me** button (see Section 24).
+- **Add to Cart** and **+ 1 case** buttons. Out-of-stock products can still be added; the button reads **Backorder** and the line is flagged as a backorder. A **Notify me** box also appears on sold-out products (see Section 24).
+- **Save** (heart) — adds the product to the **Saved** list (Section 9).
 - **Quote disclaimer** — a note that this is a quote request, not a direct purchase.
 - **Related products** — "More in this category" shows other products in the same category.
 - **Barcode scan** — a scan icon in the header lets you scan a product's barcode with your phone camera to jump straight to its page.
@@ -107,7 +107,7 @@ Pages are server-side rendered with **ISR caching** (revalidates every 10 minute
 
 ## 4. Search & Autocomplete
 
-**Files:** `components/catalog/SearchBar.tsx`, `app/api/products/suggest/route.ts`, `app/api/products/lookup/route.ts`
+**Files:** `components/catalog/SearchInput.tsx`, `app/api/products/suggest/route.ts`, `app/api/products/lookup/route.ts`
 
 There are two search behaviors:
 
@@ -126,16 +126,17 @@ Every search term is tracked (see Section 16 — Analytics) so you can see what 
 **URL:** `/cart`  
 **Files:** `app/(catalog)/cart/page.tsx`, `components/catalog/CartButton.tsx`
 
-The cart is stored in **localStorage** in the browser, so it persists across page refreshes without needing a login. It holds each product's SKU, name, price, and quantity.
+The cart is stored in **localStorage** in the browser, so it persists across page refreshes without needing a login. It holds each product's SKU, name, price, and quantity. The page is titled **Your Order Request**.
 
 **Cart page features:**
-- List of items with image, name, SKU, price per unit
-- Quantity controls (increase / decrease / remove)
-- Line totals and subtotal
-- **Order minimum** — if the subtotal is below the minimum order amount, a warning shows and the checkout button is blocked
-- **Save as draft** — saves the cart to the server so you can come back to it later (even from a different device if logged in)
-- **Rush order flag** — a toggle to mark the order as rush / required-ship-date
-- A note field for special instructions
+- List of items with image, name, SKU, price per unit, and badges such as **Backorder** or **Custom price** (rep-set, Section 6)
+- Quantity controls (− / + / ✕ to remove)
+- Line totals and subtotal; prices are re-checked against the server (`/api/cart/reprice`), so a signed-in customer sees their own tier price
+- **Unavailable lines** — a product that has since been hidden, deactivated or left at $0 shows "No longer available. It won't be included in your request." with a **Remove** button, and isn't counted in the total
+- **Promo code** box with **Apply**
+- **Estimated sales tax** once a state is chosen (an estimate only; QuickBooks charges the real tax)
+- **Order minimum** — `MIN_ORDER_SUBTOTAL_CENTS` in `lib/order-rules.ts`, currently **$0** (off). If raised, the cart says "Minimum order is $X" and blocks submit
+- **Save as draft / Load draft…** — drafts are kept in that **browser only** (localStorage), not on the server or the account
 
 The cart header badge shows item count and updates in real time as items are added from any product card or the quick order page.
 
@@ -146,23 +147,26 @@ The cart header badge shows item count and updates in real time as items are add
 **URL:** `/cart` (checkout form is on the same page, below the cart)  
 **Files:** `app/api/orders/route.ts`, `lib/order-validation.ts`, `lib/order-emails.ts`
 
-When the cart is ready, the customer fills out the checkout form:
+When the cart is ready, the customer fills out the checkout form (pre-filled from their last order, with a **Clear** link):
 
-- **Name, email, company** (remembers these from the last visit)
-- **Phone** (optional)
-- **PO number** (optional, for buyers who need one on the order)
-- **Shipping notes**
-- **CC a sales rep** — an optional field to forward a copy of the confirmation email to a rep
+- **Required:** Name, Email, Ship to — address, City, State, ZIP
+- **Optional:** Phone, Company, **Placed by (rep)** (a dropdown of active reps), **CC sales rep (email)**, PO number, Address line 2, Notes, **Ship by date**
+- Signed-in buyers can also pick a saved address or save this one to their address book
+- The email box suggests fixes for common typos ("Did you mean …?")
 
-Clicking **Submit Order**:
-1. The order is validated server-side (minimum order check, required fields)
-2. The order is saved to Supabase as an `order_request` with all line items snapshotted
-3. A **notification email** goes to `sales@ly-usa.com` with the full order details
-4. A **confirmation email** goes to the customer with a reference code (e.g. ORD-2026-0042) and a link to track their order
-5. The cart is cleared
-6. The customer is redirected to the order status page
+Clicking **Submit Order Request**:
+1. The order is validated server-side (required fields, minimum). Prices are **re-computed on the server**; the cart's prices are never trusted.
+2. Products that are inactive, hidden or $0 are **dropped**. Out-of-stock products are **kept** and recorded as backorders (`lib/order-submission.ts`).
+3. Pricing, in order: a **rep's selected tier**; otherwise the **customer's own tier or discount**, only when signed in with the same email as the order (Section 15); then the **promo code**, applied per line only where it beats the tier price (never stacked). Rep **custom prices** (above $0 only) are left as set.
+4. The order is saved as an `order_request` with all line items snapshotted, and gets a reference code such as **ORD-2026-0042** (rep orders with a tier get a tier tag, e.g. ORD-2026-DIS-0042).
+5. An **owner** is assigned: the rep the order is credited to, otherwise the owner of this customer's previous order, otherwise Unassigned.
+6. A **notification email** goes to the sales inbox (`SALES_ALERT_TO`, being switched to `sales@ly-usa.com`) with the full order. Replying to it goes straight to the customer.
+7. A **confirmation email** goes to the customer with the reference code and a tracking link; reps named in Placed by / CC are copied.
+8. The cart is cleared and the page shows **Request received** with the reference code and **Continue browsing**.
 
-**Sales rep pre-fill:** If a rep shares a link with `?rep=email@example.com` in the URL, the CC field is pre-filled automatically so the rep gets a copy of every order submitted through that link.
+**Sales rep links:** a link with `?rep=email@example.com` is remembered in the browser and pre-selects that rep in **Placed by (rep)**, if it matches an active rep.
+
+**Rep ordering:** a signed-in rep picks a tier from the **Tier…** menu in the header and can set a **Custom price for this order** on any line (must be more than $0). The order is linked to the rep's account (for `/rep/quotes`) only when a tier was picked.
 
 ---
 
@@ -171,13 +175,15 @@ Clicking **Submit Order**:
 **URL:** `/order/[reference]`  
 **File:** `app/(catalog)/order/[reference]/page.tsx`
 
-Customers can check their order status at any time using the reference code from their confirmation email. The page shows:
+Customers open this page from the **Track your order status** link in their confirmation email. The link carries a secret token (`?t=…`); the reference code alone isn't enough. It also opens for someone signed in with the order's email, the rep who placed it, or an admin. Anyone else sees "Sign in to view this order" (`lib/order-access.ts`).
 
-- **Status badge** — Received → In Progress → Confirmed → Closed
-- **Order items** — product list with quantities and prices
-- **Subtotal**
-- **Submitted date**
-- **Reorder button** — adds all items from this order back to the cart in one click, useful for repeat orders
+The page shows:
+
+- **Status badge** — Received → In Progress → Confirmed → Closed (admin statuses New → Contacted → Converted → Lost), plus **Entered in our system** once it's in QuickBooks
+- **Order items** — product list with quantities, prices and backorder flags
+- **Subtotal** and **Submitted date**
+- **Print** and **Reorder all items** (adds the same items back to the cart)
+- **Have a question about this order?** — a message box with **Send message**. The message is emailed to the sales inbox (`/api/order-reply`, subject "Customer message — ORD-…"); replying goes straight to the customer. It isn't saved on the order.
 
 ---
 
@@ -186,12 +192,13 @@ Customers can check their order status at any time using the reference code from
 **URLs:** `/login`, `/register`, `/account`, `/account/settings`, `/my-orders`  
 **Files:** `app/(catalog)/login/page.tsx`, `app/(catalog)/register/page.tsx`, `app/(catalog)/account/`, `lib/auth-client.ts`, `lib/auth-server.ts`
 
-Customers can create an account with email + password. This is optional — you can submit orders without an account. Having an account gives you:
+Customers can create an account with email + password (**Login** in the header → **Create one**). This is optional — you can submit orders without an account, and there's **no approval step**: everyone sees the standard prices. Having an account gives you:
 
-- **Order history** — `/my-orders` shows all past orders matched by email
-- **Profile** — name, company, phone stored in your account
-- **Settings** — edit profile info at `/account/settings`
-- **Saved cart / draft** — your saved draft cart is tied to your account
+- **Your own prices** — if an admin has given your email a price tier in Customer Profiles (Section 15). The header then shows "<Tier> pricing". Matching is **by email only**: registering doesn't create a customer profile, and signing in with a different email gives standard prices.
+- **Order history** — `/account` and `/my-orders` list past orders matched by email, with **Reorder**
+- **Profile** — edit at `/account/settings`; **saved addresses** — the address book on `/account`, offered at checkout
+- **Resale certificate** — upload on `/account` (state + PDF/JPG/PNG). Once staff **verify** it, orders shipping to that state show $0 estimated tax (`lib/sales-tax.ts`); a pending one is flagged on the order. Reminder emails go out before it expires.
+- **Net terms** — anyone (signed in or not) can apply via **Apply for net terms →** in the footer (`/credit-application`). Staff approve or decline in admin; approval records the terms and emails the applicant but doesn't change pricing or QuickBooks.
 
 Authentication is handled by **Supabase Auth** (email/password). The login page also has a forgot-password flow — Supabase sends a reset link to the customer's email.
 
@@ -202,7 +209,7 @@ Authentication is handled by **Supabase Auth** (email/password). The login page 
 **URL:** `/favorites`  
 **File:** `app/(catalog)/favorites/page.tsx`
 
-The heart icon on any product card saves it to your favorites list. Favorites are stored in localStorage (no login required). The `/favorites` page shows all saved products in the same grid layout as the main catalog. You can add them to cart from the favorites page directly.
+The heart icon on any product card saves it to your favorites list. Favorites are stored in localStorage (no login required). The **Saved** link in the header (with a count) opens `/favorites`, which shows all saved products in the same grid layout as the main catalog. You can add them to cart from the favorites page directly.
 
 ---
 
@@ -213,9 +220,9 @@ The heart icon on any product card saves it to your favorites list. Favorites ar
 
 A faster way to build a cart for buyers who already know what SKUs they want. Two input methods:
 
-**Manual SKU entry:** Type a SKU into the input, set a quantity, and click Add. Looks up the product by SKU and adds it to cart instantly.
+**SKUs box:** paste one SKU per line with an optional quantity after it (`ABC-123 24`; default 1) and click **Add all to cart**. The result lists what was added, any SKUs **Not found**, and anything added beyond stock (backordered), with a **View cart →** link.
 
-**CSV upload:** Upload a CSV file with two columns — SKU and quantity. The page validates each row, shows a preview of matched products, and lets you add all valid items to cart in one click. Useful for reps who prepare orders offline.
+**Upload CSV:** drop or browse for a CSV with two columns — SKU, Qty (one per row, max 50). Each row shows whether it matched before you add them. Useful for reps who prepare orders offline.
 
 ---
 
@@ -229,7 +236,9 @@ The admin section is completely separate from the public catalog. Access require
 1. **Email + password login** — each staff member has their own Supabase Auth account with `role: admin` in their profile metadata
 2. **2FA (optional but available)** — `/admin/2fa-setup` lets any admin set up a TOTP authenticator app (Google Authenticator, Authy, etc.)
 
-The admin homepage (`/admin`) is a dashboard overview linking to all the admin sections. The sidebar shows: Orders, Products, Import, Customers, Analytics, Price List, Sync, Audit Log, Zero Results, Reps, Users.
+The admin homepage (`/admin`, "Admin Dashboard") is a grid of cards; there is no sidebar. At the top: **Waiting on people** (everything that needs someone, oldest first), **Catalog health**, and **How to use the admin** (`/admin/guide`, the printable staff guide). Some cards only appear when there's work waiting (Price review, Name review, Case-count review, Needs follow-up). The rest are always shown, from Order Requests and Customer Profiles through to QuickBooks Setup (see Section 26 for the less obvious ones).
+
+Sales reps sign in separately at `/rep/login` and get a **Rep Account** page (`/rep`) with Browse catalog, My quotes (`/rep/quotes`), Line card PDF and 2FA setup.
 
 ---
 
@@ -238,25 +247,46 @@ The admin homepage (`/admin`) is a dashboard overview linking to all the admin s
 **URL:** `/admin/orders`  
 **Files:** `app/admin/orders/page.tsx`, `app/admin/orders/[id]/page.tsx`, `app/admin/api/orders/route.ts`
 
-The orders list shows every quote request submitted through the site. You can:
+The orders list ("Order Requests") shows every quote request submitted through the site. You can:
 
-- **Search** by customer name, email, or reference code
-- **Filter** by status (New / Contacted / Converted / Lost) and by whether it's been entered in QuickBooks
-- **Click an order** to see the full detail page
+- **Needs follow-up** — New, non-dismissed orders only, oldest first (`?view=followup`; also the dashboard card)
+- **Search** by customer name or reference code
+- **Filter** by status (New / Contacted / Converted / Lost), by QuickBooks (not entered / entered), and **Show dismissed**
+- See an **age badge** on New orders ("Waiting Nd"): amber after 1 business day, red after 3 (Mon–Fri, LA time; `lib/order-age.ts`)
+- See hints for likely duplicates ("Same customer sent ORD-… later")
+- Toggle **Mark QB / ✓ QB** per row, and open **Print ↗** / **Excel** per row
+- **Export CSV** of all orders
 
-**Order detail page** (`/admin/orders/[id]`) shows:
-- Customer info (name, email, phone, company)
-- PO number and sales rep
-- Full item list with quantities and prices
-- Buyer discount (if the customer has a custom pricing tier) and discounted subtotal
-- **Status dropdown** — update the order through its stages
-- **Entered in QuickBooks toggle** — check this off once it's been keyed in; shows timestamp and who toggled it
-- **Print Sales Order** — opens a print-ready PDF version of the order (`/admin/orders/[id]/print`)
-- **Excel export** — downloads the order as an Excel file for QuickBooks import (`/admin/api/orders/[id]/excel`)
-- **Packing slip** — a separate print view formatted as a packing slip (`/admin/orders/[id]/packing-slip`)
-- **Customer view link** — opens the same order status page the customer sees, so you can verify it looks right
+**Order detail page** (`/admin/orders/[id]`) shows customer info (with placed-by rep, promo code, price tier, resale certificate and a warning if it ships to a different state), PO number, ship-to, notes, line items with backorder badges, subtotal and tax estimate, and a **+ Save to customer profiles** shortcut. An amber **Buyer Discount on File** box means a flat discount that must be applied in QuickBooks by hand. Order lines **can't be edited** in admin.
 
-**Bulk CSV export:** `/admin/api/orders/export` downloads all orders as a CSV for reporting.
+Actions:
+- **Status buttons — New / Contacted / Converted / Lost.** Each saves immediately and emails the customer (except New):
+  - **Contacted** — "Update on your order" (someone will be in touch)
+  - **Converted** — "Your order is confirmed", and, **once per order, ever**: takes each line's quantity out of stock and queues the order for QuickBooks. Changing the status back afterwards doesn't undo either.
+  - **Lost** — "Regarding your order request" (can't be fulfilled)
+- **Close, no email** (Needs follow-up view) — set Contacted / Lost / Converted (asks twice) / Duplicate without emailing the customer
+- **Owner (follows up)** — assign a rep or Unassigned; no email
+- **Test / duplicate / spam → Dismiss** — New orders not yet in QuickBooks only; hides it from the waiting counts, no email, can be undone
+- **Mark entered in QB / In QuickBooks ✓** — manual flag (also set automatically by the Web Connector); makes "Entered in our system" show to the customer
+- **Customer view ↗**, **Excel**, **Packing slip ↗**, **Sales order ↗** (printable) — for checking or keying by hand
+
+### QuickBooks Desktop (Web Connector)
+
+**Files:** `app/api/qbwc/route.ts`, `lib/qbxml.ts`, `app/admin/quickbooks/`, `components/admin/QbSyncErrors.tsx`
+
+Converted orders go into QuickBooks automatically. The QuickBooks Web Connector on the office PC (set up once from **QuickBooks Setup** → **Download .qwc file**) checks in about every 15 minutes and, for the oldest queued order:
+
+1. Finds the QuickBooks customer — a saved link first, then an exact email or name match from the pulled customer list. A near-miss or several matches puts the order **on hold for review**; no match at all creates a new QuickBooks customer.
+2. Finds each item by SKU, creating any missing item.
+3. Sends a **Sales Order** (memo: reference, promo, tax estimate, notes; PO number; each line notes the ordered price). Sales tax is not sent — QuickBooks computes it.
+
+On success the order is marked entered in QuickBooks. On failure it is marked failed and its status **reverts from Converted to New** (the customer has already had the "confirmed" email, and the stock was already taken out). Problems are listed at the bottom of `/admin/quickbooks`:
+
+- **Possible existing customer** — pick the match, or **Not a match — create new**
+- **Failed syncs** — fix the cause, then **Retry** (never retried automatically)
+- **Stuck syncs** — sent but never confirmed: check QuickBooks first, and **Force retry** only if the order isn't there (otherwise you get a duplicate Sales Order)
+
+Helper screens: `/admin/quickbooks/customers` (**Pull from QuickBooks**, then link buyers' emails to existing QuickBooks customers to avoid duplicates) and `/admin/quickbooks/items` (pulls the QuickBooks item list, used when naming new container SKUs).
 
 ---
 
@@ -273,29 +303,38 @@ The products page is a full list of every product in the catalog with search and
 - Filter by visibility (visible / hidden)
 - Filter by active/inactive status
 
-**Per-product actions (inline):**
-- **Edit** — click to edit the product name, description, or image URL inline (no separate page)
-- **Stock adjustment** — add or remove units with a reason note (e.g. "received shipment", "damaged"). Every adjustment is logged.
-- **Hide/show toggle** — manually hide a product from the catalog without deactivating it. Useful for temporarily removing something.
-- **Per-product reorder threshold** — set a custom low-stock alert level per product (overrides the global default of 5 units)
+**Per-product actions:**
+- **Edit** — opens an "Edit product" box: name, categories (more than one allowed), price, priced per, description, primary image (URL or **Attach file**), additional images, and volume pricing tiers. **Save changes** is audit-logged. Category, description and photos stick; **name and price are put back by the next Erply sync** unless the price has a Price review hold (Section 18).
+- **Adjust stock** — quantity and reason, **+ Add** / **− Remove**, with a history. Every adjustment is logged.
+- **Visible / Hidden** pill — hides a product from the catalog without deactivating it (`manually_hidden`)
+- **Threshold** — a per-product low-stock level ("Global" uses the default)
+- **Delete** — permanent, but a product that's still in Erply or a later Excel file comes back
+- **Add product** (top right) — creates a product in the catalog only, not in Erply, so the next sync may deactivate it
 
-**Bulk stock adjustment:** Check multiple products and use the sticky bar at the bottom to adjust stock on all of them at once. Useful after a warehouse count.
+**Bulk stock adjustment:** tick rows, choose **Adjust by** or **Set to**, enter an amount and **Apply**. Useful after a warehouse count.
+
+**Low-stock email on/off** switch is on this page (Section 22).
+
+**Why a product isn't on the website:** it is **inactive** (missing from or deactivated in Erply), or **hidden** — by hand, automatically for a $0 price, by the dashboard's **Hide all products without an image** (no confirm, no undo-all), or because it came in from Receiving (new products arrive hidden, at $0, flagged needs-photo). A missing photo alone doesn't hide a product.
+
+**$0 rules** (`lib/visibility-guard.ts`): a $0 product can't be unhidden, a visible product can't be set to $0, and the sync hides products whose price drops to $0. Put products back on the site with the pill, **Catalog Cleanup → Needs pricing → Unhide**, or **Show these?** (Section 26).
 
 ---
 
 ## 14. Admin — Import (Excel Upload)
 
 **URL:** `/admin/import`  
-**Files:** `app/admin/import/page.tsx`, `app/api/import/route.ts`, `app/api/import/diff/route.ts`
+**Files:** `app/admin/import/page.tsx`, `app/admin/api/import/route.ts`, `app/admin/api/import/diff/route.ts`
 
-This is how product data gets into the catalog. The admin drags and drops an Excel file onto the import page. The file is parsed in the browser (no upload needed for the preview step).
+Since Erply became the source of product data (Section 18), the Excel import is for **one-off partial edits**. The admin drags and drops an Excel file onto the import page. The file is parsed in the browser (no upload needed for the preview step).
 
 **The import flow:**
 
-1. **Drop the file** — the page immediately parses it and shows a diff preview
-2. **Diff preview** — shows exactly what will change: new products (green), updated products (yellow), deactivated products (red — SKUs in the DB that are no longer in the file), and unchanged products (skipped)
-3. **Review and confirm** — you see the count of each type before committing
-4. **Click Import** — sends the parsed data to the server, which upserts products into Supabase
+1. **Drop the file** ("Drag & drop your Excel file here") — the page parses it and shows a preview
+2. **Preview** — new and updated products, with any issues per row
+3. **Confirm Import (N rows)** or **Cancel**
+
+**What it changes** (`app/admin/api/import/route.ts`): name, price and Active for every SKU in the sheet. Description and category are set **only for new products**. A blank Image URL or Stock Qty keeps the existing value, and Stock Qty is ignored for SKUs Erply counts. **Nothing missing from the sheet is deactivated.** Names and prices imported this way are still overwritten by the next Erply sync.
 
 **Excel format expected:**
 
@@ -306,8 +345,8 @@ This is how product data gets into the catalog. The admin drags and drops an Exc
 | Category | Yes | Must match exactly — "Footwear" ≠ "footwear" |
 | Price | Yes | Numeric, no $ sign |
 | Description | No | Short product description |
-| Stock Qty | No | Defaults to 0 if blank |
-| Image URL | No | Direct link to hosted image |
+| Stock Qty | No | Blank keeps the current value; ignored for SKUs Erply counts |
+| Image URL | No | Direct link to hosted image; blank keeps the current one |
 | Active | No | TRUE/FALSE — hide without deleting |
 
 **Import history:** `/admin/imports` shows a log of every past import with row counts (inserted / updated / deactivated / errors).
@@ -321,14 +360,22 @@ A download link for the template Excel file is available in the UI (at `/public/
 **URL:** `/admin/customers`  
 **Files:** `app/admin/customers/page.tsx`, `app/admin/customers/CustomerTable.tsx`, `app/admin/api/customers/route.ts`
 
-The customers page manages buyer accounts and custom pricing. Every registered customer (or any customer who has placed an order) appears here.
+"Customer Profiles" manages buyer pricing. A profile is **not** created when someone registers or orders; an admin adds it with **Add customer** (or **+ Save to customer profiles** on an order), before or after the buyer signs up. Matching is by **email**.
 
-**Per-customer fields:**
-- Name, email, company, phone
-- **Discount percent** — set a custom discount for this buyer (e.g. 10% off all orders). When a customer with a discount places an order, the order detail page in admin shows both the standard subtotal and the discounted subtotal side by side.
-- Notes
+**Per-customer fields:** email (required, must be the one they sign in with), name, company, **Price Tier**, notes. Edit inline with **Edit** on the row. (A flat `discount_percent` column still exists but can't be set from the Add form.)
 
-This is the foundation for tier-based pricing. A buyer at 15% discount sees the same prices on the catalog as everyone else, but their order confirmation shows the discounted total.
+**Price tiers** (`price_tiers` table, values from migration 0032; the stored base price is the Wholesale price):
+
+| Tier | Price |
+|---|---|
+| Wholesale | base price |
+| Distribution Chain | 8% off |
+| Exclusive | 24% markup |
+| Retail | 2× (100% markup) |
+
+**How it applies** (`lib/customer-pricing.ts`, the one place that decides): an active tier wins, otherwise the flat discount, never both. A signed-in customer with a tier sees tier prices while browsing (header badge "<Tier> pricing"), in the cart and on the order. A flat discount shows in the cart and on the order but not while browsing. Orders only get customer pricing when the buyer is **signed in with the order's email**. A rep's tier choice overrides the customer's own pricing.
+
+Tiers here are **not synced** to Erply, WooCommerce or QuickBooks, and no email is sent when a tier is assigned.
 
 ---
 
@@ -344,11 +391,12 @@ A dashboard showing how the catalog is being used. Everything here is pulled fro
 - Every search term typed (fires on debounced input)
 
 **Dashboard sections:**
-- **Date range filter** — switch between 7D / 30D / 90D / All time
-- **Orders over time** — bar chart of how many orders were submitted per day over the selected period
-- **Summary stats** — total orders, total quote value, conversion rate (views → orders)
-- **Most viewed products** — ranked list of which products get the most traffic
-- **Top search terms** — what customers are searching for most
+- **Date range filter** — 7 / 30 / 90 days / All time
+- **Orders over time** — bar chart of orders submitted per day
+- **Visitor funnel** — how many visitors reach each step from viewing to submitting
+- **Why Submit didn't go through** — the reasons checkout was blocked
+- **From printed line cards (QR)** — product views that came from scanning a line-card QR code
+- Summary stats, most viewed products and top search terms
 
 ---
 
@@ -357,7 +405,9 @@ A dashboard showing how the catalog is being used. Everything here is pulled fro
 **URL:** `/admin/price-list`  
 **File:** `app/admin/price-list/page.tsx`
 
-A printable wholesale price list — all products with their prices, organized by category. You can filter by category before printing. Designed to be printed as a PDF handout for trade shows or sales calls.
+A printable wholesale price list — all visible, priced products ($0 excluded), organized by category. You can filter by category, and **Prices at** prints the list at catalog price, at a tier, or for one customer (`lib/price-scope.ts`). Designed to be printed as a PDF handout for trade shows or sales calls. Prices are per unit; volume breaks aren't shown.
+
+The **Photo Line Card** (`/admin/line-card`, and `/rep/line-card` for reps) is the photo-grid version, with the same **Prices at** option and QR codes that link to each product page.
 
 ---
 
@@ -366,15 +416,24 @@ A printable wholesale price list — all products with their prices, organized b
 **URL:** `/admin/sync`  
 **Files:** `app/admin/sync/page.tsx`, `app/admin/api/sync/route.ts`, `lib/erply.ts`, `lib/product-sync.ts`
 
-L&Y USA uses **Erply** as their inventory management system. This page is where the Erply integration lives. When it's activated, it replaces the manual Excel import — products sync automatically from Erply into the catalog.
+L&Y USA uses **Erply** as their inventory management system, and it is the master for product names, prices, stock and active status. The sync is **live**: Erply has been configured in Vercel production since about 2026-09-23, so the nightly run uses real Erply data. The Status badge on this page says "Erply configured" (or "Not configured (stub mode)", which disables the run button).
 
-**Current status:** Built and ready, but **not yet activated**. Erply data needs to be cleaned up on the Erply side before the sync can be turned on. Once activated:
+**Nightly sync** (`/api/sync`, Vercel cron `0 8 * * *` = 08:00 UTC, about midnight–1 AM Pacific):
 
-- A **daily cron job** (8am) triggers the sync automatically
-- The sync page lets you **manually trigger a sync** and see its status
-- A webhook endpoint at `/api/webhooks/erply` can receive real-time updates from Erply
+| Field | What the sync does |
+|---|---|
+| Name, price | Overwritten from Erply every run. Prices are rounded to the nearest quarter (never .75). A price approved on **Price review** is held and wins until Erply matches it. |
+| Stock | Erply warehouse 1 only. Adds Erply's **change since the last run** rather than replacing the number, so manual adjustments and order deductions survive. A SKU Erply reports as 0 that has never had stock is left alone. |
+| Active / inactive | Set from Erply. Active catalog products missing from the feed are deactivated, unless that would be more than 10% of active products (or 20 on a small catalog), in which case it deactivates nothing. |
+| Category, description | Taken from Erply only when a product is first created. |
+| Photos | Never touched. |
+| Visibility | Never unhides. New $0 products and visible products whose price drops to $0 are hidden and marked "awaiting price". |
 
-There is also a `/api/webhooks/woo` endpoint for WooCommerce webhooks (for future use).
+The same nightly run also sends the low-stock email, abandoned-cart reminders and resale-certificate reminders, and is recorded in the run history on this page.
+
+**Running it by hand:** **Preview changes** shows a dry run (incoming, new, updated, deactivated, and a sample of SKUs that would be deactivated; the page warns not to run it if that number is unexpectedly large). **Run sync now** asks for confirmation, then reports new / updated / deactivated / skipped. The manual run does **not** sync stock; only the nightly run does.
+
+**Webhooks:** `/api/webhooks/erply` can update stock on in-store sales (it needs `ERPLY_WEBHOOK_TOKEN`; it rejects requests when the token isn't set). `/api/webhooks/woo` handles WooCommerce webhooks. The Erply↔WooCommerce **customer** sync (`/api/sync/customers`) has been **off** since 2026-08-07 (`SYNC_CUSTOMERS_ENABLED`).
 
 ---
 
@@ -388,6 +447,7 @@ Every significant action in the admin leaves a record in the audit log. This inc
 - Stock adjustments (who changed what, by how much, and why)
 - Order status changes (who moved an order from New → Contacted, etc.)
 - QuickBooks "entered" toggles (who marked it, when)
+- Product edits, visibility changes, price approvals, renames, credit-application decisions and the low-stock email switch
 
 Each entry shows: action type, what was changed, old value → new value, who did it, and when.
 
@@ -404,6 +464,8 @@ Shows every search term that was typed into the catalog but returned **zero prod
 - Misspelled category or product names
 - SKUs customers are searching for that have been deactivated
 
+Search events come from the header search dropdown, as the customer types. The **#hidden** section lists **hidden** products that customers searched for by SKU or barcode — usually worth showing.
+
 ---
 
 ## 21. Email Notifications
@@ -415,12 +477,19 @@ The site sends several types of automated emails:
 
 | Trigger | Recipients | Content |
 |---|---|---|
-| New order submitted | `sales@ly-usa.com` (+ optional CC rep) | Full order details — customer info, all items, quantities, prices, subtotal |
-| New order submitted | Customer | Confirmation with reference code + link to order status page |
-| Order status change | Customer | Notification that their order moved to a new stage |
-| Low stock | `sale@ly-usa.com` (can be switched off; off since 2026-11-11) | Which products have dropped to/below their threshold |
-| Back in stock | Subscribers | Products they requested notification for are back in stock |
-| Abandoned cart | Customer | Reminder that they have items in their cart (24-hour delay) |
+| New order submitted | Sales inbox, `SALES_ALERT_TO` (`sales@ly-usa.com`) | Full order details, backorders flagged; Reply-To is the customer |
+| New order submitted | Customer (+ reps in Placed by / CC) | "We received your order request" with the reference code and tracking link |
+| Status set to Contacted / Converted / Lost | Customer | "Update on your order" / "Your order is confirmed" / "Regarding your order request". **Close, no email** and Dismiss send nothing. |
+| Customer message on the order page | Sales inbox | "Customer message — ORD-…"; Reply-To is the customer |
+| Net-terms application submitted | Sales inbox | Link to the application in admin |
+| Net-terms approved / declined | Applicant | The decision, terms and optional note (if "Email …" is ticked) |
+| Resale certificate expiring / expired | Customer | Reminder before expiry, notice after (sent from the nightly run) |
+| Low stock | `REORDER_ALERT_TO` (`sale@ly-usa.com`; switched off since 2026-11-11) | Which products have dropped to/below their threshold |
+| Back in stock | Subscribers | "Back in stock: <name>" with a link to the product on lyusa.app |
+| Abandoned cart | Customer | "You left something behind" (24 hours after, from the nightly run) |
+| Waiting on you (Mondays) | `WAITING_DIGEST_TO` | Dormant: not set, by decision |
+
+Mail is sent from the authenticated Titan mailbox (`TITAN_SMTP_USER`) unless `SALES_ALERT_FROM` / `REORDER_ALERT_FROM` are set; Titan rejects a From address the mailbox doesn't own. To check an inbox receives the app's mail, run `node scripts/send-test-email.ts <address>`.
 
 ---
 
@@ -428,12 +497,12 @@ The site sends several types of automated emails:
 
 **Files:** `lib/low-stock-alert.ts`
 
-When a product's stock drops to or below its threshold, a low-stock alert email is sent to `sale@ly-usa.com`. 
+When a product's stock drops to or below its threshold, a low-stock alert email is sent to `REORDER_ALERT_TO` (`sale@ly-usa.com`) — one email listing every product that went low, not one per product.
 
 **How it triggers:**
-- On every Excel import (checked after the import runs)
-- On the daily cron job at 8am (catches any changes that happened outside imports)
-- On manual stock adjustments in the admin
+- On product syncs and imports (`lib/product-sync.ts`), including the nightly cron
+- On manual stock adjustments in the admin (single and bulk)
+- On Erply webhook stock updates
 
 **De-duplication:** Each product only alerts once per "restock cycle." Once a product gets the low-stock alert, it won't alert again until it's been restocked above the threshold and then drops below again. This prevents email spam if the same product stays low for days.
 
@@ -447,7 +516,7 @@ When a product's stock drops to or below its threshold, a low-stock alert email 
 
 **File:** `lib/abandoned-cart.ts`, `app/api/cart-session/route.ts`
 
-When a customer starts a checkout but doesn't finish, the site saves their cart server-side as a "cart session" (keyed by email if they've typed it). After 24 hours with no order submitted, an automated email goes out reminding them they have items waiting. The email links back to the site with a note about what's in their cart.
+A cart is saved server-side as a "cart session" only when the customer types an email in the cart's checkout form and leaves that box with items in the cart. The nightly run (08:00 UTC) emails any session that has gone 24 hours or more without an order — once only. The email ("You left something behind — L & Y USA") lists the items without prices and links back to the site; Reply-To is the sales inbox.
 
 ---
 
@@ -455,9 +524,9 @@ When a customer starts a checkout but doesn't finish, the site saves their cart 
 
 **File:** `lib/back-in-stock-notify.ts`, `app/api/back-in-stock/route.ts`
 
-On any out-of-stock product detail page, the "Add to Cart" button is replaced by a **Notify Me** form. The customer types their email and submits. Their request is saved to the `back_in_stock_requests` table.
+On any out-of-stock product detail page there is a **Notify me** box (alongside the **Backorder** button). The customer types their email and submits ("We'll email you when this is back in stock"). Their request is saved to the `back_in_stock_requests` table.
 
-When a product is restocked (via import or manual stock adjustment) and crosses back above zero, the system automatically emails all subscribers for that product. The email is sent once per subscriber and the request is marked as notified so they don't get duplicate emails.
+Requests are checked whenever a **product sync or Excel import** runs (`syncToSupabase`) — **not** on a manual stock adjustment in admin. A subscriber is emailed only when the product has stock above 0 and is active and visible; requests for hidden products wait until it's shown. Each subscriber is emailed once, and the request is marked as notified. The email links to the product on `https://lyusa.app`.
 
 ---
 
@@ -467,18 +536,27 @@ When a product is restocked (via import or manual stock adjustment) and crosses 
 The app is deployed on Vercel. Every push to the main branch triggers an automatic deployment. The underlying Vercel URL is `https://livecatalog.vercel.app`; the custom domain `lyusa.app` is pointed here and is the live production URL.
 
 **Database — Supabase (PostgreSQL)**  
-All data lives in Supabase: products, categories, orders, customers, analytics, audit log, cart sessions, back-in-stock requests, stock adjustments. Row Level Security (RLS) is enabled on all tables — public routes can only read active products; admin reads and writes use a service-role key kept server-side.
+All data lives in Supabase: products, categories, orders, customers, analytics, audit log, cart sessions, back-in-stock requests, stock adjustments, shipments, QuickBooks sync queue. Row Level Security (RLS) is enabled — the public catalog reads through explicit public SELECT policies; admin reads and writes use a secret key kept server-side. Migrations are applied by hand in the Supabase SQL editor.
+
+**Inventory — Erply**  
+The master for names, prices, stock and active status (Section 18). Receiving applies container stock directly in Erply.
+
+**Accounting — QuickBooks Desktop**  
+Reached through the QuickBooks Web Connector on the office PC, which polls `/api/qbwc` (Section 12).
 
 **Images — Cloudinary**  
 Product images are hosted on Cloudinary. The `lib/image.ts` helper generates responsive image URLs (resize, crop, format conversion) on the fly using Cloudinary's URL API. Images are referenced in the database by their Cloudinary URL; the catalog never stores images itself.
 
 **Authentication — Supabase Auth**  
-Two separate auth flows:
+Three roles:
 - **Customer accounts** — email/password, handled by Supabase Auth directly (`lib/auth-client.ts`, `lib/auth-server.ts`)
-- **Admin** — also Supabase Auth, but requires `role: admin` in the user's `app_metadata`; enforced in middleware
+- **Admin** — requires `role: admin` in the user's `app_metadata`; `/admin/*` is enforced in middleware
+- **Rep** — `role: rep`; `/rep/*` is enforced in middleware
+
+Middleware gates only `/admin/*` and `/rep/*`. Every `/api/*` route is public and does its own check; admin-only APIs live under `/admin/api/*`, and cron/webhook routes check a secret via `lib/request-auth.ts`.
 
 **Daily Cron — Vercel Cron**  
-A cron job runs every day at 8am and triggers two things: the Erply sync (when activated) and the low-stock check. Configured in `vercel.json`.
+Runs at 08:00 UTC (`vercel.json`): the Erply product sync, low-stock email, abandoned-cart reminders and resale-certificate reminders. A Monday cron for the "Waiting on you" digest exists but stays dormant.
 
 **Excel Parsing — SheetJS**  
 The `xlsx` npm package (SheetJS) is used for all Excel reading and writing: parsing the import file in the browser, generating per-order Excel exports, and generating bulk CSV exports.
@@ -487,4 +565,31 @@ The `xlsx` npm package (SheetJS) is used for all Excel reading and writing: pars
 Product names follow a standard format like `"Foam Hearts - 12/pk 5bx/cs cs.60"`. The `lib/pack.ts` utility parses this string to extract pack size, boxes per case, and case quantity — used to display the per-case price alongside the per-unit price on product pages.
 
 **Catalog Access Gate**  
-A dormant feature — the entire public catalog can be put behind an access code (like a password for the storefront). Built and ready; activate by setting the `CATALOG_ACCESS_CODE` environment variable on Vercel.
+A dormant feature — the entire public catalog can be put behind an access code (like a password for the storefront). Built and ready; activate by setting the `CATALOG_ACCESS_CODE` environment variable on Vercel. It's one shared code for every visitor, not per-account approval.
+
+---
+
+## 26. Admin — Other Screens
+
+One line each; the in-app guide (`/admin/guide`) has the clicks for the day-to-day ones.
+
+**Customers and paperwork**
+- **Net-Terms Applications** (`/admin/credit-applications`) — **Details** shows "What we already know" (site quotes, QuickBooks/Erply matches, earlier applications); **Approve** (Net 30/60) or **Decline**, with an optional note and email; **Reopen** puts it back to pending. A record only: it doesn't set a tier or QuickBooks terms.
+- **Resale Certificates** (`/admin/resale-certificates`) — **Verify** / **Reject** uploaded certificates. Verified makes the buyer's tax estimate $0 for that state; no email goes to the customer.
+- **Sales tax** (`/admin/sales-tax`) — one estimated rate per ship-to state; an unlisted or switched-off state isn't collected. Nothing is sent to QuickBooks, which charges the real tax.
+- **Promotions** (`/admin/promotions`) — promo codes buyers enter in the cart; each line gets the better of the usual price and the code's price, never both. Dates are Pacific time.
+- **Registered Users**, **Accounts**, **Rep Performance**.
+
+**Receiving and new products** — `/admin/receiving`
+1. Upload the supplier's "Original List" .xlsx (optionally with a container number). Nothing is written yet.
+2. Review Shipped / Received / Erply stock; **Save counts for later**, or tick "This container has not already been received." and **Apply** — adds the stock **in Erply**, one-way (applying twice doubles it). Catalog stock follows on the next nightly sync.
+3. SKUs not in the catalog appear under **New products**: fill name, category, price and pieces/pack (**Attach Commercial Invoice** suggests names), **Create in Erply**, then **Add created products to the catalog** — they arrive hidden, at $0, flagged needs-photo.
+
+**Catalog quality**
+- **Catalog health** (`/admin/catalog-health`) — nightly sync status, visible products missing a price or photo, low-stock email state, prices waiting for Erply; **Check photo files** finds photos that don't load or are thumbnail-sized. (`scripts/find-blurry-photos.ts` goes further and lists low-resolution photos.)
+- **Catalog Cleanup** (`/admin/cleanup`) — tabs Needs photo (drag-and-drop photo upload, files named by SKU; tick "Also replace the existing photo" to overwrite), Name not to standard, No category, No description, Needs pricing (Unhide / pull prices from Erply), Case price?.
+- **Photo shot list** — printable list of in-stock products needing a photo, holiday items and searched SKUs first.
+- **Show these?** (`/admin/show-review`) — hidden products that have everything; **Show** or **Keep hidden** (undoable).
+- **Price review** — **Approve** sets the website price now and holds it until Erply matches; **Download Erply list** for prices to type into Erply.
+- **Name review**, **Case-count review**, **Owner questions** — proposed renames and case-count fixes; approving writes to Erply, WooCommerce and the catalog together (needs the Erply login, so only from a local run).
+- **Carton Measurements**, **Bin Capacity**, **Collections**, **Display Settings**, **Import History**, **WooCommerce export** (`/admin/woo-export`).
