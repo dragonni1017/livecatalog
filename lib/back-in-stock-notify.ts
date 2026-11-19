@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isSmtpConfigured, sendMail } from './email'
+import { productUrl } from './qr'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = SupabaseClient<any, 'public', any>
@@ -42,7 +43,7 @@ export async function checkBackInStockAndNotify(db: DB): Promise<{ notified: num
         subject: `Back in stock: ${p.name}`,
         text:
           `Good news — ${p.name} (${p.sku}) is back in stock with ${p.stock_qty} units available.\n\n` +
-          `Shop now: https://livecatalog.vercel.app/product/${req.product_id}\n\n` +
+          `Shop now: ${productUrl(req.product_id)}\n\n` +
           `— L & Y USA\n`,
         from: process.env.REORDER_ALERT_FROM || process.env.TITAN_SMTP_USER,
       })

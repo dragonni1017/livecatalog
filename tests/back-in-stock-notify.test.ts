@@ -51,4 +51,12 @@ describe('checkBackInStockAndNotify', () => {
     // the rest stay pending, so they're emailed once shown and in stock
     expect(marked).toEqual(['shown'])
   })
+
+  it('links to the product on the live site domain', async () => {
+    const { db } = fakeDb([{ id: 'shown', product: product({}) }])
+    await checkBackInStockAndNotify(db)
+    const { text } = (sendMail.mock.calls[0] as unknown as [{ text: string }])[0]
+    expect(text).toContain('Shop now: https://lyusa.app/product/p-shown')
+    expect(text).not.toContain('vercel.app')
+  })
 })
