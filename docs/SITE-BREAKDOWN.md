@@ -133,6 +133,7 @@ The cart is stored in **localStorage** in the browser, so it persists across pag
 - Quantity controls (− / + / ✕ to remove)
 - Line totals and subtotal; prices are re-checked against the server (`/api/cart/reprice`), so a signed-in customer sees their own tier price
 - **Unavailable lines** — a product that has since been hidden, deactivated or left at $0 shows "No longer available. It won't be included in your request." with a **Remove** button, and isn't counted in the total
+- **Quote and shipping notice** above the form: no payment is taken, and shipping isn't included — it's calculated and charged on a separate bill (`SHIPPING_NOTE` in `lib/order-rules.ts`, repeated in the confirmation email)
 - **Promo code** box with **Apply**
 - **Estimated sales tax** once a state is chosen (an estimate only; QuickBooks charges the real tax)
 - **Order minimum** — `MIN_ORDER_SUBTOTAL_CENTS` in `lib/order-rules.ts`, currently **$0** (off). If raised, the cart says "Minimum order is $X" and blocks submit
