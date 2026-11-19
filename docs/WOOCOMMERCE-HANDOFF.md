@@ -1,6 +1,6 @@
 # WooCommerce handoff (ly-usa.com)
 
-Written 2026-11-18 for the team that runs the WooCommerce site. The catalog
+Updated 2026-11-18 for the team that runs the WooCommerce site. The catalog
 (this repo) only reports on WooCommerce or offers files for it; every change
 to the live site is that team's call. Numbers are from the dates given;
 re-run the scripts named below for fresh ones.
@@ -55,17 +55,32 @@ dry run. Two questions first:
 Every write saves the old text to a backup CSV and the audit log first, and
 `--undo=<backup.csv>` puts it back.
 
-## 3. For your information (site-side, from the 2026-11-13 comparison)
+## 3. Needs an update: 66 prices
 
-- **Same products:** every catalog SKU is on the site. 145 site names still
-  use the old `SKU - name` format.
-- **Prices:** fixed. Since the 2026-11-11 price load, 3,146 of 3,212 site
-  prices equal the catalog. The 66 differences are the 65 prices changed
-  2026-11-12 plus one discontinued draft. The old 2.40x markup is gone.
-- **Publishing:** the site publishes 1,961 products that the catalog hides:
-  1,115 hidden on purpose, 764 with no photo, 77 sold out, 5 out of stock.
+Rechecked 2026-11-18: 3,146 of 3,212 site prices equal the catalog (the
+2026-11-11 price load; the old 2.40x markup is gone). The other **66 still
+have the price from before the 2026-11-12 changes**:
+
+- **58 are higher on the site**, mostly 12-24x. These are pack prices that
+  were corrected in the catalog (e.g. $43.25 on the site, $3.50 in the
+  catalog; several $12 on the site, $0.50 in the catalog).
+- **8 are lower on the site.**
+
+These prices aren't in Erply, so the Erply integration won't fix them. Please
+load them the same way as on 11-11. The list is the "price differs" rows of
+`woocommerce-vs-catalog-20261118.xlsx` (sent with this handoff).
+
+## 4. For your information (site-side, 2026-11-18 comparison)
+
+- **Same products:** every catalog SKU is on the site; no duplicate or blank
+  SKUs. 145 site names still use the old `SKU - name` format.
+- **Private:** 148 products became private on the site since 2026-11-13. All
+  are hidden in the catalog too, so this matches. Thanks.
+- **Publishing:** the site publishes 1,961 products that the catalog hides
+  (on 2026-11-13: 1,115 hidden on purpose, 764 with no photo, 77 sold out, 5
+  out of stock). 22 products shown in the catalog are drafts on the site.
 - **Stock:** 21 products disagree on in-stock (down from 872 on 2026-11-04).
-  The per-SKU list is in the 2026-11-13 handoff sheet.
+  All 21 are drafts on the site, so customers don't see them.
 - **Broken category links (last checked 2026-08-18):** 14 homepage/menu links still 404 because no
   category exists for them: Party Supplies x2, Plate Set x2, Top Sellers x3,
   New Arrivals x3, Sale x4. Either create those categories or point the tiles
@@ -73,8 +88,9 @@ Every write saves the old text to a backup CSV and the audit log first, and
 
 ## What we need back
 
-1. OK/corrections on the four guessed category mappings (section 1).
-2. Confirmation that Erply's description sync is still off, and whether to
+1. The 66 prices updated on the site (section 3).
+2. OK/corrections on the four guessed category mappings (section 1).
+3. Confirmation that Erply's description sync is still off, and whether to
    push descriptions: empty only, replace too, or neither (section 2).
-3. A decision on the 14 broken category links, and anything from section 3
+4. A decision on the 14 broken category links, and anything from section 4
    you want a fresh SKU list for.
