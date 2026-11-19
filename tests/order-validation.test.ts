@@ -88,6 +88,26 @@ describe('validateOrderInput', () => {
     const result = validateOrderInput(null)
     expect(result.ok).toBe(false)
   })
+
+  it('keeps a custom price above $0 and drops a $0 or negative one', () => {
+    const result = validateOrderInput({
+      contact: validContact,
+      items: [
+        { productId: 'priced', qty: 1, unitPriceOverrideCents: 125 },
+        { productId: 'zero', qty: 1, unitPriceOverrideCents: 0 },
+        { productId: 'negative', qty: 1, unitPriceOverrideCents: -50 },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      // dropped overrides leave the line itself, priced normally by the server
+      expect(result.items).toEqual([
+        { productId: 'priced', qty: 1, unitPriceOverrideCents: 125 },
+        { productId: 'zero', qty: 1 },
+        { productId: 'negative', qty: 1 },
+      ])
+    }
+  })
 })
 
 describe('validateOrderMinimum', () => {
