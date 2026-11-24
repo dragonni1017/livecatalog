@@ -10,6 +10,7 @@ import {
 } from '@/lib/commercial-invoice'
 import type { SheetRow } from '@/lib/packing-list'
 import { isCreatable } from '@/lib/receiving'
+import { erplyGroupForCategory } from '@/lib/catalog-erply-group'
 import {
   createErplyProduct,
   ErplyApiError,
@@ -263,12 +264,22 @@ export async function POST(request: NextRequest) {
     }
     const groupByName = new Map(groups.map((g) => [g.name.toLowerCase(), g]))
 
+    // proposed_category is a CATALOG category (since 2026-11-24); the Erply
+    // group is derived from it. A line staged earlier may still hold an Erply
+    // group label, which is used as-is.
+    const { data: catRows } = await db.from('categories').select('name')
+    const categoryNames = (catRows ?? []).map((c) => String(c.name))
+    const groupFor = (proposed: string) => {
+      const category = categoryNames.find((n) => n.toLowerCase() === proposed.toLowerCase())
+      return category ? erplyGroupForCategory(category, groups) : groupByName.get(proposed.toLowerCase()) ?? null
+    }
+
     const problems: string[] = []
     for (const line of eligible) {
       if (!line.proposed_name) problems.push(`${line.sku}: no name`)
       if (!line.proposed_category) problems.push(`${line.sku}: no category`)
-      else if (!groupByName.has(String(line.proposed_category).toLowerCase())) {
-        problems.push(`${line.sku}: category "${line.proposed_category}" is not an Erply product group`)
+      else if (!groupFor(String(line.proposed_category))) {
+        problems.push(`${line.sku}: category "${line.proposed_category}" has no Erply product group to create it in`)
       }
       if (line.proposed_price_cents == null) problems.push(`${line.sku}: no price`)
     }
@@ -285,7 +296,7 @@ export async function POST(request: NextRequest) {
     const failed: Array<{ sku: string; error: string }> = []
 
     for (const line of eligible) {
-      const group = groupByName.get(String(line.proposed_category).toLowerCase())!
+      const group = groupFor(String(line.proposed_category))!
       try {
         const { productId } = await createErplyProduct({
           sku: line.sku,
@@ -371,13 +382,23 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET ?shipment_id= — the Erply product groups, for the category picker.
+// GET — the category picker: CATALOG categories, each with the Erply group a
+// product in it is created in (lib/catalog-erply-group.ts). erplyGroup is
+// null where none maps, and the screen can't pick that category.
 export async function GET() {
   try {
-    const groups = await getErplyProductGroups()
-    return NextResponse.json({ groups })
+    const db = getAdminClient()
+    const [groups, { data: cats }] = await Promise.all([
+      getErplyProductGroups(),
+      db.from('categories').select('name').order('name'),
+    ])
+    const categories = (cats ?? []).map((c) => ({
+      name: String(c.name),
+      erplyGroup: erplyGroupForCategory(String(c.name), groups)?.name ?? null,
+    }))
+    return NextResponse.json({ groups, categories })
   } catch (err) {
     console.error('[admin/shipments/new-products GET] error:', err)
-    return NextResponse.json({ groups: [] })
+    return NextResponse.json({ groups: [], categories: [] })
   }
 }
