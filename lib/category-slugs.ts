@@ -22,6 +22,13 @@ export const RENAMED_CATEGORY_SLUGS: Readonly<Record<string, string>> = {
   christmas: 'seasonal-holiday',
   pens: 'stationery-office',
   'plush-toys': 'toys-novelties',
+  // Merged away 2026-11-24 (category clean-up): 0-1 visible products each.
+  // Also routes new products from Erply's same-named groups to the target.
+  'forever-roses': 'flowers',
+  skateboard: 'toys-novelties',
+  'plate-set': 'drinkware-cups',
+  // Deleted 2026-11-24, empty; Erply's "LED/Electronics" already aliases to LED.
+  'led-electronics': 'led',
 }
 
 /**
