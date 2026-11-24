@@ -24,7 +24,7 @@ const RECEIVED: Record<Received, { label: string; cls: string }> = {
   'not staged': { label: 'not staged', cls: 'bg-amber-100 text-amber-800' },
 }
 
-type Report = ContainerReport & { erplyNote: string | null }
+type Report = ContainerReport & { erplyNote: string | null; qbNote: string | null }
 
 export default function ContainerCheckPanel() {
   const [count, setCount] = useState(21)
@@ -86,7 +86,11 @@ export default function ContainerCheckPanel() {
 
   async function copyMissing() {
     if (!report) return
-    const text = ['SKU\tPieces\tContainers', ...report.missing.map((m) => `${m.sku}\t${m.pieces}\t${m.containers.join(', ')}`)].join('\n')
+    const qbCell = (m: (typeof report.missing)[number]) => (m.inQb == null ? '' : m.inQb ? 'yes' : 'no')
+    const text = [
+      'SKU\tPieces\tContainers\tIn QuickBooks',
+      ...report.missing.map((m) => `${m.sku}\t${m.pieces}\t${m.containers.join(', ')}\t${qbCell(m)}`),
+    ].join('\n')
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -144,6 +148,15 @@ export default function ContainerCheckPanel() {
             <span className="font-medium">{notStaged.length}</span> of {report.containers.length} containers never staged.{' '}
             {report.totals.distinct.toLocaleString()} SKUs: {report.totals.live} live, {report.totals.hidden} hidden,{' '}
             <span className="font-medium">{report.totals.missing} not in the catalog</span>.
+            {report.totals.notInQb != null && (
+              <>
+                {' '}
+                <span className={report.totals.notInQb ? 'font-medium text-amber-800' : ''}>
+                  {report.totals.notInQb} not in QuickBooks
+                </span>
+                .
+              </>
+            )}
           </p>
           {report.totals.inErplyNotCatalog > 0 && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800">
@@ -153,6 +166,7 @@ export default function ContainerCheckPanel() {
             </p>
           )}
           {report.erplyNote && <p className="text-amber-800">{report.erplyNote}</p>}
+          {report.qbNote && <p className="text-amber-800">{report.qbNote}</p>}
 
           <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="w-full">
@@ -165,6 +179,7 @@ export default function ContainerCheckPanel() {
                   <th className="px-3 py-2 text-right">Live</th>
                   <th className="px-3 py-2 text-right">Hidden</th>
                   <th className="px-3 py-2 text-right">Not in catalog</th>
+                  {report.qbChecked && <th className="px-3 py-2 text-right">Not in QuickBooks</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -183,6 +198,11 @@ export default function ContainerCheckPanel() {
                       {c.missing}
                       {c.inErplyNotCatalog > 0 && <span className="block text-xs font-normal text-red-700">{c.inErplyNotCatalog} in Erply</span>}
                     </td>
+                    {report.qbChecked && (
+                      <td className={`px-3 py-2 text-right tabular-nums ${c.notInQb ? 'font-semibold text-amber-800' : 'text-green-700'}`}>
+                        {c.notInQb ? c.notInQb : c.skus ? '✓' : '—'}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -203,6 +223,8 @@ export default function ContainerCheckPanel() {
                   <li key={m.sku} className={`tabular-nums ${m.containers.length > 1 ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                     <span className="font-mono">{m.sku}</span>: {m.pieces.toLocaleString()} pcs on {m.containers.join(', ')}
                     {m.inErply && <span className="text-red-700"> (in Erply)</span>}
+                    {m.inQb === true && <span className="text-green-700"> (in QuickBooks)</span>}
+                    {m.inQb === false && <span className="text-amber-800"> (not in QuickBooks)</span>}
                   </li>
                 ))}
               </ul>

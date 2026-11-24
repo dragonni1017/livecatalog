@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
 import { findErplyCodes, isConfigured as isErplyConfigured } from '@/lib/erply'
+import { fetchQbItemsBySku, resolveSkus } from '@/lib/qb-item-directory'
 import {
   buildContainerReport,
   missingSkuKeys,
@@ -25,6 +26,31 @@ const MAX_SKUS = 500
 // One Erply call per missing SKU. Beyond this the check skips Erply rather
 // than run into the function timeout; the catalog half still answers.
 const MAX_ERPLY_LOOKUPS = 250
+
+// The variant lookup (QuickBooks holds "F287760- FLOWER" for a bare F287760)
+// is one query per SKU with no exact record, so it's capped like Erply's.
+const MAX_QB_VARIANT_LOOKUPS = 250
+
+/**
+ * Upper-cased SKUs QuickBooks Desktop has, from the qb_item_directory mirror.
+ * Same rule as Receiving's per-line status and QuickBooks → Items: an exact
+ * record, or a suffixed variant (resolveSkus). Null when the mirror is empty,
+ * so "never pulled" can't read as "nothing is in QuickBooks".
+ */
+async function findQbCodes(db: ReturnType<typeof getAdminClient>, keys: string[]): Promise<{ codes: Set<string>; variantsChecked: boolean } | null> {
+  const { count, error } = await db.from('qb_item_directory').select('qb_item_list_id', { count: 'exact', head: true })
+  // A HEAD count with no error and no count is a failed query (see CLAUDE.md).
+  if (error || count == null) throw new Error(error?.message ?? 'could not read the QuickBooks item list')
+  if (count === 0) return null
+
+  const exact = await fetchQbItemsBySku(db, keys)
+  const found = new Set(keys.filter((k) => exact.has(k)))
+  const rest = keys.filter((k) => !found.has(k))
+  if (rest.length <= MAX_QB_VARIANT_LOOKUPS) {
+    for (const r of await resolveSkus(db, rest)) if (r.problem !== 'missing') found.add(r.sku.toUpperCase())
+  }
+  return { codes: found, variantsChecked: rest.length <= MAX_QB_VARIANT_LOOKUPS }
+}
 
 function readInput(body: unknown): ContainerSkus[] | string {
   const list = (body as { containers?: unknown })?.containers
@@ -82,8 +108,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const report = buildContainerReport(input, catalog, (shipments ?? []) as ShipmentRefRow[], erplyCodes)
-    return NextResponse.json({ ...report, erplyNote })
+    let qbCodes: Set<string> | null = null
+    let qbNote: string | null = null
+    try {
+      const qb = await findQbCodes(db, [...new Set(input.flatMap((c) => c.skus.map((s) => s.sku.trim().toUpperCase())))])
+      qbCodes = qb?.codes ?? null
+      if (qb && !qb.variantsChecked) qbNote = "Too many SKUs to check QuickBooks variant names (like \"F287760- FLOWER\") at once, so a few counted as not in QuickBooks may be there under a suffixed name. Check fewer containers to be sure."
+      if (!qb) qbNote = 'The QuickBooks item list hasn’t been pulled yet (QuickBooks → Items), so SKUs weren’t checked against it.'
+    } catch (e) {
+      qbNote = `QuickBooks lookup failed: ${(e as Error).message}`
+    }
+
+    const report = buildContainerReport(input, catalog, (shipments ?? []) as ShipmentRefRow[], erplyCodes, qbCodes)
+    return NextResponse.json({ ...report, erplyNote, qbNote })
   } catch (err) {
     console.error('[admin/shipments/check-containers] error:', err)
     return NextResponse.json({ error: 'Container check failed.' }, { status: 500 })

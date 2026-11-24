@@ -116,6 +116,8 @@ export interface ContainerSummary {
   missing: number
   /** Missing from the catalog but present in Erply: the sync failing, not a receiving backlog. */
   inErplyNotCatalog: number
+  /** SKUs on this container QuickBooks Desktop doesn't have. Null when QuickBooks wasn't checked. */
+  notInQb: number | null
 }
 
 export interface MissingSku {
@@ -125,14 +127,17 @@ export interface MissingSku {
   pieces: number
   /** Null when Erply wasn't checked. */
   inErply: boolean | null
+  /** Null when QuickBooks wasn't checked. */
+  inQb: boolean | null
 }
 
 export interface ContainerReport {
   containers: ContainerSummary[]
   /** On the most containers first: create those before staging any of them. */
   missing: MissingSku[]
-  totals: { distinct: number; live: number; hidden: number; missing: number; inErplyNotCatalog: number }
+  totals: { distinct: number; live: number; hidden: number; missing: number; inErplyNotCatalog: number; notInQb: number | null }
   erplyChecked: boolean
+  qbChecked: boolean
 }
 
 const key = (sku: string) => sku.trim().toUpperCase()
@@ -149,6 +154,13 @@ export function buildContainerReport(
   shipments: ShipmentRefRow[],
   /** Upper-cased codes found in Erply, or null when Erply wasn't checked. */
   erplyCodes: Set<string> | null,
+  /**
+   * Upper-cased SKUs QuickBooks Desktop has (the qb_item_directory mirror),
+   * or null when it wasn't checked. Covers every SKU, not just the ones
+   * missing from the catalog: a product can be live here and still never
+   * have been set up in QuickBooks, where orders get keyed.
+   */
+  qbCodes: Set<string> | null = null,
 ): ContainerReport {
   const bySku = new Map(catalog.filter((c) => c.sku).map((c) => [key(c.sku!), c]))
   const statusOf = (k: string) => {
@@ -173,19 +185,21 @@ export function buildContainerReport(
     const keys = new Map<string, number>()
     for (const s of c.skus) keys.set(key(s.sku), (keys.get(key(s.sku)) ?? 0) + s.pieces)
     const counts = { live: 0, hidden: 0, missing: 0, inErplyNotCatalog: 0 }
+    let notInQb = 0
     for (const [k, pieces] of keys) {
       const st = statusOf(k)
       distinct.set(k, st)
       counts[st]++
+      if (qbCodes && !qbCodes.has(k)) notInQb++
       if (st !== 'missing') continue
       const inErply = erplyCodes ? erplyCodes.has(k) : null
       if (inErply) counts.inErplyNotCatalog++
-      const m = missing.get(k) ?? { sku: c.skus.find((s) => key(s.sku) === k)!.sku.trim(), containers: [], pieces: 0, inErply }
+      const m = missing.get(k) ?? { sku: c.skus.find((s) => key(s.sku) === k)!.sku.trim(), containers: [], pieces: 0, inErply, inQb: qbCodes ? qbCodes.has(k) : null }
       if (!m.containers.includes(c.ref)) m.containers.push(c.ref)
       m.pieces += pieces
       missing.set(k, m)
     }
-    return { ref: c.ref, etd: c.etd, file: c.file, error: c.error, received: received.get(c.ref.toUpperCase()) ?? 'not staged', skus: keys.size, ...counts }
+    return { ref: c.ref, etd: c.etd, file: c.file, error: c.error, received: received.get(c.ref.toUpperCase()) ?? 'not staged', skus: keys.size, ...counts, notInQb: qbCodes ? notInQb : null }
   })
 
   const missingList = [...missing.values()].sort((a, b) => b.containers.length - a.containers.length || a.sku.localeCompare(b.sku))
@@ -199,7 +213,9 @@ export function buildContainerReport(
       hidden: n('hidden'),
       missing: n('missing'),
       inErplyNotCatalog: missingList.filter((m) => m.inErply).length,
+      notInQb: qbCodes ? [...distinct.keys()].filter((k) => !qbCodes.has(k)).length : null,
     },
     erplyChecked: erplyCodes !== null,
+    qbChecked: qbCodes !== null,
   }
 }

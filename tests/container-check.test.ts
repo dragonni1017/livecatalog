@@ -76,10 +76,11 @@ describe('buildContainerReport', () => {
       { ref: 'CCCC3333333', received: 'abandoned', skus: 0, live: 0, hidden: 0, missing: 0, inErplyNotCatalog: 0 },
     ])
     expect(r.missing).toEqual([
-      { sku: 'new1', containers: ['AAAA1111111', 'BBBB2222222'], pieces: 30, inErply: false },
-      { sku: 'NEW2', containers: ['AAAA1111111'], pieces: 1, inErply: true },
+      { sku: 'new1', containers: ['AAAA1111111', 'BBBB2222222'], pieces: 30, inErply: false, inQb: null },
+      { sku: 'NEW2', containers: ['AAAA1111111'], pieces: 1, inErply: true, inQb: null },
     ])
-    expect(r.totals).toEqual({ distinct: 4, live: 1, hidden: 1, missing: 2, inErplyNotCatalog: 1 })
+    expect(r.totals).toEqual({ distinct: 4, live: 1, hidden: 1, missing: 2, inErplyNotCatalog: 1, notInQb: null })
+    expect(r.qbChecked).toBe(false)
     expect(r.erplyChecked).toBe(true)
   })
 
@@ -88,6 +89,22 @@ describe('buildContainerReport', () => {
     expect(r.erplyChecked).toBe(false)
     expect(r.missing.every((m) => m.inErply === null)).toBe(true)
     expect(r.containers.every((c) => c.received === 'not staged')).toBe(true)
+  })
+
+
+  it('counts SKUs QuickBooks lacks on every container, live ones included', () => {
+    const r = buildContainerReport(input, catalog, shipments, null, new Set(['NEW1', 'HID1']))
+    expect(r.qbChecked).toBe(true)
+    expect(r.containers.map((c) => [c.ref, c.notInQb])).toEqual([
+      ['AAAA1111111', 2],
+      ['BBBB2222222', 0],
+      ['CCCC3333333', 0],
+    ])
+    expect(r.missing.map((m) => [m.sku, m.inQb])).toEqual([
+      ['new1', true],
+      ['NEW2', false],
+    ])
+    expect(r.totals.notInQb).toBe(2)
   })
 
   it('missingSkuKeys gives the distinct upper-cased SKUs to ask Erply about', () => {
