@@ -1,6 +1,6 @@
 ---
 name: project-new-arrivals-empty
-description: 2026-10-02 - /new-arrivals was empty (created_at is the import date); FIXED same day to date by shipments.applied_at from receiving; "Newest" sort fixed too (#92, products.arrived_at)
+description: 2026-10-02 - /new-arrivals was empty (created_at is the import date); FIXED same day to date by shipments.applied_at from receiving; "Newest" sort fixed too (#92, products.arrived_at); empty again 2026-11-24 (nothing received since 09-23) -> page now falls back to the latest delivery
 type: project
 ---
 
@@ -29,3 +29,12 @@ nothing feeds it to the catalog.
 **How to apply:** if fixing it, derive "arrived" from receiving
 (`shipments` applied_at for the SKUs in that shipment), or add an
 `arrived_at` set on first stock-in. Don't reuse `created_at`.
+
+**Empty again 2026-11-24:** not a bug. No container had been applied on
+`/admin/receiving` since 2026-09-23, so nothing was inside 30 days, and 14+
+newer containers had never been staged (see
+[[project-containers-not-received-20261021]]). The page now falls back to a
+30-day window ending at the newest visible arrival, with the subtitle "Our
+latest delivery, received <date>" (`fallbackSinceMs` in
+`lib/new-arrivals.ts`). It only renders empty if no visible product has
+ever had an `arrived_at`.
