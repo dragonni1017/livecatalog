@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { descriptorFromQbDesc } from '@/lib/qb-descriptor'
 import {
   auditProductName,
   buildProductName,
@@ -54,6 +55,11 @@ describe('normalizeDescriptor', () => {
 
   it('drops the legacy leading-SKU-digits prefix', () => {
     expect(normalizeDescriptor('7491 - Magic Gold Heart Ribbon Gift Box')).toBe('Magic Gold Heart Ribbon Gift Box')
+  })
+
+  it('keeps a leading count joined to the word, like 108-Branch', () => {
+    expect(normalizeDescriptor("108-Branch Soft Baby's Breath")).toBe("108-Branch Soft Baby's Breath")
+    expect(descriptorFromQbDesc("108-Branch Soft Baby's Breath -  144/cs - 32\" x 11\" x 9\" - 12lbs", 'F288173').head).toBe("108-Branch Soft Baby's Breath")
   })
 })
 
