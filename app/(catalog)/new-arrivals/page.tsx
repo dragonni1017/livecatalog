@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { supabase, getAdminClient } from '@/lib/supabase'
-import { NEW_ARRIVAL_DAYS, newArrivalsSinceMs } from '@/lib/new-arrivals'
+import { NEW_ARRIVAL_DAYS, fallbackSinceMs, formatArrivalDate, newArrivalsSinceMs } from '@/lib/new-arrivals'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
@@ -13,30 +13,50 @@ export const revalidate = 300
 
 // Arrival dates come from receiving (products.arrived_at), not
 // products.created_at (which is the import date). See lib/new-arrivals.ts.
-export default async function NewArrivalsPage() {
-  const since = new Date(newArrivalsSinceMs()).toISOString()
+// products.arrived_at is kept current from receiving by triggers (migration
+// 0055), so the page doesn't read shipments and shipment_lines itself.
+function arrivedSince(sinceMs: number) {
+  return supabase
+    .from('products')
+    .select(
+      'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
+    )
+    .eq('is_active', true)
+    .eq('manually_hidden', false)
+    .gte('arrived_at', new Date(sinceMs).toISOString())
+    // Most recent arrival first, then by name within one delivery.
+    .order('arrived_at', { ascending: false })
+    .order('name')
+    .limit(500)
+}
 
-  // One round trip: products.arrived_at is kept current from receiving by
-  // triggers (migration 0055), so the page no longer reads shipments and
-  // shipment_lines first.
+export default async function NewArrivalsPage() {
   const [{ data: categories }, collections, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
     loadLiveCollections(getAdminClient()),
-    supabase
-      .from('products')
-      .select(
-        'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
-      )
-      .eq('is_active', true)
-      .eq('manually_hidden', false)
-      .gte('arrived_at', since)
-      // Most recent arrival first, then by name within one delivery.
-      .order('arrived_at', { ascending: false })
-      .order('name')
-      .limit(500),
+    arrivedSince(newArrivalsSinceMs()),
   ])
   const categoryCounts = await loadCategoryCounts(categories ?? [])
-  const products = (data ?? []) as unknown as Product[]
+  let products = (data ?? []) as unknown as Product[]
+
+  // Nothing received lately: show the latest delivery rather than an empty
+  // page, and say when it came in. Two extra queries, only on this path.
+  let newestArrival: string | null = null
+  if (products.length === 0) {
+    const { data: newest } = await supabase
+      .from('products')
+      .select('arrived_at')
+      .eq('is_active', true)
+      .eq('manually_hidden', false)
+      .not('arrived_at', 'is', null)
+      .order('arrived_at', { ascending: false })
+      .limit(1)
+    newestArrival = newest?.[0]?.arrived_at ?? null
+    if (newestArrival) {
+      const { data: latest } = await arrivedSince(fallbackSinceMs(newestArrival))
+      products = (latest ?? []) as unknown as Product[]
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
@@ -68,7 +88,11 @@ export default async function NewArrivalsPage() {
         {/* Page heading */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">New Arrivals</h1>
-          <p className="mt-1 text-sm text-gray-500">Received in the last {NEW_ARRIVAL_DAYS} days</p>
+          <p className="mt-1 text-sm text-gray-500">
+            {newestArrival
+              ? `Our latest delivery, received ${formatArrivalDate(newestArrival)}`
+              : `Received in the last ${NEW_ARRIVAL_DAYS} days`}
+          </p>
         </div>
 
         {products.length === 0 ? (
