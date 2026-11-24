@@ -3,6 +3,7 @@ import {
   blockersForDelete,
   containerRefFromFileName,
   findContentMatches,
+  retailCentsFromQb,
   findDuplicateRegistrations,
   isCreatable,
   isStockAppliable,
@@ -382,5 +383,15 @@ describe('findContentMatches', () => {
 
   it('returns nothing for an empty file', () => {
     expect(findContentMatches([], prior('a', 10), new Map([['a', 10]]))).toEqual([])
+  })
+})
+
+describe('retailCentsFromQb', () => {
+  it('is the QuickBooks base price x2.4, rounded to the quarter, never .75', () => {
+    expect(retailCentsFromQb(1.25)).toBe(300)
+    expect(retailCentsFromQb(2)).toBe(500) // 4.80 -> 5.00
+    expect(retailCentsFromQb(14.5)).toBe(3500) // 34.80 -> 35.00
+    expect(retailCentsFromQb(4.5)).toBe(1100) // 10.80 -> 11.00
+    expect(retailCentsFromQb(1.1)).toBe(250) // 2.64 -> 2.50
   })
 })
