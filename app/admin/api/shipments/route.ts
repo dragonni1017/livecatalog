@@ -11,7 +11,7 @@ import {
   type SheetRow,
 } from '@/lib/packing-list'
 import { blockersForDelete, containerRefFromFileName } from '@/lib/receiving'
-import { loadShipmentProgress, otherShipmentsForContainer } from '@/lib/receiving-progress'
+import { findPriorShipments, loadShipmentProgress, otherShipmentsForContainer } from '@/lib/receiving-progress'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,6 +107,25 @@ export async function POST(request: NextRequest) {
     }
 
     const grouped = groupLinesBySku(parsed.lines)
+
+    // Stop before staging a container that's already here, by container
+    // number OR by contents (a file with no "Cntr#" in its name, or a
+    // re-export the file_hash above doesn't recognise). The amber warning
+    // after staging was easy to scroll past, and by then a duplicate row
+    // already existed. `stage_anyway` is the explicit override for a
+    // container that genuinely arrived in two parts.
+    if (body.stage_anyway !== true) {
+      const matches = await findPriorShipments(db, containerRef, grouped)
+      if (matches.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'This container looks like one that is already on the Receiving page.',
+            possibleDuplicate: matches,
+          },
+          { status: 409 },
+        )
+      }
+    }
 
     // Resolve each SKU against the catalog so the preview can show what
     // matched before anything is registered. The UPC cross-check is the same
