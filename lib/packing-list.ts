@@ -47,6 +47,31 @@ const COLUMN: Record<string, string[]> = {
   // invoice rows group colourways, and cartons + pieces are what reconcile
   // the two. Optional: a sheet without it still receives fine.
   cartons: ['箱数'],
+  // Product name. Only used to carry a merged 品名 cell (and the pc/pk it
+  // states) down to the rows beneath it: SheetJS leaves those blank.
+  productName: ['品名'],
+}
+
+// Piece and pack words seen on supplier sheets. 张 sheet, 支/枝 stem, 个 each,
+// 片 piece, 只 animal-count, 条 strip, 朵 flower head, 根 stick; 包 pack,
+// 袋 bag, 盒 box, 把 bunch, 扎/束 bundle, 捆 bale.
+const PIECE_WORD = '(?:张|支|枝|个|片|只|条|朵|根|pcs?)'
+const PACK_WORD = '(?:包|袋|盒|把|扎|束|捆|pk|pack|bag)'
+const PER_PACK_RES = [
+  // "20张/包", "12 pcs/pk"
+  new RegExp(`(\\d+)\\s*${PIECE_WORD}\\s*[/／]\\s*${PACK_WORD}`, 'i'),
+  // "1把12支", "（1包 20张）"
+  new RegExp(`(?:^|[^\\d])1\\s*${PACK_WORD}\\s*[:：]?\\s*(\\d+)\\s*${PIECE_WORD}`, 'i'),
+]
+
+/** Pieces per pack stated in free text, or null. */
+export function piecesPerPackFromText(text: string | null | undefined): number | null {
+  for (const re of PER_PACK_RES) {
+    const m = re.exec(String(text ?? ''))
+    const n = m ? Number(m[1]) : NaN
+    if (Number.isInteger(n) && n > 0) return n
+  }
+  return null
 }
 
 // Which COLUMN fields are a carton dimension axis, and the label used when
@@ -123,6 +148,13 @@ export interface PackingListLine {
    * This is the cs.N of the house naming standard — see lib/product-naming.ts.
    */
   piecesPerCase: number | null
+  /**
+   * Pieces per pack when the sheet's text states it: "20张/包" (20 sheets a
+   * pack) in 品名, "40捆（1把12支）" (12 stems a bunch) in 材质. The sheet has
+   * no pc/pk column — its "pk/cs" is units per CARTON — so this is the only
+   * place it appears. Null when no text says so. See piecesPerPackFromText.
+   */
+  piecesPerPackHint: number | null
   caseLengthIn: number | null
   caseWidthIn: number | null
   caseHeightIn: number | null
@@ -385,10 +417,20 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
 
   const dataRows = rows.slice(headerRowIndex + 1).filter((r) => r && r[colIndex.sku])
 
+  // A merged 品名 cell spans a colourway run (F287943-F287941 on BSIU8114429
+  // share "爱心玫瑰 20张/包"), but only its first row carries the text, so a
+  // row with a blank 品名 inherits the pc/pk of the row above.
+  let groupHint: number | null = null
+
   for (const row of dataRows) {
     const sku = String(row[colIndex.sku]).trim()
     if (!sku) continue
     const where = `SKU ${sku}`
+
+    const ownHint = piecesPerPackFromText(row.filter((c) => typeof c === 'string').join(' '))
+    const nameBlank = colIndex.productName >= 0 && !String(row[colIndex.productName] ?? '').trim()
+    const piecesPerPackHint = ownHint ?? (nameBlank ? groupHint : null)
+    if (!nameBlank) groupHint = ownHint
 
     const rawQty = row[colIndex.qty]
     const qty = typeof rawQty === 'number' ? rawQty : Number(String(rawQty ?? '').trim())
@@ -436,6 +478,7 @@ export function parsePackingListSheet(rows: SheetRow[]): PackingListParse {
       qtyShipped: qty,
       cartons,
       piecesPerCase,
+      piecesPerPackHint,
       ...dims,
     })
   }
@@ -475,6 +518,7 @@ export function groupLinesBySku(lines: PackingListLine[]): PackingListLine[] {
     // group are the same physical product, and a later row's blank cells
     // shouldn't erase what the first row supplied.
     existing.barcodeFromFile = existing.barcodeFromFile ?? line.barcodeFromFile
+    existing.piecesPerPackHint = existing.piecesPerPackHint ?? line.piecesPerPackHint
   }
   return [...bySku.values()]
 }

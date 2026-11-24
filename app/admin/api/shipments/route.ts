@@ -170,6 +170,10 @@ export async function POST(request: NextRequest) {
         // generated product name. Both null on a sheet without a 箱数 column.
         cartons: line.cartons,
         pieces_per_case: line.piecesPerCase,
+        // Pre-fills pc/pk on New products when the sheet's text states it
+        // ("20张/包"). On every row, null or not: bulk inserts send one
+        // column list for all rows (see CLAUDE.md).
+        proposed_pieces_per_pack: line.piecesPerPackHint,
         case_length_in: line.caseLengthIn,
         case_width_in: line.caseWidthIn,
         case_height_in: line.caseHeightIn,
