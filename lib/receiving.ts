@@ -228,6 +228,27 @@ export function pickNeighbourSpec(
   return { sku: best.sku, piecesPerPack: best.piecesPerPack, boxesPerCase: best.boxesPerCase, caseTotal: best.caseTotal, count: best.count }
 }
 
+/**
+ * The pack size in words, for the Receiving screen. Says which unit is sold
+ * and counted in stock — the case count (cs.#) is always in that unit:
+ *   20/pk 60bx/cs cs.60  -> sold by the pack (floral paper)
+ *   12/pk 10bx/cs cs.120 -> sold by the piece
+ * Null when the figures are incomplete or fit neither convention.
+ */
+export function describePackSpec(pk: number, bx: number, cs: number): string | null {
+  if (![pk, bx, cs].every((n) => Number.isInteger(n) && n > 0)) return null
+  const convention = packSpecConvention({ piecesPerPack: pk, boxesPerCase: bx, piecesPerCase: cs, caseUnit: null })
+  const pcs = (pk * bx).toLocaleString()
+  if (convention === 'either') return `Sold by the piece: 1 case = ${cs.toLocaleString()} pcs. Stock counts pieces.`
+  if (convention === 'pack') {
+    return `Sold by the pack: 1 case = ${bx} packs of ${pk} (${pcs} pcs). Stock counts packs.`
+  }
+  if (convention === 'piece') {
+    return `Sold by the piece: 1 case = ${bx} packs of ${pk} = ${pcs} pcs. Stock counts pieces.`
+  }
+  return null
+}
+
 // ── Same container, different file ───────────────────────────────────────────
 
 /**

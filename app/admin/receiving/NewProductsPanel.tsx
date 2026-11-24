@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, packSpecConvention, parseProductName } from '@/lib/product-naming'
-import { isCreatable, missingForCreate, QB_TO_RETAIL, retailCentsFromQb, type NeighbourSpec } from '@/lib/receiving'
+import {
+  describePackSpec as describeSpecWords,
+  isCreatable,
+  missingForCreate,
+  QB_TO_RETAIL,
+  retailCentsFromQb,
+  type NeighbourSpec,
+} from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
 import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
 
@@ -208,6 +215,11 @@ export default function NewProductsPanel({
    * pk/cs actually used: as typed, or — left blank on a piece-sold row —
    * cs.# ÷ pc/pk when that divides evenly. Shown as the box's placeholder.
    */
+  function describePackSpec(draft: Draft): string | null {
+    const bx = draft.packsPerCase.trim() ? Number(draft.packsPerCase) : derivedPacksPerCase(draft)
+    return bx == null ? null : describeSpecWords(Number(draft.piecesPerPack), bx, Number(draft.caseTotal))
+  }
+
   function derivedPacksPerCase(draft: Draft): number | null {
     const pk = Number(draft.piecesPerPack)
     const cs = Number(draft.caseTotal)
@@ -225,20 +237,20 @@ export default function NewProductsPanel({
     const draft = draftFor(line)
     if (!draft.descriptor.trim()) return { name: '', note: 'needs a name' }
     const descriptor = draft.descriptor.trim()
-    if (!draft.piecesPerPack.trim()) return { name: descriptor, note: 'enter pc/pk, pk/cs and cs.# to add the pack spec' }
+    if (!draft.piecesPerPack.trim()) return { name: descriptor, note: 'fill in the pack size to add it to the name' }
 
     const pk = Number(draft.piecesPerPack)
     const bx = draft.packsPerCase.trim() ? Number(draft.packsPerCase) : derivedPacksPerCase(draft)
     const cs = Number(draft.caseTotal)
     const whole = (n: number | null) => n != null && Number.isInteger(n) && n > 0
     if (!whole(pk) || !whole(bx) || !whole(cs)) {
-      return { name: descriptor, note: 'pc/pk, pk/cs and cs.# must all be whole numbers' }
+      return { name: descriptor, note: 'the three pack-size boxes must be whole numbers' }
     }
     const spec = { piecesPerPack: pk, boxesPerCase: bx!, piecesPerCase: cs, caseUnit: null }
     if (packSpecConvention(spec) === 'inconsistent') {
       return {
         name: descriptor,
-        note: `cs.${cs} must be ${pk} × ${bx} = ${pk * bx!} (sold by the piece) or ${bx} (sold by the pack)`,
+        note: `case count ${cs} doesn't fit: use ${bx} if it's sold by the pack, or ${pk * bx!} (${pk} × ${bx}) if it's sold by the piece`,
       }
     }
 
@@ -246,7 +258,7 @@ export default function NewProductsPanel({
     // Still built — the spec is valid — but the sheet's per-case figure is
     // cs.# for both conventions, so a different number is usually a typo.
     const sheet = line.pieces_per_case
-    const note = sheet && sheet !== cs ? `the packing list says ${sheet} per case, not ${cs}` : null
+    const note = sheet && sheet !== cs ? `the packing list says ${sheet} per carton, not ${cs}` : null
     return { name, note }
   }
 
@@ -807,36 +819,41 @@ export default function NewProductsPanel({
                         )}
                       </label>
                       <div className="text-sm">
-                        <span
-                          className="text-xs font-medium text-gray-600"
-                          title={`Sold by the piece: cs.# = pc/pk × pk/cs. Sold by the pack (floral paper): cs.# = pk/cs. The packing list says ${line.pieces_per_case ?? '?'} per case.`}
-                        >
-                          pc/pk · pk/cs · cs.#
-                        </span>
+                        <span className="text-xs font-medium text-gray-600">Pack size</span>
                         <div className="mt-1 grid grid-cols-3 gap-1">
                           {(
                             [
-                              ['piecesPerPack', 'pc/pk', ''],
-                              ['packsPerCase', 'pk/cs', String(derivedPacksPerCase(draft) ?? '')],
-                              ['caseTotal', 'cs.#', ''],
+                              ['piecesPerPack', 'Pcs in a pack', 'pc/pk', ''],
+                              ['packsPerCase', 'Packs in a case', 'pk/cs', String(derivedPacksPerCase(draft) ?? '')],
+                              ['caseTotal', 'Case count', 'cs.#', ''],
                             ] as const
-                          ).map(([field, label, placeholder]) => (
-                            <input
-                              key={field}
-                              aria-label={label}
-                              title={label}
-                              value={draft[field]}
-                              onChange={(e) => setDraft(line, { [field]: e.target.value })}
-                              placeholder={placeholder || label}
-                              inputMode="numeric"
-                              className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-                            />
+                          ).map(([field, label, short, placeholder]) => (
+                            <label key={field} className="block">
+                              <span className="block text-[11px] leading-tight text-gray-500">
+                                {label} <span className="text-gray-400">({short})</span>
+                              </span>
+                              <input
+                                value={draft[field]}
+                                onChange={(e) => setDraft(line, { [field]: e.target.value })}
+                                placeholder={placeholder}
+                                inputMode="numeric"
+                                className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                              />
+                            </label>
                           ))}
                         </div>
+                        {/* Plain-English reading of the three boxes: which
+                            unit is sold and counted in stock. */}
+                        {(() => {
+                          const text = describePackSpec(draft)
+                          return text ? <span className="mt-0.5 block text-xs text-gray-700">{text}</span> : null
+                        })()}
                         {line.pieces_per_case != null && (
                           <span className="mt-0.5 block text-xs text-gray-500">
-                            Packing list: {line.pieces_per_case}/cs
-                            {line.cartons ? ` (${line.qty_shipped.toLocaleString()} in ${line.cartons} cartons)` : ''}
+                            Packing list:{' '}
+                            {line.cartons
+                              ? `${line.qty_shipped.toLocaleString()} in ${line.cartons} cartons = ${line.pieces_per_case} per carton`
+                              : `${line.pieces_per_case} per carton`}
                           </span>
                         )}
                         {/* Where the starting figures came from, until
