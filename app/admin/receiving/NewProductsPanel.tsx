@@ -25,13 +25,10 @@ interface Draft {
   descriptor: string
   category: string
   priceDollars: string
+  /** The three pack-spec figures, as typed: "<pk>/pk <bx>bx/cs cs.<cs>". */
   piecesPerPack: string
-  /**
-   * Whether the packing list's per-case figure counts pieces or packs. Floral
-   * paper ships "3,000" meaning 3,000 PACKS (60/carton), and its name is
-   * pack-sold: "60/pk 60bx/cs cs.60", not cs.3600.
-   */
-  soldBy: 'piece' | 'pack'
+  packsPerCase: string
+  caseTotal: string
 }
 
 const BASIS_LABEL: Record<string, string> = {
@@ -97,6 +94,10 @@ export default function NewProductsPanel({
     const override = drafts[line.id]
     if (override) return override
     const parsed = parseProductName(line.proposed_name ?? '')
+    const sheetCase = line.pieces_per_case != null ? String(line.pieces_per_case) : ''
+    // Floral paper ships "3,000" meaning PACKS (60/carton): QuickBooks says
+    // "60 pks/cs", so the sheet's per-case figure is pk/cs as well as cs.#.
+    const packSold = qb?.[line.sku.toUpperCase()]?.soldBy === 'pack'
     return {
       descriptor: parsed.base,
       category: line.proposed_category ?? '',
@@ -107,15 +108,10 @@ export default function NewProductsPanel({
           : parsed.spec
             ? String(parsed.spec.piecesPerPack)
             : '',
-      // A saved name says which form it is; otherwise QuickBooks' "pks/cs"
-      // does; otherwise piece-sold, the more common form.
-      soldBy: parsed.spec
-        ? packSpecConvention(parsed.spec) === 'pack'
-          ? 'pack'
-          : 'piece'
-        : qb?.[line.sku.toUpperCase()]?.soldBy === 'pack'
-          ? 'pack'
-          : 'piece',
+      // A saved name's spec wins; otherwise start from the packing list.
+      // Blank pk/cs on a piece-sold row is worked out as cs.# ÷ pc/pk.
+      packsPerCase: parsed.spec ? String(parsed.spec.boxesPerCase) : packSold ? sheetCase : '',
+      caseTotal: parsed.spec ? String(parsed.spec.piecesPerCase) : sheetCase,
     }
   }
 
@@ -146,27 +142,49 @@ export default function NewProductsPanel({
   }
 
   /**
-   * The full house-standard name, assembled only when the pack split is known
-   * and divides the case evenly — cs.N must equal pk x bx, so a pk that
-   * doesn't divide the case total can't produce a valid name.
+   * pk/cs actually used: as typed, or — left blank on a piece-sold row —
+   * cs.# ÷ pc/pk when that divides evenly. Shown as the box's placeholder.
+   */
+  function derivedPacksPerCase(draft: Draft): number | null {
+    const pk = Number(draft.piecesPerPack)
+    const cs = Number(draft.caseTotal)
+    if (draft.packsPerCase.trim() || !pk || !cs || cs % pk !== 0) return null
+    return cs / pk
+  }
+
+  /**
+   * The full house-standard name from the three typed figures. The spec is
+   * only added when it satisfies one of the two conventions in
+   * lib/product-naming.ts: cs.# = pc/pk × pk/cs (sold by the piece) or
+   * cs.# = pk/cs (sold by the pack, e.g. floral paper "60/pk 60bx/cs cs.60").
    */
   function finalName(line: ShipmentLine): { name: string; note: string | null } {
     const draft = draftFor(line)
     if (!draft.descriptor.trim()) return { name: '', note: 'needs a name' }
     const descriptor = draft.descriptor.trim()
-    const cs = line.pieces_per_case
+    if (!draft.piecesPerPack.trim()) return { name: descriptor, note: 'enter pc/pk, pk/cs and cs.# to add the pack spec' }
+
     const pk = Number(draft.piecesPerPack)
-
-    if (!cs) return { name: descriptor, note: 'no pieces-per-case on the sheet — no pack spec will be added' }
-    if (!draft.piecesPerPack) return { name: descriptor, note: `${cs} per case — enter pieces per pack to add the spec` }
-    if (!Number.isInteger(pk) || pk <= 0) return { name: descriptor, note: 'pieces per pack must be a whole number' }
-    // Pack-sold: the sheet's per-case figure is packs, so it IS bx and cs.N.
-    if (draft.soldBy === 'pack') {
-      return { name: buildProductName({ descriptor, piecesPerPack: pk, boxesPerCase: cs, soldBy: 'pack' }), note: null }
+    const bx = draft.packsPerCase.trim() ? Number(draft.packsPerCase) : derivedPacksPerCase(draft)
+    const cs = Number(draft.caseTotal)
+    const whole = (n: number | null) => n != null && Number.isInteger(n) && n > 0
+    if (!whole(pk) || !whole(bx) || !whole(cs)) {
+      return { name: descriptor, note: 'pc/pk, pk/cs and cs.# must all be whole numbers' }
     }
-    if (cs % pk !== 0) return { name: descriptor, note: `${pk} doesn't divide ${cs} evenly — cs.N must equal pk × bx` }
+    const spec = { piecesPerPack: pk, boxesPerCase: bx!, piecesPerCase: cs, caseUnit: null }
+    if (packSpecConvention(spec) === 'inconsistent') {
+      return {
+        name: descriptor,
+        note: `cs.${cs} must be ${pk} × ${bx} = ${pk * bx!} (sold by the piece) or ${bx} (sold by the pack)`,
+      }
+    }
 
-    return { name: buildProductName({ descriptor, piecesPerPack: pk, boxesPerCase: cs / pk }), note: null }
+    const name = buildProductName({ descriptor, piecesPerPack: pk, boxesPerCase: bx!, caseTotal: cs })
+    // Still built — the spec is valid — but the sheet's per-case figure is
+    // cs.# for both conventions, so a different number is usually a typo.
+    const sheet = line.pieces_per_case
+    const note = sheet && sheet !== cs ? `the packing list says ${sheet} per case, not ${cs}` : null
+    return { name, note }
   }
 
   async function attachInvoice(file: File) {
@@ -725,24 +743,40 @@ export default function NewProductsPanel({
                           </span>
                         )}
                       </label>
-                      <label className="text-sm">
-                        <span className="text-xs font-medium text-gray-600">Pieces/pack</span>
-                        <input
-                          value={draft.piecesPerPack}
-                          onChange={(e) => setDraft(line, { piecesPerPack: e.target.value })}
-                          inputMode="numeric"
-                          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                        <select
-                          value={draft.soldBy}
-                          onChange={(e) => setDraft(line, { soldBy: e.target.value as Draft['soldBy'] })}
-                          title={`The packing list says ${line.pieces_per_case ?? '?'} per case. Sold by the pack means that's ${line.pieces_per_case ?? '?'} packs, not pieces (floral paper, gift bows).`}
-                          className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-700"
+                      <div className="text-sm">
+                        <span
+                          className="text-xs font-medium text-gray-600"
+                          title={`Sold by the piece: cs.# = pc/pk × pk/cs. Sold by the pack (floral paper): cs.# = pk/cs. The packing list says ${line.pieces_per_case ?? '?'} per case.`}
                         >
-                          <option value="piece">Sold by the piece</option>
-                          <option value="pack">Sold by the pack</option>
-                        </select>
-                      </label>
+                          pc/pk · pk/cs · cs.#
+                        </span>
+                        <div className="mt-1 grid grid-cols-3 gap-1">
+                          {(
+                            [
+                              ['piecesPerPack', 'pc/pk', ''],
+                              ['packsPerCase', 'pk/cs', String(derivedPacksPerCase(draft) ?? '')],
+                              ['caseTotal', 'cs.#', ''],
+                            ] as const
+                          ).map(([field, label, placeholder]) => (
+                            <input
+                              key={field}
+                              aria-label={label}
+                              title={label}
+                              value={draft[field]}
+                              onChange={(e) => setDraft(line, { [field]: e.target.value })}
+                              placeholder={placeholder || label}
+                              inputMode="numeric"
+                              className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+                          ))}
+                        </div>
+                        {line.pieces_per_case != null && (
+                          <span className="mt-0.5 block text-xs text-gray-500">
+                            Packing list: {line.pieces_per_case}/cs
+                            {line.cartons ? ` (${line.qty_shipped.toLocaleString()} in ${line.cartons} cartons)` : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
