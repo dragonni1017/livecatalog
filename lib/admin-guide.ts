@@ -22,7 +22,7 @@ export const WORKFLOWS: Workflow[] = [
     id: 'new-customer',
     title: 'New customer: account, net terms, and their price tier',
     what:
-      'There is no approval step before a customer can shop: anyone can see the standard (Wholesale) prices and send a quote request. ' +
+      'There is no approval step before a customer can shop: anyone can see the standard (Retail) prices and send a quote request.' +
       'Their own price tier is something you give them, and it’s matched to them by email address.',
     steps: [
       { text: 'The customer creates an account on the website (Login at the top → “Create one”) with their email and a password. They can send quote requests without one, but they need it to get their own prices.' },
@@ -34,7 +34,7 @@ export const WORKFLOWS: Workflow[] = [
       { text: 'Tell them to sign in with that email. The top of the website then shows “<Tier> pricing” and every price is theirs, in the catalog, the cart and the order. Nothing emails them about it, so let them know yourself.' },
     ],
     careful: [
-      'Tiers: Wholesale = the normal website price. Distribution Chain = 8% off. Exclusive = 24% above. Retail = double.',
+      'Tiers: Retail = the normal website price, what everyone sees without a tier. Exclusive = 38% off it. Wholesale = 50% off (half price). Distribution Chain = 54% off.',
       'The email must match exactly. If they sign in or order with a different email, they get standard prices.',
       'Approving net terms does not set a price tier or anything in QuickBooks. Set their terms on the QuickBooks customer yourself.',
       'A price tier set here stays on the website. It isn’t copied to Erply, WooCommerce or QuickBooks.',
@@ -71,7 +71,7 @@ export const WORKFLOWS: Workflow[] = [
     steps: [
       { text: 'New container: open', link: 'Receiving', href: '/admin/receiving' },
       { text: 'Upload the supplier’s “Original List” .xlsx. Check the Shipped and Received counts. Click Save counts for later, or tick “This container has not already been received.” and click Apply to add the stock in Erply.' },
-      { text: 'SKUs the website doesn’t have yet appear under “New products”. Fill in name, category, price and pieces per pack, click Create in Erply, then Add created products to the catalog. They arrive hidden, at $0, needing a photo.' },
+      { text: 'SKUs the website doesn’t have yet appear under “New products”. Fill in name, category, price (the full Retail price: QuickBooks still has the old base price, and “Fill blank prices from QuickBooks” converts it × 2.4) and pieces per pack, click Create in Erply, then Add created products to the catalog. They arrive hidden, at $0, needing a photo.' },
       { text: 'Photos: print the list on', link: 'Photo shot list', href: '/admin/photo-shot-list' },
       { text: 'Name each photo file by SKU (F288094.jpg, then F288094-2.jpg for extra angles). Drop them on', link: 'Catalog Cleanup → Needs photo', href: '/admin/cleanup' },
       { text: 'Check the products have a real price in Erply, then put them on the website from', link: 'Show these?', href: '/admin/show-review' },
