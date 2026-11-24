@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic'
 export interface QbLineStatus {
   problem: SkuResolution['problem'] | null
   description: string | null
+  /** QuickBooks sales price, for reference only; null when absent or $0. */
+  salesPrice: number | null
 }
 
 export async function GET(request: NextRequest) {
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
           problem: r.problem ?? null,
           // First line only: the rest is carton size and weight.
           description: r.match?.sales_desc?.split('\n')[0].trim() ?? null,
+          salesPrice: Number(r.match?.sales_price) > 0 ? Number(r.match!.sales_price) : null,
         }
       }
     }
