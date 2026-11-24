@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogCategoryFor, erplyGroupForCategory } from '@/lib/catalog-erply-group'
+import { catalogCategoryFor, erplyGroupForCategory, groupLabelMatches, groupNameSuffixes } from '@/lib/catalog-erply-group'
 
 const groups = [
   { id: 1, name: 'Drinkware' },
@@ -42,5 +42,14 @@ describe('catalogCategoryFor', () => {
     expect(catalogCategoryFor('Toys / Bubbles', names)).toBe('Toys & Novelties')
     expect(catalogCategoryFor('Floral Papers', names)).toBeNull()
     expect(catalogCategoryFor(null, names)).toBeNull()
+  })
+})
+
+describe('group names containing " / "', () => {
+  it('reads "Toys / Squishy / Slime" as the group "Squishy / Slime"', () => {
+    expect(groupNameSuffixes('Toys / Squishy / Slime')).toEqual(['Slime', 'Squishy / Slime', 'Toys / Squishy / Slime'])
+    expect(groupLabelMatches('Toys / Squishy / Slime', 'Squishy / Slime')).toBe(true)
+    expect(groupLabelMatches('Toys / Squishy / Slime', 'Toys')).toBe(false)
+    expect(catalogCategoryFor('Toys / Squishy / Slime', ['Toys & Novelties'])).toBe('Toys & Novelties')
   })
 })

@@ -35,7 +35,25 @@ export const CATALOG_TO_ERPLY_GROUP: Record<string, string> = {
   Speakers: 'LED/Electronics',
 }
 
-const leaf = (groupName: string) => groupName.split(' / ').pop()!.trim()
+/**
+ * Every possible leaf name of a path-style group label, shortest first. A
+ * group's own name can contain " / " ("Squishy / Slime" under Toys is
+ * labelled "Toys / Squishy / Slime"), so the leaf isn't just the last
+ * segment: it's one of these, and Erply's product groupName says which.
+ */
+export function groupNameSuffixes(label: string): string[] {
+  const parts = label.split(' / ').map((s) => s.trim())
+  return parts.map((_, i) => parts.slice(parts.length - 1 - i).join(' / '))
+}
+
+/** Does a path-style group label name this Erply groupName (a product's leaf)? */
+export function groupLabelMatches(label: string, groupName: string): boolean {
+  const wanted = groupName.trim().toLowerCase()
+  return groupNameSuffixes(label).some((s) => s.toLowerCase() === wanted)
+}
+
+const aliasesOnto = (label: string, category: string) =>
+  groupNameSuffixes(label).some((s) => resolveErplyCategoryAlias(s).toLowerCase() === category)
 
 export function erplyGroupForCategory(category: string, groups: ErplyGroupRef[]): ErplyGroupRef | null {
   const wanted = category.trim().toLowerCase()
@@ -43,7 +61,7 @@ export function erplyGroupForCategory(category: string, groups: ErplyGroupRef[])
   if (override) return groups.find((g) => g.name.toLowerCase() === override.toLowerCase()) ?? null
   // Otherwise the group whose leaf aliases onto this category; the shallowest
   // if several ("Drinkware" over "Drinkware / Tumblers"), then Erply's order.
-  const hits = groups.filter((g) => resolveErplyCategoryAlias(leaf(g.name)).toLowerCase() === wanted)
+  const hits = groups.filter((g) => aliasesOnto(g.name, wanted))
   return hits.sort((a, b) => a.name.split(' / ').length - b.name.split(' / ').length)[0] ?? null
 }
 
@@ -55,5 +73,10 @@ export function erplyGroupForCategory(category: string, groups: ErplyGroupRef[])
 export function catalogCategoryFor(proposed: string | null | undefined, categoryNames: string[]): string | null {
   if (!proposed) return null
   const byLower = new Map(categoryNames.map((n) => [n.toLowerCase(), n]))
-  return byLower.get(proposed.toLowerCase()) ?? byLower.get(resolveErplyCategoryAlias(leaf(proposed)).toLowerCase()) ?? null
+  if (byLower.has(proposed.toLowerCase())) return byLower.get(proposed.toLowerCase())!
+  for (const s of groupNameSuffixes(proposed)) {
+    const hit = byLower.get(resolveErplyCategoryAlias(s).toLowerCase())
+    if (hit) return hit
+  }
+  return null
 }
