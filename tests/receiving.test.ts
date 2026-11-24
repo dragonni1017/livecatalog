@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   blockersForDelete,
   containerRefFromFileName,
+  describePackSpec,
   findContentMatches,
   neighbourSkus,
   pickNeighbourSpec,
@@ -424,5 +425,15 @@ describe('pickNeighbourSpec', () => {
     expect(pickNeighbourSpec('F288112', 150, catalog)).toMatchObject({ sku: 'F288110', caseTotal: 150 })
     expect(pickNeighbourSpec('F288112', 72, catalog)).toBeNull()
     expect(pickNeighbourSpec('F288112', null, catalog)).toBeNull()
+  })
+})
+
+describe('describePackSpec', () => {
+  it('says which unit is sold and counted', () => {
+    expect(describePackSpec(20, 60, 60)).toBe('Sold by the pack: 1 case = 60 packs of 20 (1,200 pcs). Stock counts packs.')
+    expect(describePackSpec(12, 10, 120)).toBe('Sold by the piece: 1 case = 10 packs of 12 = 120 pcs. Stock counts pieces.')
+    expect(describePackSpec(1, 36, 36)).toBe('Sold by the piece: 1 case = 36 pcs. Stock counts pieces.')
+    expect(describePackSpec(20, 60, 100)).toBeNull()
+    expect(describePackSpec(20, 0, 60)).toBeNull()
   })
 })

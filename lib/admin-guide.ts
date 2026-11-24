@@ -71,7 +71,7 @@ export const WORKFLOWS: Workflow[] = [
     steps: [
       { text: 'New container: open', link: 'Receiving', href: '/admin/receiving' },
       { text: 'Upload the supplier’s “Original List” .xlsx. Check the Shipped and Received counts. Click Save counts for later, or tick “This container has not already been received.” and click Apply to add the stock in Erply.' },
-      { text: 'SKUs the website doesn’t have yet appear under “New products”. Fill in name, category, price (the full Retail price: QuickBooks still has the old base price, and “Fill blank prices from QuickBooks” converts it × 2.4) and pieces per pack, click Create in Erply, then Add created products to the catalog. They arrive hidden, at $0, needing a photo.' },
+      { text: 'SKUs the website doesn’t have yet appear under “New products”. Fill in name, category, price (the full Retail price: QuickBooks still has the old base price, and “Fill blank prices from QuickBooks” converts it × 2.4) and pack size (pcs in a pack, packs in a case, case count; the case count is in whatever unit is sold, so floral paper is 20/pk 60bx/cs cs.60, counted in packs), click Create in Erply, then Add created products to the catalog. They arrive hidden, at $0, needing a photo.' },
       { text: 'Photos: print the list on', link: 'Photo shot list', href: '/admin/photo-shot-list' },
       { text: 'Name each photo file by SKU (F288094.jpg, then F288094-2.jpg for extra angles). Drop them on', link: 'Catalog Cleanup → Needs photo', href: '/admin/cleanup' },
       { text: 'Check the products have a real price in Erply, then put them on the website from', link: 'Show these?', href: '/admin/show-review' },
