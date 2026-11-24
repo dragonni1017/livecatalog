@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, packSpecConvention, parseProductName } from '@/lib/product-naming'
+import { catalogCategoryFor } from '@/lib/catalog-erply-group'
 import {
   describePackSpec as describeSpecWords,
   isCreatable,
@@ -23,9 +24,10 @@ import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
 // case — the admin supplies the rest and approves every row before anything
 // is created in Erply.
 
-interface ProductGroup {
-  id: number
+/** A catalog category and the Erply group a new product in it is created in. */
+interface CategoryOption {
   name: string
+  erplyGroup: string | null
 }
 
 interface Draft {
@@ -58,7 +60,7 @@ export default function NewProductsPanel({
   // vanish the moment it was created, taking its Erply product ID and any
   // price warning with it.
   const unmatched = lines.filter((l) => l.match_status !== 'matched' || l.erply_created_product_id)
-  const [groups, setGroups] = useState<ProductGroup[]>([])
+  const [categories, setCategories] = useState<CategoryOption[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
@@ -85,8 +87,8 @@ export default function NewProductsPanel({
   useEffect(() => {
     fetch('/admin/api/shipments/new-products')
       .then((r) => r.json())
-      .then((j) => setGroups(j.groups ?? []))
-      .catch(() => setGroups([]))
+      .then((j) => setCategories(j.categories ?? []))
+      .catch(() => setCategories([]))
   }, [])
 
   useEffect(() => {
@@ -111,7 +113,12 @@ export default function NewProductsPanel({
     const spec = specDefaults(line)
     return {
       descriptor: parsed.base,
-      category: line.proposed_category ?? '',
+      // A catalog category. Lines staged before 2026-11-24 hold an Erply group
+      // label, converted here; kept raw until the list loads so a save can't
+      // blank it.
+      category: categories.length
+        ? (catalogCategoryFor(line.proposed_category, categories.map((c) => c.name)) ?? '')
+        : (line.proposed_category ?? ''),
       priceDollars: line.proposed_price_cents != null ? (line.proposed_price_cents / 100).toFixed(2) : '',
       piecesPerPack: spec.piecesPerPack,
       packsPerCase: spec.packsPerCase,
@@ -595,8 +602,10 @@ export default function NewProductsPanel({
                   className="mt-1 block rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                 >
                   <option value="">— choose —</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.name}>{g.name}</option>
+                  {categories.map((c) => (
+                    <option key={c.name} value={c.name} disabled={!c.erplyGroup}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -783,19 +792,30 @@ export default function NewProductsPanel({
                       />
                     </label>
                     <label className="text-sm">
-                      <span className="text-xs font-medium text-gray-600">Category (Erply group)</span>
+                      <span className="text-xs font-medium text-gray-600">Catalog category</span>
                       <select
                         value={draft.category}
                         onChange={(e) => setDraft(line, { category: e.target.value })}
                         className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                       >
                         <option value="">— choose —</option>
-                        {groups.map((g) => (
-                          <option key={g.id} value={g.name}>
-                            {g.name}
+                        {categories.map((c) => (
+                          <option
+                            key={c.name}
+                            value={c.name}
+                            disabled={!c.erplyGroup}
+                            title={c.erplyGroup ? `Created in Erply group "${c.erplyGroup}"` : 'No Erply group to create it in'}
+                          >
+                            {c.name}
                           </option>
                         ))}
                       </select>
+                      {(() => {
+                        const group = categories.find((c) => c.name === draft.category)?.erplyGroup
+                        return group ? (
+                          <span className="mt-0.5 block text-xs text-gray-500">Erply group: {group}</span>
+                        ) : null
+                      })()}
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <label className="text-sm">

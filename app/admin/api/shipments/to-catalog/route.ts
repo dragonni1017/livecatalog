@@ -8,6 +8,7 @@ import {
   isConfigured as isErplyConfigured,
 } from '@/lib/erply'
 import { resolveErplyCategoryAlias } from '@/lib/erply-category-aliases'
+import { catalogCategoryFor } from '@/lib/catalog-erply-group'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     const db = getAdminClient()
     const { data: lines } = await db
       .from('shipment_lines')
-      .select('sku, erply_created_product_id')
+      .select('sku, erply_created_product_id, proposed_category')
       .eq('shipment_id', shipmentId)
       .not('erply_created_product_id', 'is', null)
 
@@ -75,6 +76,10 @@ export async function POST(request: NextRequest) {
     const stockIndex = await getErplyStockIndex(WAREHOUSE_ID)
     const { data: catRows } = await db.from('categories').select('id, name')
     const catIdByName = new Map((catRows ?? []).map((c) => [c.name.toLowerCase(), c.id]))
+    const catNames = (catRows ?? []).map((c) => String(c.name))
+    const categoryBySku = new Map(
+      (lines ?? []).filter((l) => l.proposed_category).map((l) => [String(l.sku).toUpperCase(), String(l.proposed_category)]),
+    )
 
     // ids are assigned here rather than left to the column default: that
     // default draws from products_id_seq, which has collided with
@@ -105,7 +110,12 @@ export async function POST(request: NextRequest) {
       // deliberately contains no pricing logic to duplicate.
       if (e.price > 0) { skippedPriced.push(sku); continue }
 
-      const categoryName = resolveErplyCategoryAlias(e.groupName)
+      // The catalog category picked on Receiving wins: the catalog owns
+      // categories, and several (Speakers, Humidifier, Gifts…) can't be
+      // recovered from the Erply group. Erply's group is the fallback, for
+      // lines staged before the picker listed catalog categories.
+      const picked = catalogCategoryFor(categoryBySku.get(sku.toUpperCase()), catNames)
+      const categoryName = picked ?? resolveErplyCategoryAlias(e.groupName)
       const categoryId = catIdByName.get(categoryName.toLowerCase()) ?? null
       if (!categoryId) noCategory.push(sku)
 
