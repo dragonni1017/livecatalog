@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, packSpecConvention, parseProductName } from '@/lib/product-naming'
-import { isCreatable, missingForCreate, QB_TO_RETAIL, retailCentsFromQb } from '@/lib/receiving'
+import { isCreatable, missingForCreate, QB_TO_RETAIL, retailCentsFromQb, type NeighbourSpec } from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
 import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
 
@@ -67,8 +67,13 @@ export default function NewProductsPanel({
   // QuickBooks status per upper-cased SKU, tagged with the shipment it was
   // loaded for so switching shipments never shows the previous one's. null =
   // not loaded (or failed), in which case the rows don't mention QuickBooks.
-  const [qbLoaded, setQbLoaded] = useState<{ shipmentId: string; status: Record<string, QbLineStatus> | null } | null>(null)
+  const [qbLoaded, setQbLoaded] = useState<{
+    shipmentId: string
+    status: Record<string, QbLineStatus> | null
+    neighbours: Record<string, NeighbourSpec>
+  } | null>(null)
   const qb = qbLoaded?.shipmentId === shipmentId ? qbLoaded.status : null
+  const neighbours = qbLoaded?.shipmentId === shipmentId ? qbLoaded.neighbours : {}
 
   useEffect(() => {
     fetch('/admin/api/shipments/new-products')
@@ -80,8 +85,10 @@ export default function NewProductsPanel({
   useEffect(() => {
     fetch(`/admin/api/shipments/qb-status?shipment_id=${encodeURIComponent(shipmentId)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setQbLoaded({ shipmentId, status: j && !j.directoryEmpty ? (j.status ?? null) : null }))
-      .catch(() => setQbLoaded({ shipmentId, status: null }))
+      .then((j) =>
+        setQbLoaded({ shipmentId, status: j && !j.directoryEmpty ? (j.status ?? null) : null, neighbours: j?.neighbours ?? {} }),
+      )
+      .catch(() => setQbLoaded({ shipmentId, status: null, neighbours: {} }))
   }, [shipmentId])
 
   if (unmatched.length === 0) return null
@@ -94,25 +101,81 @@ export default function NewProductsPanel({
     const override = drafts[line.id]
     if (override) return override
     const parsed = parseProductName(line.proposed_name ?? '')
-    const sheetCase = line.pieces_per_case != null ? String(line.pieces_per_case) : ''
-    // Floral paper ships "3,000" meaning PACKS (60/carton): QuickBooks says
-    // "60 pks/cs", so the sheet's per-case figure is pk/cs as well as cs.#.
-    const packSold = qb?.[line.sku.toUpperCase()]?.soldBy === 'pack'
+    const spec = specDefaults(line)
     return {
       descriptor: parsed.base,
       category: line.proposed_category ?? '',
       priceDollars: line.proposed_price_cents != null ? (line.proposed_price_cents / 100).toFixed(2) : '',
-      piecesPerPack:
-        line.proposed_pieces_per_pack != null
-          ? String(line.proposed_pieces_per_pack)
-          : parsed.spec
-            ? String(parsed.spec.piecesPerPack)
-            : '',
-      // A saved name's spec wins; otherwise start from the packing list.
-      // Blank pk/cs on a piece-sold row is worked out as cs.# ÷ pc/pk.
-      packsPerCase: parsed.spec ? String(parsed.spec.boxesPerCase) : packSold ? sheetCase : '',
-      caseTotal: parsed.spec ? String(parsed.spec.piecesPerCase) : sheetCase,
+      piecesPerPack: spec.piecesPerPack,
+      packsPerCase: spec.packsPerCase,
+      caseTotal: spec.caseTotal,
     }
+  }
+
+  /**
+   * Starting pc/pk · pk/cs · cs.#, and where they came from, in order:
+   *  1. the saved name's own spec;
+   *  2. pc/pk stated in the packing list's text ("20张/包"), whose per-case
+   *     figure then counts packs (case_counts_packs, migration 0079);
+   *  3. QuickBooks' description ("20/pk", "60 pks/cs");
+   *  4. the spec most catalog neighbours with the same cs.# use
+   *     (pickNeighbourSpec) — what all 17 floral papers on BSIU8114429 get.
+   * cs.# is always the packing list's per-case figure: it is cs.N under both
+   * naming conventions. Blank pk/cs on a piece-sold row is worked out as
+   * cs.# ÷ pc/pk (derivedPacksPerCase).
+   */
+  function specDefaults(line: ShipmentLine): {
+    piecesPerPack: string
+    packsPerCase: string
+    caseTotal: string
+    source: string | null
+  } {
+    const parsed = parseProductName(line.proposed_name ?? '').spec
+    if (parsed) {
+      return {
+        piecesPerPack: String(parsed.piecesPerPack),
+        packsPerCase: String(parsed.boxesPerCase),
+        caseTotal: String(parsed.piecesPerCase),
+        source: null,
+      }
+    }
+    const key = line.sku.toUpperCase()
+    const q = qb?.[key]
+    const nb = neighbours[key]
+    const sheetCase = line.pieces_per_case != null ? String(line.pieces_per_case) : ''
+    const str = (n: number | null | undefined) => (n == null ? '' : String(n))
+    // Packs per case when something says the sheet counts packs.
+    const packsIfPackSold = line.case_counts_packs || q?.soldBy === 'pack' ? sheetCase : ''
+    // A neighbour with the same pc/pk also tells us pk/cs (covers lines staged
+    // before migration 0079, which have pc/pk but no case_counts_packs).
+    const nbPacks = (pk: number) => (nb && nb.piecesPerPack === pk ? String(nb.boxesPerCase) : '')
+
+    if (line.proposed_pieces_per_pack != null) {
+      const pk = line.proposed_pieces_per_pack
+      return {
+        piecesPerPack: String(pk),
+        packsPerCase: packsIfPackSold || str(q?.packsPerCase) || nbPacks(pk),
+        caseTotal: sheetCase,
+        source: line.case_counts_packs ? 'the packing list' : null,
+      }
+    }
+    if (q?.perPack) {
+      return {
+        piecesPerPack: String(q.perPack),
+        packsPerCase: str(q.packsPerCase) || packsIfPackSold || nbPacks(q.perPack),
+        caseTotal: sheetCase,
+        source: 'QuickBooks',
+      }
+    }
+    if (nb) {
+      return {
+        piecesPerPack: String(nb.piecesPerPack),
+        packsPerCase: String(nb.boxesPerCase),
+        caseTotal: String(nb.caseTotal),
+        source: `${nb.sku}${nb.count > 1 ? ` and ${nb.count - 1} other nearby product${nb.count > 2 ? 's' : ''}` : ''}`,
+      }
+    }
+    return { piecesPerPack: '', packsPerCase: packsIfPackSold, caseTotal: sheetCase, source: packsIfPackSold ? 'QuickBooks' : null }
   }
 
   /**
@@ -776,6 +839,41 @@ export default function NewProductsPanel({
                             {line.cartons ? ` (${line.qty_shipped.toLocaleString()} in ${line.cartons} cartons)` : ''}
                           </span>
                         )}
+                        {/* Where the starting figures came from, until
+                            they're edited — so a borrowed spec is reviewed,
+                            not trusted. */}
+                        {!drafts[line.id] && specDefaults(line).source && (
+                          <span className="mt-0.5 block text-xs text-blue-700">
+                            Pre-filled from {specDefaults(line).source}
+                          </span>
+                        )}
+                        {(() => {
+                          const nb = neighbours[line.sku.toUpperCase()]
+                          if (!nb) return null
+                          const same =
+                            draft.piecesPerPack === String(nb.piecesPerPack) &&
+                            draft.packsPerCase === String(nb.boxesPerCase) &&
+                            draft.caseTotal === String(nb.caseTotal)
+                          if (same) return null
+                          return (
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500">
+                              Like {nb.sku}: {nb.piecesPerPack}/pk {nb.boxesPerCase}bx/cs cs.{nb.caseTotal}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDraft(line, {
+                                    piecesPerPack: String(nb.piecesPerPack),
+                                    packsPerCase: String(nb.boxesPerCase),
+                                    caseTotal: String(nb.caseTotal),
+                                  })
+                                }
+                                className="text-red-700 underline"
+                              >
+                                Use
+                              </button>
+                            </span>
+                          )
+                        })()}
                       </div>
                     </div>
                   </div>

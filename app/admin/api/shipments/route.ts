@@ -210,6 +210,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: linesError.message }, { status: 400 })
     }
 
+    // A pc/pk stated in the sheet's text means its per-case figure counts
+    // packs (migration 0079). Separate and error-tolerant, not part of the
+    // insert above: before 0079 is applied the column doesn't exist, and that
+    // must not stop a container from staging.
+    let finalLines = insertedLines ?? []
+    if (finalLines.some((l) => l.proposed_pieces_per_pack != null)) {
+      const { data: flagged, error: flagError } = await db
+        .from('shipment_lines')
+        .update({ case_counts_packs: true })
+        .eq('shipment_id', shipment.id)
+        .not('proposed_pieces_per_pack', 'is', null)
+        .select('*')
+      if (flagError) console.warn('[admin/shipments POST] case_counts_packs not set (migration 0079?):', flagError.message)
+      else {
+        const byId = new Map((flagged ?? []).map((l) => [l.id, l]))
+        finalLines = finalLines.map((l) => byId.get(l.id) ?? l)
+      }
+    }
+
     await logAudit({
       action: 'shipment_staged',
       entity_type: 'shipment',
@@ -221,7 +240,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       shipment,
-      lines: (insertedLines ?? []).sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
+      lines: finalLines.sort((a, b) => String(a.sku).localeCompare(String(b.sku))),
       problems: parsed.problems,
       unitNote: parsed.unitNote,
       containerWarning: await otherShipmentsForContainer(db, containerRef, shipment.id),

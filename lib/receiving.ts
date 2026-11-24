@@ -9,6 +9,7 @@
  */
 
 import { roundCentsToQuarterSkip75 } from './order-rules'
+import { packSpecConvention, parseProductName } from './product-naming'
 
 export interface ReceivingLine {
   match_status: string
@@ -153,6 +154,78 @@ export const QB_TO_RETAIL = 2.4
 
 export function retailCentsFromQb(qbDollars: number): number {
   return roundCentsToQuarterSkip75(Math.round(qbDollars * 100) * QB_TO_RETAIL)
+}
+
+// ── Pack spec from catalog neighbours ────────────────────────────────────────
+
+/** How far either side of a SKU's number to look for catalog neighbours. */
+export const NEIGHBOUR_RADIUS = 10
+
+/**
+ * SKUs numbered near this one with the same letter prefix and digit width:
+ * F287625 -> F287615..F287635. New colourways land next to the run they
+ * belong to, so these are the products most likely packed the same way.
+ * Empty for a SKU that isn't letters-then-digits (P273810-60CM).
+ */
+export function neighbourSkus(sku: string, radius = NEIGHBOUR_RADIUS): string[] {
+  const m = /^([A-Za-z]+)(\d+)$/.exec(sku.trim())
+  if (!m) return []
+  const [, prefix, digits] = m
+  const n = Number(digits)
+  const out: string[] = []
+  for (let k = n - radius; k <= n + radius; k++) {
+    if (k === n || k < 0) continue
+    const s = String(k).padStart(digits.length, '0')
+    if (s.length === digits.length) out.push(`${prefix.toUpperCase()}${s}`)
+  }
+  return out
+}
+
+export interface NeighbourSpec {
+  /** Nearest catalog SKU carrying the chosen spec. */
+  sku: string
+  piecesPerPack: number
+  boxesPerCase: number
+  caseTotal: number
+  /** How many neighbours share this exact spec. */
+  count: number
+}
+
+/**
+ * The pack spec most of this SKU's catalog neighbours use, among those whose
+ * cs.N equals the packing list's per-case figure. That figure is cs.N under
+ * both naming conventions (pieces per case, or packs per case), so it can't
+ * borrow a 60/cs spec for a 150/cs item. Ties go to the nearest SKU. On
+ * BSIU8114429 it gives "20/pk 60bx/cs cs.60" for all 17 floral papers.
+ */
+export function pickNeighbourSpec(
+  sku: string,
+  sheetPerCase: number | null,
+  catalog: { sku: string; name: string }[],
+): NeighbourSpec | null {
+  if (!sheetPerCase) return null
+  const m = /^([A-Za-z]+)(\d+)$/.exec(sku.trim())
+  if (!m) return null
+  const n = Number(m[2])
+  const wanted = new Set(neighbourSkus(sku))
+  const groups = new Map<string, NeighbourSpec & { dist: number }>()
+  for (const p of catalog) {
+    if (!wanted.has(p.sku.toUpperCase())) continue
+    const spec = parseProductName(p.name).spec
+    if (!spec || spec.piecesPerCase !== sheetPerCase || packSpecConvention(spec) === 'inconsistent') continue
+    const key = `${spec.piecesPerPack}|${spec.boxesPerCase}|${spec.piecesPerCase}`
+    const dist = Math.abs(Number(p.sku.slice(m[1].length)) - n)
+    const g = groups.get(key)
+    if (!g) {
+      groups.set(key, { sku: p.sku, piecesPerPack: spec.piecesPerPack, boxesPerCase: spec.boxesPerCase, caseTotal: spec.piecesPerCase, count: 1, dist })
+    } else {
+      g.count++
+      if (dist < g.dist) Object.assign(g, { sku: p.sku, dist })
+    }
+  }
+  const best = [...groups.values()].sort((a, b) => b.count - a.count || a.dist - b.dist)[0]
+  if (!best) return null
+  return { sku: best.sku, piecesPerPack: best.piecesPerPack, boxesPerCase: best.boxesPerCase, caseTotal: best.caseTotal, count: best.count }
 }
 
 // ── Same container, different file ───────────────────────────────────────────

@@ -3,6 +3,8 @@ import {
   blockersForDelete,
   containerRefFromFileName,
   findContentMatches,
+  neighbourSkus,
+  pickNeighbourSpec,
   retailCentsFromQb,
   findDuplicateRegistrations,
   isCreatable,
@@ -393,5 +395,34 @@ describe('retailCentsFromQb', () => {
     expect(retailCentsFromQb(14.5)).toBe(3500) // 34.80 -> 35.00
     expect(retailCentsFromQb(4.5)).toBe(1100) // 10.80 -> 11.00
     expect(retailCentsFromQb(1.1)).toBe(250) // 2.64 -> 2.50
+  })
+})
+
+describe('neighbourSkus', () => {
+  it('lists same-prefix SKUs within the radius, keeping the digit width', () => {
+    expect(neighbourSkus('F287625', 2)).toEqual(['F287623', 'F287624', 'F287626', 'F287627'])
+    expect(neighbourSkus('K0003', 2)).toEqual(['K0001', 'K0002', 'K0004', 'K0005'])
+    expect(neighbourSkus('P273810-60CM')).toEqual([])
+  })
+})
+
+describe('pickNeighbourSpec', () => {
+  const catalog = [
+    { sku: 'F288116', name: 'Pink Paper - 20/pk 60bx/cs cs.60' },
+    { sku: 'F288118', name: 'Odd Paper - 60/pk 1bx/cs cs.60' },
+    { sku: 'F288132', name: 'Teal Paper - 20/pk 60bx/cs cs.60' },
+    { sku: 'F288110', name: 'Ribbon - 1/pk 150bx/cs cs.150' },
+    { sku: 'F288111', name: 'No spec at all' },
+    { sku: 'G288113', name: 'Other prefix - 20/pk 60bx/cs cs.60' },
+  ]
+
+  it('takes the spec most neighbours share, named by the nearest', () => {
+    expect(pickNeighbourSpec('F288125', 60, catalog)).toEqual({ sku: 'F288132', piecesPerPack: 20, boxesPerCase: 60, caseTotal: 60, count: 2 })
+  })
+
+  it('only borrows a spec whose cs.N matches the packing list', () => {
+    expect(pickNeighbourSpec('F288112', 150, catalog)).toMatchObject({ sku: 'F288110', caseTotal: 150 })
+    expect(pickNeighbourSpec('F288112', 72, catalog)).toBeNull()
+    expect(pickNeighbourSpec('F288112', null, catalog)).toBeNull()
   })
 })

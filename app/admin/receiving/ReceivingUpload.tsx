@@ -43,6 +43,9 @@ export interface ShipmentLine {
   proposed_category: string | null
   proposed_price_cents: number | null
   proposed_pieces_per_pack: number | null
+  // Migration 0079; absent until it's applied. True = the sheet's per-case
+  // figure counts packs, because its text stated pieces per pack.
+  case_counts_packs?: boolean | null
   erply_created_product_id: number | null
   created_product_at: string | null
   create_error: string | null
