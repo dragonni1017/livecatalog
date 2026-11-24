@@ -6,6 +6,7 @@ import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, parseProductName } from '@/lib/product-naming'
 import { isCreatable, missingForCreate } from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
+import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
 
 // Phase 2: the SKUs on this shipment that aren't in the catalog yet.
 //
@@ -60,12 +61,25 @@ export default function NewProductsPanel({
   const [priceWorklist, setPriceWorklist] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
 
+  // QuickBooks status per upper-cased SKU, tagged with the shipment it was
+  // loaded for so switching shipments never shows the previous one's. null =
+  // not loaded (or failed), in which case the rows don't mention QuickBooks.
+  const [qbLoaded, setQbLoaded] = useState<{ shipmentId: string; status: Record<string, QbLineStatus> | null } | null>(null)
+  const qb = qbLoaded?.shipmentId === shipmentId ? qbLoaded.status : null
+
   useEffect(() => {
     fetch('/admin/api/shipments/new-products')
       .then((r) => r.json())
       .then((j) => setGroups(j.groups ?? []))
       .catch(() => setGroups([]))
   }, [])
+
+  useEffect(() => {
+    fetch(`/admin/api/shipments/qb-status?shipment_id=${encodeURIComponent(shipmentId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setQbLoaded({ shipmentId, status: j && !j.directoryEmpty ? (j.status ?? null) : null }))
+      .catch(() => setQbLoaded({ shipmentId, status: null }))
+  }, [shipmentId])
 
   if (unmatched.length === 0) return null
 
@@ -335,8 +349,8 @@ export default function NewProductsPanel({
   // invoice_line_no rather than the description: a row can legitimately join
   // an invoice line that carries no description, and that still counts as
   // having run the step.
-  const needsInvoice =
-    creatable.length > 0 && !unmatched.some((l) => l.invoice_line_no != null)
+  const invoiceAttached = unmatched.some((l) => l.invoice_line_no != null)
+  const needsInvoice = creatable.length > 0 && !invoiceAttached
 
   return (
     <div className="mt-8">
@@ -565,10 +579,15 @@ export default function NewProductsPanel({
                       )}
                     </p>
                   ) : (
-                    <p className="mt-0.5 text-xs text-amber-700">
-                      No invoice line matched this SKU — name it by hand.
-                    </p>
+                    // Only said once an invoice is actually attached: before
+                    // that, every row read "No invoice line matched" and was
+                    // taken for a QuickBooks failure. The banner above covers
+                    // the not-attached case.
+                    invoiceAttached && (
+                      <p className="mt-0.5 text-xs text-gray-500">Not on the attached Commercial Invoice.</p>
+                    )
                   )}
+                  {!created && qb && <QbNote status={qb[line.sku.toUpperCase()]} named={!!line.proposed_name} />}
                   {line.match_status === 'barcode_mismatch' && (
                     <p className="mt-0.5 text-xs text-red-600">
                       The sheet&apos;s UPC disagrees with the barcode on file — check the SKU mapping before creating this.
@@ -676,4 +695,34 @@ export default function NewProductsPanel({
       </div>
     </div>
   )
+}
+
+// One line per new SKU saying whether QuickBooks Desktop has it, from the
+// mirror on /admin/quickbooks/items. Wording matches that page's buckets.
+function QbNote({ status, named }: { status: QbLineStatus | undefined; named: boolean }) {
+  if (!status) return null
+  const fill = named ? '' : ' Use Fill names on QuickBooks → Items, or type a name.'
+  switch (status.problem) {
+    case null:
+      return (
+        <p className="mt-0.5 text-xs text-green-700">
+          ✓ In QuickBooks{status.description ? `: “${status.description}”` : ''}
+          {!named && <span className="text-gray-500">{fill}</span>}
+        </p>
+      )
+    case 'missing':
+      return <p className="mt-0.5 text-xs text-amber-700">Not in QuickBooks — set it up there, or name it by hand.</p>
+    case 'ambiguous':
+      return <p className="mt-0.5 text-xs text-amber-700">More than one QuickBooks item has this SKU — name it by hand.</p>
+    case 'pack_mismatch':
+      return (
+        <p className="mt-0.5 text-xs text-amber-700">
+          In QuickBooks, but its description quotes a different case pack — check it before naming.
+        </p>
+      )
+    case 'no_description':
+      return <p className="mt-0.5 text-xs text-amber-700">In QuickBooks, but with no description — name it by hand.</p>
+    default:
+      return null
+  }
 }
