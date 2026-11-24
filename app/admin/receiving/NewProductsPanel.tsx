@@ -215,6 +215,21 @@ export default function NewProductsPanel({
    * pk/cs actually used: as typed, or — left blank on a piece-sold row —
    * cs.# ÷ pc/pk when that divides evenly. Shown as the box's placeholder.
    */
+  /**
+   * "50 cases of 60 pk/cs = 3,000 packs": the sheet's figures in the unit the
+   * pack size says is sold (packs for floral paper, pieces otherwise), or
+   * unit-less while the boxes don't settle it.
+   */
+  function packingListWords(line: ShipmentLine, draft: Draft): string {
+    const pk = Number(draft.piecesPerPack)
+    const bx = draft.packsPerCase.trim() ? Number(draft.packsPerCase) : derivedPacksPerCase(draft)
+    const cs = Number(draft.caseTotal)
+    const unit = pk > 1 && bx === cs ? 'pk' : pk > 0 && bx && cs === pk * bx ? 'pcs' : null
+    const per = `${line.pieces_per_case}${unit ? ` ${unit}` : ''}/cs`
+    const total = `${line.qty_shipped.toLocaleString()}${unit === 'pk' ? ' packs' : unit === 'pcs' ? ' pcs' : ''}`
+    return line.cartons ? `${line.cartons} cases of ${per} = ${total}` : `${per}, ${total} in all`
+  }
+
   function describePackSpec(draft: Draft): string | null {
     const bx = draft.packsPerCase.trim() ? Number(draft.packsPerCase) : derivedPacksPerCase(draft)
     return bx == null ? null : describeSpecWords(Number(draft.piecesPerPack), bx, Number(draft.caseTotal))
@@ -850,10 +865,7 @@ export default function NewProductsPanel({
                         })()}
                         {line.pieces_per_case != null && (
                           <span className="mt-0.5 block text-xs text-gray-500">
-                            Packing list:{' '}
-                            {line.cartons
-                              ? `${line.qty_shipped.toLocaleString()} in ${line.cartons} cartons = ${line.pieces_per_case} per carton`
-                              : `${line.pieces_per_case} per carton`}
+                            Packing list: {packingListWords(line, draft)}
                           </span>
                         )}
                         {/* Where the starting figures came from, until
