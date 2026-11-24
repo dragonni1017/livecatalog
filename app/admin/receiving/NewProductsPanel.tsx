@@ -648,6 +648,17 @@ export default function NewProductsPanel({
                           placeholder="0.00"
                           className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                         />
+                        {/* Reference only, never filled in: the QuickBooks
+                            price matched the catalog price on 5 of 753 SKUs
+                            checked 2026-11-24, typically ~40% of it. */}
+                        {qb?.[line.sku.toUpperCase()]?.salesPrice != null && (
+                          <span
+                            className="mt-0.5 block text-xs text-gray-500"
+                            title="The QuickBooks Desktop sales price. It rarely matches the catalog price, so it's shown for reference and not filled in."
+                          >
+                            QuickBooks: ${qb[line.sku.toUpperCase()].salesPrice!.toFixed(2)} (not the catalog price)
+                          </span>
+                        )}
                       </label>
                       <label className="text-sm">
                         <span className="text-xs font-medium text-gray-600">Pieces/pack</span>
