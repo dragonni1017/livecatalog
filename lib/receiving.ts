@@ -8,6 +8,8 @@
  * stranded — the gap that made receiving two half-workflows instead of one.
  */
 
+import { roundCentsToQuarterSkip75 } from './order-rules'
+
 export interface ReceivingLine {
   match_status: string
   qty_received: number
@@ -135,6 +137,22 @@ export function containerRefFromFileName(fileName: string): string | null {
   const m = /Cntr#\s*([A-Za-z]{3,4}\s?\d{6,7})/i.exec(fileName)
   if (!m) return null
   return m[1].replace(/\s+/g, '').toUpperCase()
+}
+
+// ── QuickBooks price -> Retail ───────────────────────────────────────────────
+
+/**
+ * QuickBooks Desktop still holds the pre-2026-08-04 base price; the catalog
+ * (and Erply) price is Retail = base x 2.4, rounded to the storefront's
+ * quarter stops (docs/memory/project-retail-anchor-pricing-flip.md). Checked
+ * 2026-11-24 across 2,339 SKUs priced in both: this reproduces the catalog
+ * price exactly for 1,877 (80%); the rest were priced by hand. So it's a
+ * starting suggestion for the intended price, never applied unreviewed.
+ */
+export const QB_TO_RETAIL = 2.4
+
+export function retailCentsFromQb(qbDollars: number): number {
+  return roundCentsToQuarterSkip75(Math.round(qbDollars * 100) * QB_TO_RETAIL)
 }
 
 // ── Same container, different file ───────────────────────────────────────────

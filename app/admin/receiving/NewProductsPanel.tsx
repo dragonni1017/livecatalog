@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { buildProductName, parseProductName } from '@/lib/product-naming'
-import { isCreatable, missingForCreate } from '@/lib/receiving'
+import { isCreatable, missingForCreate, QB_TO_RETAIL, retailCentsFromQb } from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
 import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
 
@@ -344,6 +344,26 @@ export default function NewProductsPanel({
   // soon as the gap is filled rather than after a save.
   const missingCategory = creatable.filter((l) => !draftFor(l).category)
   const missingPrice = creatable.filter((l) => !draftFor(l).priceDollars)
+  // QuickBooks holds the old base price; x2.4 (quarter-rounded) is Retail,
+  // the price the intended-price box wants. See retailCentsFromQb.
+  const qbRetailCents = (line: ShipmentLine): number | null => {
+    const p = qb?.[line.sku.toUpperCase()]?.salesPrice
+    return p != null ? retailCentsFromQb(p) : null
+  }
+  const qbFillable = missingPrice.filter((l) => qbRetailCents(l) != null)
+
+  /** Blank price boxes only, like fillMissing: a typed price is never replaced. */
+  function fillPricesFromQb() {
+    setDrafts((prev) => {
+      const next = { ...prev }
+      for (const line of qbFillable) {
+        const current = next[line.id] ?? draftFor(line)
+        if (current.priceDollars) continue
+        next[line.id] = { ...current, priceDollars: (qbRetailCents(line)! / 100).toFixed(2) }
+      }
+      return next
+    })
+  }
   // Only nag when there is something the invoice would actually answer, and
   // when no line on this shipment has been matched to an invoice line yet.
   // invoice_line_no rather than the description: a row can legitimately join
@@ -485,6 +505,23 @@ export default function NewProductsPanel({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {qbFillable.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={fillPricesFromQb}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Fill {qbFillable.length} blank price{qbFillable.length === 1 ? '' : 's'} from QuickBooks
+          </button>
+          <span className="text-xs text-gray-500">
+            QuickBooks price × {QB_TO_RETAIL}, rounded to the quarter = the Retail price. Review before saving: it
+            matches the current catalog price for about 4 in 5 products.
+          </span>
         </div>
       )}
 
@@ -648,15 +685,24 @@ export default function NewProductsPanel({
                           placeholder="0.00"
                           className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                         />
-                        {/* Reference only, never filled in: the QuickBooks
-                            price matched the catalog price on 5 of 753 SKUs
-                            checked 2026-11-24, typically ~40% of it. */}
-                        {qb?.[line.sku.toUpperCase()]?.salesPrice != null && (
+                        {/* QuickBooks holds the old base price; the box wants
+                            Retail. Shown converted, filled only on a click. */}
+                        {qbRetailCents(line) != null && (
                           <span
-                            className="mt-0.5 block text-xs text-gray-500"
-                            title="The QuickBooks Desktop sales price. It rarely matches the catalog price, so it's shown for reference and not filled in."
+                            className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500"
+                            title={`QuickBooks still has the old base price. Retail = base × ${QB_TO_RETAIL}, rounded to the quarter (never .75).`}
                           >
-                            QuickBooks: ${qb[line.sku.toUpperCase()].salesPrice!.toFixed(2)} (not the catalog price)
+                            QuickBooks ${qb![line.sku.toUpperCase()].salesPrice!.toFixed(2)} → Retail $
+                            {(qbRetailCents(line)! / 100).toFixed(2)}
+                            {draft.priceDollars !== (qbRetailCents(line)! / 100).toFixed(2) && (
+                              <button
+                                type="button"
+                                onClick={() => setDraft(line, { priceDollars: (qbRetailCents(line)! / 100).toFixed(2) })}
+                                className="text-red-700 underline"
+                              >
+                                Use
+                              </button>
+                            )}
                           </span>
                         )}
                       </label>
