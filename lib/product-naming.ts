@@ -161,7 +161,10 @@ export function normalizeDescriptor(raw: string): string {
   return (raw ?? '')
     .replace(/\s*-\s*100\s*%.*$/i, '')       // "- 100% Zinc Alloy"
     .replace(/\b\s*Style\b/gi, '')            // "Cylinder Style" -> "Cylinder"
-    .replace(/^\d{3,6}\s*-\s*/, '')           // legacy "7491 - " prefix
+    // Legacy "7491 - " prefix. The space after the dash is required, as in
+    // auditProductName: without it "108-Branch Soft Baby's Breath" (F288173)
+    // lost its count and became "Branch Soft Baby's Breath".
+    .replace(/^\d{3,6}\s*-\s+/, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
