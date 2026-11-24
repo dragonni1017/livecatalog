@@ -6,6 +6,7 @@ import {
   isSkuHeaderCell,
   normalizeBarcode,
   parsePackingListSheet,
+  piecesPerPackFromText,
   PackingListError,
   type SheetRow,
 } from '@/lib/packing-list'
@@ -342,5 +343,35 @@ describe.skipIf(!fs.existsSync(REAL_FILE))('real container EMCU8402359', () => {
       expect(line.qtyShipped).toBeGreaterThan(0)
       expect(Number.isInteger(line.qtyShipped)).toBe(true)
     }
+  })
+})
+
+describe('pieces per pack from sheet text', () => {
+  it('reads the forms seen on 2026 Arrival Lists', () => {
+    expect(piecesPerPackFromText('爱心玫瑰\n20张/包')).toBe(20)
+    expect(piecesPerPackFromText('40捆\n（1把12支）')).toBe(12)
+    expect(piecesPerPackFromText('扭扭棒 100根/包 100包/件')).toBe(100)
+    expect(piecesPerPackFromText('波波圆球12个/盒')).toBe(12)
+    expect(piecesPerPackFromText('素色鱼尾纱\n4cm*10y')).toBeNull()
+    expect(piecesPerPackFromText('塑料膜')).toBeNull()
+  })
+
+  it('carries a merged 品名 cell down its colourway run, and stops at the next name', () => {
+    const rows: SheetRow[] = [
+      ['品名', '货号', '材质', 'pk/cs', '箱数\nCTN', '总PCS'],
+      ['爱心玫瑰\n20张/包', 'F287943', '塑料膜', 60, 20, 1200],
+      [null, 'F287944', '塑料膜', 60, 28, 1680],
+      ['心动', 'F288126', '塑料膜', 60, 30, 1800],
+      [null, 'F288127', '塑料膜', 60, 30, 1800],
+      ['三叉满天星', 'F288166', '40捆\n（1把12支）', 40, 20, 800],
+    ]
+    const hints = parsePackingListSheet(rows).lines.map((l) => [l.sku, l.piecesPerPackHint, l.piecesPerCase])
+    expect(hints).toEqual([
+      ['F287943', 20, 60],
+      ['F287944', 20, 60],
+      ['F288126', null, 60],
+      ['F288127', null, 60],
+      ['F288166', 12, 40],
+    ])
   })
 })
