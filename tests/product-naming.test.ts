@@ -232,3 +232,14 @@ describe('buildProductName soldBy', () => {
     expect(buildProductName({ descriptor: 'Foam Bear', piecesPerPack: 12, boxesPerCase: 10 })).toBe('Foam Bear - 12/pk 10bx/cs cs.120')
   })
 })
+
+describe('buildProductName caseTotal', () => {
+  it('writes cs.# exactly as typed', () => {
+    expect(buildProductName({ descriptor: 'Floral Paper', piecesPerPack: 60, boxesPerCase: 60, caseTotal: 60 })).toBe(
+      'Floral Paper - 60/pk 60bx/cs cs.60',
+    )
+    expect(buildProductName({ descriptor: 'Foam Bear', piecesPerPack: 12, boxesPerCase: 10, caseTotal: 120 })).toBe(
+      'Foam Bear - 12/pk 10bx/cs cs.120',
+    )
+  })
+})

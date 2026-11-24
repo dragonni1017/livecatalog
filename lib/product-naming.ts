@@ -141,15 +141,18 @@ export function buildProductName(args: {
    * writes cs.N = pk × bx. See the two conventions at the top of this file.
    */
   soldBy?: 'piece' | 'pack'
+  /**
+   * The cs.N figure as typed, overriding soldBy. Callers should check it with
+   * packSpecConvention: a figure matching neither convention is a defect.
+   */
+  caseTotal?: number
 }): string {
   const descriptor = normalizeDescriptor(args.descriptor)
   const size = args.size?.trim()
   const head = size ? `${descriptor} ${size}` : descriptor
-  const spec =
-    args.soldBy === 'pack'
-      ? `${args.piecesPerPack}/pk ${args.boxesPerCase}bx/cs cs.${args.boxesPerCase}`
-      : formatPackSpec(args.piecesPerPack, args.boxesPerCase)
-  return `${head} - ${spec}`
+  const cs =
+    args.caseTotal ?? (args.soldBy === 'pack' ? args.boxesPerCase : args.piecesPerPack * args.boxesPerCase)
+  return `${head} - ${args.piecesPerPack}/pk ${args.boxesPerCase}bx/cs cs.${cs}`
 }
 
 /**
