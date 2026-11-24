@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
 import { isSkuHeaderCell } from '@/lib/packing-list'
 import { blockersForDelete, type ShipmentProgress } from '@/lib/receiving'
+import type { PriorShipmentMatch } from '@/lib/receiving-progress'
 import NewProductsPanel from './NewProductsPanel'
 
 // Client-side workbook read, same approach as components/admin/ExcelDropzone.tsx:
@@ -192,6 +193,10 @@ export default function ReceivingUpload({
   const [containerWarning, setContainerWarning] = useState<
     { id: string; file_name: string; status: string; applied_at: string | null }[]
   >([])
+  // Set when the stage route recognised the file as a container that's
+  // already here (by container number or by contents) and staged nothing.
+  // Holds the file so "Stage anyway" can resend it with the override.
+  const [priorMatch, setPriorMatch] = useState<{ file: File; matches: PriorShipmentMatch[] } | null>(null)
   const [containerRef, setContainerRef] = useState('')
   const [notes, setNotes] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -201,9 +206,10 @@ export default function ReceivingUpload({
   const totalPieces = eligible.reduce((sum, l) => sum + l.qty_received, 0)
   const isApplied = shipment?.status === 'applied'
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, stageAnyway = false) {
     setError(null)
     setFlash(null)
+    setPriorMatch(null)
     setParsing(true)
     try {
       if (!file.name.match(/\.(xlsx|xls)$/i)) {
@@ -234,8 +240,16 @@ export default function ReceivingUpload({
           file_name: file.name,
           container_ref: containerRef.trim() || null,
           rows: candidate.rows,
+          stage_anyway: stageAnyway,
         }),
       })
+      if (res.status === 409) {
+        const json = await res.clone().json().catch(() => null)
+        if (json?.possibleDuplicate?.length) {
+          setPriorMatch({ file, matches: json.possibleDuplicate })
+          return
+        }
+      }
       const err = await readApiError(res, 'Could not read that packing list.')
       if (err) {
         setError(err)
@@ -274,7 +288,7 @@ export default function ReceivingUpload({
   // refuses an already-applied shipment. `problems`/`unitNote` describe the
   // parse that staged it and aren't stored, so they reset rather than
   // carrying the previous shipment's values over.
-  async function openShipment(s: Shipment) {
+  async function openShipment(s: Pick<Shipment, 'id'>) {
     if (s.id === shipment?.id || loadingId) return
     setError(null)
     setFlash(null)
@@ -527,6 +541,66 @@ export default function ReceivingUpload({
             <p className="mt-1 text-xs text-gray-400">
               Nothing is written to stock at this stage — you review the counts first.
             </p>
+          </div>
+        </div>
+      )}
+
+      {priorMatch && !shipment && (
+        <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900" data-prior-match>
+          <p className="font-semibold">This container looks like one that&apos;s already here. Nothing was staged.</p>
+          <ul className="mt-2 space-y-1.5">
+            {priorMatch.matches.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>
+                  <span className="font-medium">{m.container_ref || m.file_name}</span>
+                  {' — '}
+                  {m.status === 'applied'
+                    ? `received ${m.applied_at?.slice(0, 10) ?? 'earlier'}`
+                    : `staged ${m.staged_at.slice(0, 10)}, not yet applied`}
+                  <span className="block text-xs text-red-800">
+                    {[
+                      m.byRef && 'same container number',
+                      m.share !== null &&
+                        `${m.matchedLines} lines match (${Math.round(m.share * 100)}% same SKUs and quantities)`,
+                      m.file_name,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPriorMatch(null)
+                    void openShipment(m)
+                  }}
+                  className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-900 hover:bg-red-100"
+                >
+                  Open that shipment
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs">
+            Staging it again would let the same pieces be added to Erply twice. Only stage it anyway if this container
+            genuinely arrived in two parts.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={parsing}
+              onClick={() => void handleFile(priorMatch.file, true)}
+              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+            >
+              Stage anyway
+            </button>
+            <button
+              type="button"
+              onClick={() => setPriorMatch(null)}
+              className="rounded-lg px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

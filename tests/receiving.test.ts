@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   blockersForDelete,
   containerRefFromFileName,
+  findContentMatches,
   findDuplicateRegistrations,
   isCreatable,
   isStockAppliable,
@@ -353,5 +354,33 @@ describe('summariseShipment — price agreement', () => {
     )
     expect(p.priceMismatch).toBe(0)
     expect(p.noPriceIntent).toBe(0)
+  })
+})
+
+describe('findContentMatches', () => {
+  const lines = Array.from({ length: 10 }, (_, i) => ({ sku: `P${100 + i}`, qtyShipped: 24 }))
+  const prior = (id: string, n: number, qty = 24) =>
+    Array.from({ length: n }, (_, i) => ({ shipment_id: id, sku: `p${100 + i}`, qty_shipped: qty }))
+
+  it('matches a re-export of the same container, case-insensitively', () => {
+    const hits = findContentMatches(lines, prior('a', 10), new Map([['a', 10]]))
+    expect(hits).toEqual([{ shipmentId: 'a', matched: 10, share: 1 }])
+  })
+
+  it('tolerates a few corrected lines (Original vs Arrival List)', () => {
+    const rows = [...prior('a', 8), { shipment_id: 'a', sku: 'P108', qty_shipped: 12 }]
+    expect(findContentMatches(lines, rows, new Map([['a', 10]]))[0]).toMatchObject({ matched: 8, share: 0.8 })
+  })
+
+  it('ignores the same SKUs at different quantities', () => {
+    expect(findContentMatches(lines, prior('a', 10, 36), new Map([['a', 10]]))).toEqual([])
+  })
+
+  it('measures against the larger shipment, so a small overlap with a big container is not a match', () => {
+    expect(findContentMatches(lines, prior('a', 10), new Map([['a', 40]]))).toEqual([])
+  })
+
+  it('returns nothing for an empty file', () => {
+    expect(findContentMatches([], prior('a', 10), new Map([['a', 10]]))).toEqual([])
   })
 })

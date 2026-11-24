@@ -137,6 +137,64 @@ export function containerRefFromFileName(fileName: string): string | null {
   return m[1].replace(/\s+/g, '').toUpperCase()
 }
 
+// ── Same container, different file ───────────────────────────────────────────
+
+/**
+ * Share of lines (same SKU AND same shipped quantity) two packing lists must
+ * have in common to be called the same container. An Original List and its
+ * Arrival List differ by a handful of corrected lines; two genuinely
+ * different containers that happen to carry the same SKUs almost never ship
+ * them in identical quantities.
+ */
+export const SAME_CONTAINER_SHARE = 0.8
+
+export interface PriorShipmentLine {
+  shipment_id: string
+  sku: string
+  qty_shipped: number
+}
+
+export interface ContentMatch {
+  shipmentId: string
+  matched: number
+  share: number
+}
+
+/**
+ * Earlier shipments whose lines largely repeat this file's lines. The
+ * container-number check can't see a file whose name has no "Cntr#", and the
+ * file_hash check misses a re-export with a few edited cells; this catches
+ * both. Share is measured against the LARGER of the two line counts so a
+ * small file can't "match" a big container it only overlaps.
+ *
+ * `prior` only needs the rows whose SKU appears in `lines`; `priorLineCounts`
+ * supplies each earlier shipment's full size.
+ */
+export function findContentMatches(
+  lines: { sku: string; qtyShipped: number }[],
+  prior: PriorShipmentLine[],
+  priorLineCounts: Map<string, number>,
+  threshold = SAME_CONTAINER_SHARE,
+): ContentMatch[] {
+  if (lines.length === 0) return []
+  const wanted = new Set(lines.map((l) => `${l.sku.toUpperCase()}|${l.qtyShipped}`))
+  const hits = new Map<string, Set<string>>()
+  for (const row of prior) {
+    const key = `${row.sku.toUpperCase()}|${row.qty_shipped}`
+    if (!wanted.has(key)) continue
+    const set = hits.get(row.shipment_id)
+    if (set) set.add(key)
+    else hits.set(row.shipment_id, new Set([key]))
+  }
+  const out: ContentMatch[] = []
+  for (const [shipmentId, keys] of hits) {
+    const size = Math.max(lines.length, priorLineCounts.get(shipmentId) ?? 0)
+    const share = keys.size / size
+    if (share >= threshold) out.push({ shipmentId, matched: keys.size, share })
+  }
+  return out.sort((a, b) => b.share - a.share)
+}
+
 export interface PriorRegistrationRow {
   productId: number
   amount: number
