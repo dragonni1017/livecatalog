@@ -135,11 +135,21 @@ export function buildProductName(args: {
   size?: string | null
   piecesPerPack: number
   boxesPerCase: number
+  /**
+   * 'pack' writes the PACK-SOLD form, cs.N = packs per case (cs === bx), as
+   * every live floral paper does: "… - 20/pk 60bx/cs cs.60". Default 'piece'
+   * writes cs.N = pk × bx. See the two conventions at the top of this file.
+   */
+  soldBy?: 'piece' | 'pack'
 }): string {
   const descriptor = normalizeDescriptor(args.descriptor)
   const size = args.size?.trim()
   const head = size ? `${descriptor} ${size}` : descriptor
-  return `${head} - ${formatPackSpec(args.piecesPerPack, args.boxesPerCase)}`
+  const spec =
+    args.soldBy === 'pack'
+      ? `${args.piecesPerPack}/pk ${args.boxesPerCase}bx/cs cs.${args.boxesPerCase}`
+      : formatPackSpec(args.piecesPerPack, args.boxesPerCase)
+  return `${head} - ${spec}`
 }
 
 /**

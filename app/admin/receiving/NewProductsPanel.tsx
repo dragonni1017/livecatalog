@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { readApiError, TRANSPORT_ERROR } from '@/lib/admin-fetch'
-import { buildProductName, parseProductName } from '@/lib/product-naming'
+import { buildProductName, packSpecConvention, parseProductName } from '@/lib/product-naming'
 import { isCreatable, missingForCreate, QB_TO_RETAIL, retailCentsFromQb } from '@/lib/receiving'
 import type { ShipmentLine } from './ReceivingUpload'
 import type { QbLineStatus } from '@/app/admin/api/shipments/qb-status/route'
@@ -26,6 +26,12 @@ interface Draft {
   category: string
   priceDollars: string
   piecesPerPack: string
+  /**
+   * Whether the packing list's per-case figure counts pieces or packs. Floral
+   * paper ships "3,000" meaning 3,000 PACKS (60/carton), and its name is
+   * pack-sold: "60/pk 60bx/cs cs.60", not cs.3600.
+   */
+  soldBy: 'piece' | 'pack'
 }
 
 const BASIS_LABEL: Record<string, string> = {
@@ -101,6 +107,15 @@ export default function NewProductsPanel({
           : parsed.spec
             ? String(parsed.spec.piecesPerPack)
             : '',
+      // A saved name says which form it is; otherwise QuickBooks' "pks/cs"
+      // does; otherwise piece-sold, the more common form.
+      soldBy: parsed.spec
+        ? packSpecConvention(parsed.spec) === 'pack'
+          ? 'pack'
+          : 'piece'
+        : qb?.[line.sku.toUpperCase()]?.soldBy === 'pack'
+          ? 'pack'
+          : 'piece',
     }
   }
 
@@ -145,6 +160,10 @@ export default function NewProductsPanel({
     if (!cs) return { name: descriptor, note: 'no pieces-per-case on the sheet — no pack spec will be added' }
     if (!draft.piecesPerPack) return { name: descriptor, note: `${cs} per case — enter pieces per pack to add the spec` }
     if (!Number.isInteger(pk) || pk <= 0) return { name: descriptor, note: 'pieces per pack must be a whole number' }
+    // Pack-sold: the sheet's per-case figure is packs, so it IS bx and cs.N.
+    if (draft.soldBy === 'pack') {
+      return { name: buildProductName({ descriptor, piecesPerPack: pk, boxesPerCase: cs, soldBy: 'pack' }), note: null }
+    }
     if (cs % pk !== 0) return { name: descriptor, note: `${pk} doesn't divide ${cs} evenly — cs.N must equal pk × bx` }
 
     return { name: buildProductName({ descriptor, piecesPerPack: pk, boxesPerCase: cs / pk }), note: null }
@@ -714,6 +733,15 @@ export default function NewProductsPanel({
                           inputMode="numeric"
                           className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                         />
+                        <select
+                          value={draft.soldBy}
+                          onChange={(e) => setDraft(line, { soldBy: e.target.value as Draft['soldBy'] })}
+                          title={`The packing list says ${line.pieces_per_case ?? '?'} per case. Sold by the pack means that's ${line.pieces_per_case ?? '?'} packs, not pieces (floral paper, gift bows).`}
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-700"
+                        >
+                          <option value="piece">Sold by the piece</option>
+                          <option value="pack">Sold by the pack</option>
+                        </select>
                       </label>
                     </div>
                   </div>

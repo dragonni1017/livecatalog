@@ -53,6 +53,19 @@ export function buildSpec(p: Pack): { spec: string | null; note: string } {
 }
 
 /**
+ * 'pack' when the QuickBooks description counts PACKS per case ("60 pks/cs",
+ * "150 pk's/cs") without contradicting it with a pieces-per-case total, so
+ * the packing list's per-case figure is packs. null when it doesn't say,
+ * which is left to the default (piece-sold) rather than guessed. "16bx/cs"
+ * isn't taken as a signal: boxes per case appear in piece-sold names too.
+ */
+export function soldByFromQbDesc(desc: string | null | undefined): 'pack' | null {
+  const { pack } = parsePack(desc ?? '')
+  if (pack.perCaseUnit !== 'pk') return null
+  return pack.piecesPerCase == null || pack.piecesPerCase === pack.perCase ? 'pack' : null
+}
+
+/**
  * The plush test for the approved rule. Deterministic:
  *   - the QB description (pack/carton text removed) has the word "Plush" or
  *     "Plushie", OR the QB FullName path has a "Plush" parent ("Plush Toys:X");

@@ -214,3 +214,15 @@ describe('an explicitly stated cs.N unit', () => {
     expect(parseProductName('Pizza Squishy - 12/pk 8bx/cs cs.96').spec?.caseUnit).toBeNull()
   })
 })
+
+describe('buildProductName soldBy', () => {
+  it('writes the pack-sold form when the case figure counts packs', () => {
+    const name = buildProductName({ descriptor: 'White Heartfelt Love Floral Paper', piecesPerPack: 60, boxesPerCase: 60, soldBy: 'pack' })
+    expect(name).toBe('White Heartfelt Love Floral Paper - 60/pk 60bx/cs cs.60')
+    expect(packSpecConvention(parseProductName(name).spec!)).toBe('pack')
+  })
+
+  it('defaults to piece-sold', () => {
+    expect(buildProductName({ descriptor: 'Foam Bear', piecesPerPack: 12, boxesPerCase: 10 })).toBe('Foam Bear - 12/pk 10bx/cs cs.120')
+  })
+})

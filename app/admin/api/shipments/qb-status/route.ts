@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase'
 import { resolveSkus, type SkuResolution } from '@/lib/qb-item-directory'
+import { soldByFromQbDesc } from '@/lib/qb-pack'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,8 @@ export interface QbLineStatus {
   description: string | null
   /** QuickBooks sales price, for reference only; null when absent or $0. */
   salesPrice: number | null
+  /** 'pack' when the description counts packs per case ("60 pks/cs"). */
+  soldBy: 'pack' | null
 }
 
 export async function GET(request: NextRequest) {
@@ -49,6 +52,7 @@ export async function GET(request: NextRequest) {
           // First line only: the rest is carton size and weight.
           description: r.match?.sales_desc?.split('\n')[0].trim() ?? null,
           salesPrice: Number(r.match?.sales_price) > 0 ? Number(r.match!.sales_price) : null,
+          soldBy: soldByFromQbDesc(r.match?.sales_desc),
         }
       }
     }
