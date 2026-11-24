@@ -25,7 +25,7 @@
  * 3D printed, umbrellas, tissue/paper, crowns, pot bases.
  */
 import { auditProductName, formatPackSpec } from './product-naming.ts'
-import { CARTON_DIMS_RE, CARTON_WEIGHT_RE, PACK_TOKEN_RES } from './qb-descriptor.ts'
+import { CARTON_DIMS_LOOSE_RE, CARTON_DIMS_RE, CARTON_WEIGHT_RE, PACK_TOKEN_RES } from './qb-descriptor.ts'
 import { buildSpec, parsePack, plushRule } from './qb-pack.ts'
 
 export type PackSpecRule = 'qb-stated' | 'qb-derived' | 'plush-1pk' | 'tumbler-1pk' | 'keychain-12pk'
@@ -74,7 +74,7 @@ export function planPackSpecName(input: {
   if (!input.qbDesc) return none('not in the QuickBooks item directory: needs counting')
 
   let desc = input.qbDesc.replace(/\r?\n/g, ' - ')
-  for (const re of [CARTON_DIMS_RE, CARTON_WEIGHT_RE]) desc = desc.replace(re, ' ')
+  for (const re of [CARTON_DIMS_RE, CARTON_DIMS_LOOSE_RE, CARTON_WEIGHT_RE]) desc = desc.replace(re, ' ')
   const { pack, stated, rest } = parsePack(desc)
   const qbStated = stated.join(' ')
 
