@@ -18,6 +18,7 @@ import { resolveCategorySlug } from '@/lib/category-slugs'
 import { permanentRedirect } from 'next/navigation'
 import { searchWords, suggestSearch, wordOrFilter } from '@/lib/search-terms'
 import { loadSearchVocabulary } from '@/lib/search-vocab'
+import { showAllProducts } from '@/lib/admin-catalog-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,9 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     soldby: soldByRaw,
     case: caseRaw,
   } = await searchParams
+  // An admin's "show all products" view (lib/admin-catalog-view.ts) drops the
+  // two customer-visibility filters below; everyone else keeps them.
+  const showAll = await showAllProducts()
 
   // Unknown values are ignored rather than echoed (same reasoning as price).
   const soldBy = parseSoldBy(soldByRaw)
@@ -82,8 +86,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   let query = supabase
     .from('products')
     .select('*, category:categories!products_category_id_fkey(*)', { count: 'exact' })
-    .eq('is_active', true)
-    .eq('manually_hidden', false)
+
+  if (!showAll) query = query.eq('is_active', true).eq('manually_hidden', false)
 
   // An old link to a renamed category (?category=christmas) moves to its
   // current slug, keeping every other filter on the URL.
@@ -200,7 +204,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     const vocab = await loadSearchVocabulary()
     const fixed = vocab ? suggestSearch(q, vocab) : null
     if (fixed) {
-      let check = supabase.from('products').select('id').eq('is_active', true).eq('manually_hidden', false)
+      let check = supabase.from('products').select('id')
+      if (!showAll) check = check.eq('is_active', true).eq('manually_hidden', false)
       for (const word of searchWords(fixed)) check = check.or(wordOrFilter(word, SEARCH_FIELDS, categories))
       const { data: hit } = await check.limit(1)
       if (hit?.length) {

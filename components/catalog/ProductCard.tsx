@@ -4,6 +4,7 @@ import { resolveCdnImage } from '@/lib/image'
 import { extractPackSpec, extractUnitsPerCase, stripCsSuffix } from '@/lib/pack'
 import { getDisplaySettings } from '@/lib/display-settings'
 import { getActivePriceTiers } from '@/lib/rep-tier'
+import { hiddenReason } from '@/lib/admin-catalog-view'
 import StockBadge from './StockBadge'
 import AddToCartButton from './AddToCartButton'
 import FavoriteButton from './FavoriteButton'
@@ -17,6 +18,7 @@ export default async function ProductCard({ product }: ProductCardProps) {
   const packSpec = extractPackSpec(product.name)
   const unitsPerCase = extractUnitsPerCase(product.name)
   const displayName = stripCsSuffix(product.name)
+  const hidden = hiddenReason(product)
   const settings = await getDisplaySettings()
   // Plain DB read (no cookies()/headers()) — safe under ISR. Which tier (if
   // any) applies is resolved client-side; see ProductCardPrice/AddToCartButton.
@@ -31,6 +33,13 @@ export default async function ProductCard({ product }: ProductCardProps) {
   }
   return (
     <div className="relative group flex flex-col rounded-lg border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow duration-200">
+      {/* Only an admin's "show all products" view ever lists these. */}
+      {hidden && (
+        <span className="absolute left-2 top-2 z-10 rounded bg-gray-800/85 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+          {hidden}
+          {product.price_cents <= 0 ? ' · $0' : ''}
+        </span>
+      )}
       <FavoriteButton item={favoriteItem} />
       <Link
         href={`/product/${product.id}`}

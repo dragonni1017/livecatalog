@@ -7,6 +7,7 @@ import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
 import { Product } from '@/lib/types'
+import { showAllProducts } from '@/lib/admin-catalog-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,20 +36,22 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
   if (!collection) notFound()
 
   const db = getAdminClient()
-  const ids = await loadCollectionProductIds(db, collection.id)
+  const [ids, showAll] = await Promise.all([loadCollectionProductIds(db, collection.id), showAllProducts()])
 
   const [{ data: categories }, collections, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
     loadLiveCollections(db),
     ids.length
-      ? supabase
-          .from('products')
-          .select(
-            'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
-          )
-          .eq('is_active', true)
-          .eq('manually_hidden', false)
-          .in('id', ids)
+      ? (() => {
+          const query = supabase
+            .from('products')
+            .select(
+              'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
+            )
+            .in('id', ids)
+          // An admin's "show all products" view keeps hidden and inactive ones.
+          return showAll ? query : query.eq('is_active', true).eq('manually_hidden', false)
+        })()
       : Promise.resolve({ data: [] }),
   ])
   const categoryCounts = await loadCategoryCounts(categories ?? [])

@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { supabase, getAdminClient } from '@/lib/supabase'
 import { NEW_ARRIVAL_DAYS, fallbackSinceMs, formatArrivalDate, newArrivalsSinceMs } from '@/lib/new-arrivals'
+import { showAllProducts } from '@/lib/admin-catalog-view'
 import ProductCard from '@/components/catalog/ProductCard'
 import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
@@ -15,14 +16,15 @@ export const revalidate = 300
 // products.created_at (which is the import date). See lib/new-arrivals.ts.
 // products.arrived_at is kept current from receiving by triggers (migration
 // 0055), so the page doesn't read shipments and shipment_lines itself.
-function arrivedSince(sinceMs: number) {
-  return supabase
+function arrivedSince(sinceMs: number, showAll: boolean) {
+  let query = supabase
     .from('products')
     .select(
       'id, sku, barcode, name, description, price_cents, category_id, image_url, stock_qty, is_active, manually_hidden, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)',
     )
-    .eq('is_active', true)
-    .eq('manually_hidden', false)
+  // An admin's "show all products" view keeps hidden and inactive ones.
+  if (!showAll) query = query.eq('is_active', true).eq('manually_hidden', false)
+  return query
     .gte('arrived_at', new Date(sinceMs).toISOString())
     // Most recent arrival first, then by name within one delivery.
     .order('arrived_at', { ascending: false })
@@ -31,10 +33,11 @@ function arrivedSince(sinceMs: number) {
 }
 
 export default async function NewArrivalsPage() {
+  const showAll = await showAllProducts()
   const [{ data: categories }, collections, { data }] = await Promise.all([
     supabase.from('categories').select('*').order('display_order'),
     loadLiveCollections(getAdminClient()),
-    arrivedSince(newArrivalsSinceMs()),
+    arrivedSince(newArrivalsSinceMs(), showAll),
   ])
   const categoryCounts = await loadCategoryCounts(categories ?? [])
   let products = (data ?? []) as unknown as Product[]
@@ -53,7 +56,7 @@ export default async function NewArrivalsPage() {
       .limit(1)
     newestArrival = newest?.[0]?.arrived_at ?? null
     if (newestArrival) {
-      const { data: latest } = await arrivedSince(fallbackSinceMs(newestArrival))
+      const { data: latest } = await arrivedSince(fallbackSinceMs(newestArrival), showAll)
       products = (latest ?? []) as unknown as Product[]
     }
   }

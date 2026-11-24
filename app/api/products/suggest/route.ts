@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchWords, wordOrFilter } from '@/lib/search-terms'
+import { hiddenReason, showAllProducts } from '@/lib/admin-catalog-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,9 +22,11 @@ export async function GET(request: NextRequest) {
   // "Box, Floral".
   let query = db
     .from('products')
-    .select('id, sku, name, price_cents, image_url, category:categories!products_category_id_fkey(name)')
-    .eq('is_active', true)
-    .eq('manually_hidden', false)
+    .select('id, sku, name, price_cents, image_url, is_active, manually_hidden, category:categories!products_category_id_fkey(name)')
+  // An admin's "show all products" view (lib/admin-catalog-view.ts) finds
+  // hidden and inactive products too, labelled below.
+  const showAll = await showAllProducts()
+  if (!showAll) query = query.eq('is_active', true).eq('manually_hidden', false)
   // Synonyms and category names too (lib/search-terms.ts), so "stationary"
   // finds Stationery & Office products here as on the grid. A failed category
   // lookup just leaves category matching out.
@@ -42,6 +45,8 @@ export async function GET(request: NextRequest) {
     name: string
     price_cents: number
     image_url: string | null
+    is_active: boolean
+    manually_hidden: boolean | null
     category: { name: string }[] | { name: string } | null
   }) => ({
     id: p.id,
@@ -49,9 +54,12 @@ export async function GET(request: NextRequest) {
     name: p.name,
     price_cents: p.price_cents,
     image_url: p.image_url,
-    category_name: Array.isArray(p.category)
-      ? p.category[0]?.name ?? null
-      : (p.category as { name: string } | null)?.name ?? null,
+    category_name: [
+      hiddenReason(p),
+      Array.isArray(p.category) ? p.category[0]?.name : (p.category as { name: string } | null)?.name,
+    ]
+      .filter(Boolean)
+      .join(' · ') || null,
   }))
 
   return NextResponse.json({ results }, { headers: { 'Cache-Control': 'no-store' } })

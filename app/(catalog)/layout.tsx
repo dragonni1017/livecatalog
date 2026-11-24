@@ -9,12 +9,14 @@ import TierSwitcher from '@/components/catalog/TierSwitcher'
 import Footer from '@/components/catalog/Footer'
 import { FavoritesProvider } from '@/lib/favorites-context'
 import { getActivePriceTiers } from '@/lib/rep-tier'
+import { showAllProducts } from '@/lib/admin-catalog-view'
+import AdminViewBar from '@/components/catalog/AdminViewBar'
 
 // Fetching tiers here (a plain DB read, no cookies()/headers()) is safe for
 // ISR/static rendering — TierSwitcher decides client-side whether to show
 // itself at all, so this layout never needs to know if the visitor is a rep.
 export default async function CatalogLayout({ children }: { children: React.ReactNode }) {
-  const tiers = await getActivePriceTiers()
+  const [tiers, adminView] = await Promise.all([getActivePriceTiers(), showAllProducts()])
 
   return (
     <FavoritesProvider>
@@ -85,6 +87,12 @@ export default async function CatalogLayout({ children }: { children: React.Reac
           </div>
         </div>
       </header>
+
+      {adminView && (
+        <Suspense fallback={null}>
+          <AdminViewBar />
+        </Suspense>
+      )}
 
       {/* Main content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
