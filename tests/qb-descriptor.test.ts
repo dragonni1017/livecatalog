@@ -54,3 +54,17 @@ describe('descriptorFromQbDesc', () => {
     expect(head('240/cs - 20" x 16" x 12" - 30lbs')).toBe('')
   })
 })
+
+describe('carton dimensions with a missing "x"', () => {
+  it('strips them like normal carton dimensions', () => {
+    expect(head('Love Cream Paper - 60/cs - 25" x 13" 8" - 40lbs', 'F288113')).toBe('Love Cream Paper')
+    expect(head('Bowtie Cover Rectangular Compact Mirror - 192 pcs/cs\n20" 11" x 15" - 40 lbs', 'T642168')).toBe(
+      'Bowtie Cover Rectangular Compact Mirror',
+    )
+    expect(head('Braided Pattern Nail Clipper Set - 240 pcs/cs\n26" x20" 10" - 48 lbs', 'T642097')).toBe('Braided Pattern Nail Clipper Set')
+  })
+
+  it('leaves a product size alone', () => {
+    expect(head('Gold Gift Bow 10" - 20/pk - 100pk/cs')).toBe('Gold Gift Bow 10"')
+  })
+})

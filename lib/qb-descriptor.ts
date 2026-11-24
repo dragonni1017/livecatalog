@@ -21,6 +21,13 @@ const NUM = String.raw`(\d+(?:\.\d+)?)`
 const DIM_UNIT = String.raw`\s*("|''|in(?:ch(?:es)?)?\b|cm\b|mm\b)?`
 /** Carton dimensions: `23" x 16" x 11"`, `25x25x25`, `20 x 15 x18`. */
 export const CARTON_DIMS_RE = new RegExp(`${NUM}${DIM_UNIT}\\s*[x×]\\s*${NUM}${DIM_UNIT}\\s*[x×]\\s*${NUM}${DIM_UNIT}`, 'i')
+/**
+ * Carton dimensions typed with an "x" missing: `25" x 13" 8"`, `20" 11" x 15"`.
+ * Every figure must carry an inch mark, so it can't catch a product size.
+ * 8 of 6,991 QuickBooks items on 2026-11-24, all real cartons; F288113 was
+ * named "Love Cream Paper 25" X 13" 8"" before this.
+ */
+export const CARTON_DIMS_LOOSE_RE = new RegExp(`${NUM}\\s*"\\s*[x×]?\\s*${NUM}\\s*"\\s*[x×]?\\s*${NUM}\\s*"`, 'i')
 /** Carton weight: `17 lbs`, `42lbs`, `8 kg`. */
 export const CARTON_WEIGHT_RE = new RegExp(`${NUM}\\s*(lbs?|pounds?|kgs?)\\b`, 'i')
 
@@ -76,7 +83,7 @@ export function descriptorFromQbDesc(desc: string, sku = ''): QbDescriptor {
     .replace(/([A-Za-z])-(\d+(?:\.\d+)?(?:cm|inch|in)\b)/gi, '$1 - $2')
 
   let hadCarton = false
-  for (const re of [CARTON_DIMS_RE, CARTON_WEIGHT_RE]) {
+  for (const re of [CARTON_DIMS_RE, CARTON_DIMS_LOOSE_RE, CARTON_WEIGHT_RE]) {
     const m = re.exec(rest)
     if (m) { rest = rest.replace(m[0], ' '); hadCarton = true }
   }
