@@ -22,6 +22,7 @@ import TrackView from '@/components/catalog/TrackView'
 import BackInStockForm from '@/components/catalog/BackInStockForm'
 import ImageGallery from '@/components/catalog/ImageGallery'
 import { jsonLdScript, productJsonLd } from '@/lib/product-jsonld'
+import { hiddenReason, showAllProducts } from '@/lib/admin-catalog-view'
 
 // Cache the rendered page for 10 minutes (ISR). Product pages don't depend on
 // per-request state, so this serves them from cache and only re-queries Supabase
@@ -34,13 +35,14 @@ function formatPrice(cents: number): string {
 }
 
 // React.cache dedupes the lookup so generateMetadata and the page share one query.
-const getProduct = cache(async (id: string) => {
-  const { data } = await supabase
+const getProduct = cache(async (id: string, showAll: boolean) => {
+  let query = supabase
     .from('products')
     .select('*, category:categories!products_category_id_fkey(*)')
     .eq('id', id)
-    .eq('manually_hidden', false)
-    .single()
+  // An admin's "show all products" view opens hidden ones too.
+  if (!showAll) query = query.eq('manually_hidden', false)
+  const { data } = await query.single()
   return (data as Product) ?? null
 })
 
@@ -50,7 +52,7 @@ interface ProductPageProps {
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { id } = await params
-  const product = await getProduct(id)
+  const product = await getProduct(id, await showAllProducts())
   if (!product) return { title: 'Product not found' }
 
   const price = formatPrice(product.price_cents)
@@ -72,7 +74,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = await params
-  const product = await getProduct(id)
+  const product = await getProduct(id, await showAllProducts())
 
   if (!product) notFound()
 
@@ -204,6 +206,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </nav>
             )}
 
+            {/* Reachable only in an admin's "show all products" view. */}
+            {hiddenReason(product) && (
+              <p className="mb-3 rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-xs text-gray-700">
+                <span className="font-semibold">{hiddenReason(product)}</span>: customers can&apos;t see this product.
+                {product.price_cents <= 0 ? ' It has no price yet.' : ''}{' '}
+                <Link href={`/admin/products?q=${encodeURIComponent(product.sku)}`} className="underline">
+                  Edit in Products &amp; Stock
+                </Link>
+              </p>
+            )}
             <div className="flex items-start justify-between gap-3">
               <h1 className="text-2xl font-bold text-gray-900 leading-snug">{displayName}</h1>
               <FavoriteButton

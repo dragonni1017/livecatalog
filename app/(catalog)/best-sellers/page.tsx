@@ -5,6 +5,7 @@ import CategoryNav from '@/components/catalog/CategoryNav'
 import { loadCategoryCounts } from '@/lib/category-counts'
 import { loadLiveCollections } from '@/lib/collections'
 import { Product } from '@/lib/types'
+import { showAllProducts } from '@/lib/admin-catalog-view'
 
 // Cache the rendered page for 5 minutes (ISR), like the product page. It has
 // no per-visitor state; the ranking and stock can be up to 5 min stale.
@@ -15,6 +16,7 @@ function daysAgoIso(days: number): string {
 }
 
 export default async function BestSellersPage() {
+  const showAll = await showAllProducts()
   const thirtyDaysAgo = daysAgoIso(30)
   const db = getAdminClient()
 
@@ -43,13 +45,14 @@ export default async function BestSellersPage() {
 
   let products: Product[] = []
   if (topIds.length > 0) {
-    const { data } = await db
+    let query = db
       .from('products')
       .select('id, sku, barcode, name, description, price_cents, category_id, image_url, image_urls, stock_qty, is_active, manually_hidden, volume_tiers, created_at, updated_at, category:categories!products_category_id_fkey(id, name, slug, display_order)')
       .in('id', topIds)
-      .eq('is_active', true)
-      .eq('manually_hidden', false)
       .gt('stock_qty', 0)
+    // An admin's "show all products" view keeps hidden and inactive ones.
+    if (!showAll) query = query.eq('is_active', true).eq('manually_hidden', false)
+    const { data } = await query
     // Re-sort to match view-count rank order
     const ranked = data ?? []
     products = topIds

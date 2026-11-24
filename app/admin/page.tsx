@@ -131,12 +131,23 @@ export default async function AdminDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <a
-            href="/api/admin/auth?action=logout"
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Sign out
-          </a>
+          <div className="flex items-center gap-4">
+            {/* Storefront with hidden/inactive products too, for admins only:
+                lib/admin-catalog-view.ts. A plain <a>: it's a route handler
+                that sets a cookie and redirects, not a page to prefetch. */}
+            <a
+              href="/admin/api/storefront-view?from=/"
+              className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+            >
+              View store with all products
+            </a>
+            <a
+              href="/api/admin/auth?action=logout"
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Sign out
+            </a>
+          </div>
         </div>
 
         {/* Workflow note */}
