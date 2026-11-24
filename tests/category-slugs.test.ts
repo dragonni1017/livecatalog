@@ -82,3 +82,17 @@ describe('matchExistingCategory', () => {
     expect(id('Tumbler')).toBeNull()
   })
 })
+
+describe('categories merged away 2026-11-24', () => {
+  const cats = [
+    { id: 'cat-028', name: 'Flowers', slug: 'flowers' },
+    { id: 'cat-047', name: 'Toys & Novelties', slug: 'toys-novelties' },
+    { id: 'cat-059', name: 'Drinkware & Cups', slug: 'drinkware-cups' },
+  ]
+  it('sends their old links and new Erply products to the merge target', () => {
+    expect(resolveCategorySlug('forever-roses', cats.map((c) => c.slug))).toBe('flowers')
+    expect(matchExistingCategory('Forever Roses', cats)?.name).toBe('Flowers')
+    expect(matchExistingCategory('Skateboard', cats)?.name).toBe('Toys & Novelties')
+    expect(matchExistingCategory('Plate Set', cats)?.name).toBe('Drinkware & Cups')
+  })
+})

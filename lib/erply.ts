@@ -553,6 +553,8 @@ export async function getErplyProductByCode(
   name: string
   price: number
   groupName: string
+  /** Erply groupID, e.g. for logging a group change so it can be undone. */
+  groupId: number
   /** Erply's code2. Needed when mirroring a product into the catalog. */
   barcode: string | null
   isActive: boolean
@@ -567,6 +569,7 @@ export async function getErplyProductByCode(
     name: rec.name,
     price: rec.price ?? 0,
     groupName: rec.groupName ?? '',
+    groupId: Number(rec.groupID) || 0,
     barcode: rec.code2?.trim() || null,
     isActive: rec.active === 1,
   }
@@ -610,6 +613,21 @@ export async function saveErplyProductName(productId: number, name: string): Pro
   }
   const sessionKey = await getSessionKey()
   await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), name })
+}
+
+/**
+ * Moves an existing product to another product group. Same shape as
+ * saveErplyProductName: productID plus groupID only, so nothing else on the
+ * product can be reset by a default. Does NOT verify; re-read with
+ * getErplyProductByCode. Used by the 2026-11-24 category clean-up, which
+ * aligns Erply's groups to the catalog's categories (the catalog owns them).
+ */
+export async function saveErplyProductGroup(productId: number, groupId: number): Promise<void> {
+  if (!isConfigured()) {
+    throw new Error('Erply is not configured in this environment. No group was written.')
+  }
+  const sessionKey = await getSessionKey()
+  await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), groupID: String(groupId) })
 }
 
 /**
