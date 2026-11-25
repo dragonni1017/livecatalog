@@ -622,6 +622,21 @@ export async function saveErplyProductName(productId: number, name: string): Pro
  * getErplyProductByCode. Used by the 2026-11-24 category clean-up, which
  * aligns Erply's groups to the catalog's categories (the catalog owns them).
  */
+/**
+ * Sets an existing product's barcode (Erply `code2`, read back by the sync as
+ * products.barcode). productID + code2 only, like the name/group savers, so
+ * nothing else can be reset. Erply requires code2 to be unique, so check that
+ * no other product carries it first (getErplyProductByBarcode). Does NOT
+ * verify; re-read with getErplyProductByCode.
+ */
+export async function saveErplyProductBarcode(productId: number, barcode: string): Promise<void> {
+  if (!isConfigured()) {
+    throw new Error('Erply is not configured in this environment. No barcode was written.')
+  }
+  const sessionKey = await getSessionKey()
+  await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), code2: barcode })
+}
+
 export async function saveErplyProductGroup(productId: number, groupId: number): Promise<void> {
   if (!isConfigured()) {
     throw new Error('Erply is not configured in this environment. No group was written.')
