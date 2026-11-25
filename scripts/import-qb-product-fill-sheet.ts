@@ -18,9 +18,9 @@
 // Validation, per row:
 //   - Pieces per pack / Packs per case: blank or a positive whole number.
 //   - Sold by: piece or pack (see docs/PRODUCT-NAMING-STANDARD.md):
-//       piece -> cs.N = pk x bx      pack -> cs.N = bx, written "cs.<bx>pk"
+//       piece -> cs.N = pk x bx      pack -> cs.N = bx, written "cs.<bx>"
 //   - Against what the QB desc stated: a bare "N/cs" must equal pk x bx
-//     (piece) or bx (pack); a stated "Npk/cs" must equal bx; a stated "N/pk"
+//     (piece) or bx or pk x bx (pack); a stated "Npk/cs" must equal bx; a stated "N/pk"
 //     must equal pk. A conflict is an ERROR -- QuickBooks is the source of
 //     truth for new products, so fix it there rather than in the sheet.
 //   - Category: must be a live catalog category name (case-insensitive).
@@ -147,7 +147,11 @@ function soldByOf(v: unknown): { value: 'piece' | 'pack' | null; error?: string 
 function houseName(base: string, pk: number, bx: number, soldBy: 'piece' | 'pack', unit: string): string {
   const shielded = base.replace(/(\d+)\s*-?\s*style(s)?\b/gi, '$1§')
   let name = buildProductName({ descriptor: shielded, piecesPerPack: pk, boxesPerCase: bx }).replace(/(\d+)§/g, '$1 Style')
-  if (soldBy === 'pack') name = name.replace(/cs\.\d+$/, `cs.${bx}${unit === 'bx' ? 'bx' : 'pk'}`)
+  // Pack-sold: cs.N is the packs in a case, written bare like every live
+  // floral paper ("20/pk 60bx/cs cs.60") and Receiving since #281. It used to
+  // get a "pk"/"bx" suffix here, the only place that wrote one (2026-11-25).
+  if (soldBy === 'pack') name = name.replace(/cs\.\d+$/, `cs.${bx}`)
+  void unit
   return name
 }
 
@@ -215,7 +219,12 @@ sheet.forEach((row, i) => {
   if (bx.value != null && statedBx != null && bx.value !== statedBx) problems.push(`packs per case ${bx.value} conflicts with QB desc (${statedBx}${p.packs_per_case_unit}/cs)`)
   if (pk.value != null && bx.value != null && sb.value && statedCs != null) {
     if (sb.value === 'piece' && pk.value * bx.value !== statedCs) problems.push(`sold by piece: ${pk.value} x ${bx.value} = ${pk.value * bx.value}, but QB desc says ${statedCs}/cs`)
-    if (sb.value === 'pack' && bx.value !== statedCs) problems.push(`sold by pack: ${bx.value} packs/case, but QB desc says ${statedCs}/cs`)
+    // A pack-sold product's case is bx packs, but QuickBooks often states it
+    // in pieces ("648pc/cs" for 18 packs of 36), so pk x bx matching is just
+    // as consistent. Anything else is still a conflict.
+    if (sb.value === 'pack' && bx.value !== statedCs && pk.value * bx.value !== statedCs) {
+      problems.push(`sold by pack: ${bx.value} packs/case (${pk.value * bx.value} pieces), but QB desc says ${statedCs}/cs`)
+    }
   }
 
   // Category -> catalog id -> Erply group.
