@@ -11,8 +11,10 @@
 // prod-NNNNN ids created 2026-09-01, so every insert chunk dies with
 // "duplicate key value violates unique constraint products_pkey" (observed
 // 2026-09-23: 652 rows in two chunks, taking their updates down with them).
-// supabase/migrations/0052 reseeds the sequence; this script assigns ids
-// explicitly so it does not depend on that having been applied.
+// supabase/migrations/0052 reseeds the sequence. This script used to assign
+// ids itself to dodge that, which is exactly what keeps knocking the sequence
+// out of step; it now leaves them to the default (2026-11-25). If an insert
+// fails on products_pkey, re-run 0052 and run this again.
 //
 // Every product it creates is HIDDEN (manually_hidden = true) because it is
 // priced at 0: Erply cannot accept a price over the API on this account
@@ -131,13 +133,9 @@ console.log(`${erplyBySku.size} found in Erply`)
 const { data: catRows } = await db.from('categories').select('id, name')
 const catIdByName = new Map((catRows ?? []).map((c) => [c.name.toLowerCase(), c.id]))
 
-// 5. Build the rows. ids continue the prod-NNNNN convention from the current
-//    maximum -- see the header for why they are assigned here and not left to
-//    the column default.
-let nextId = products.reduce((max, p) => {
-  const m = /^prod-(\d+)$/.exec(p.id)
-  return m ? Math.max(max, parseInt(m[1], 10)) : max
-}, 0) + 1
+// 5. Build the rows. No `id`: products.id defaults from products_id_seq.
+//    Hand-assigning max+1 here is what pushed the sequence into existing
+//    rows (products_pkey, 2026-09-23 and 2026-11-25); never do it again.
 
 const rows: Record<string, unknown>[] = []
 const skippedPriced: string[] = []
@@ -154,7 +152,6 @@ for (const sku of missing) {
   if (!categoryId) noCategory.push(`${sku} (${e.groupName ?? 'no group'} -> ${categoryName})`)
 
   rows.push({
-    id: `prod-${String(nextId++).padStart(5, '0')}`,
     sku: e.code.trim(),
     barcode: e.code2?.trim() || null,
     name: e.name,
@@ -173,7 +170,7 @@ for (const sku of missing) {
 
 console.log(`\n${rows.length} product(s) to insert${APPLY ? '' : '  (dry run - nothing written)'}`)
 for (const r of rows) {
-  console.log(`  ${r.id}  ${String(r.sku).padEnd(20)} stock ${String(r.stock_qty).padStart(6)}  cat ${String(r.category_id ?? 'NONE').padEnd(8)} ${String(r.name).slice(0, 55)}`)
+  console.log(`  ${String(r.sku).padEnd(20)} stock ${String(r.stock_qty).padStart(6)}  cat ${String(r.category_id ?? 'NONE').padEnd(8)} ${String(r.name).slice(0, 55)}`)
 }
 if (skippedPriced.length) console.log(`\nSkipped - already priced in Erply, the sync should insert these: ${skippedPriced.join(', ')}`)
 if (skippedNoErply.length) console.log(`\nSkipped - not found in Erply: ${skippedNoErply.join(', ')}`)
@@ -185,8 +182,8 @@ const csvPath = path.join(ROOT, 'data', `receiving-products-pushed-${stamp}.csv`
 const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
 fs.writeFileSync(
   csvPath,
-  ['id,sku,barcode,name,stock_qty,category_id,manually_hidden']
-    .concat(rows.map((r) => [r.id, r.sku, r.barcode, esc(r.name), r.stock_qty, r.category_id, r.manually_hidden].join(',')))
+  ['sku,barcode,name,stock_qty,category_id,manually_hidden']
+    .concat(rows.map((r) => [r.sku, r.barcode, esc(r.name), r.stock_qty, r.category_id, r.manually_hidden].join(',')))
     .join('\n') + '\n',
 )
 console.log(`\nBackup written: ${path.relative(ROOT, csvPath)}`)

@@ -81,22 +81,11 @@ export async function POST(request: NextRequest) {
       (lines ?? []).filter((l) => l.proposed_category).map((l) => [String(l.sku).toUpperCase(), String(l.proposed_category)]),
     )
 
-    // ids are assigned here rather than left to the column default: that
-    // default draws from products_id_seq, which has collided with
-    // hand-assigned prod-NNNNN blocks before and takes a whole 500-row chunk
-    // down with it (see supabase/migrations/0052).
-    const allIds: string[] = []
-    for (let from = 0; ; from += 1000) {
-      const { data } = await db.from('products').select('id').range(from, from + 999)
-      allIds.push(...(data ?? []).map((p) => p.id as string))
-      if ((data ?? []).length < 1000) break
-    }
-    let nextId =
-      allIds.reduce((max, id) => {
-        const m = /^prod-(\d+)$/.exec(id)
-        return m ? Math.max(max, parseInt(m[1], 10)) : max
-      }, 0) + 1
-
+    // No `id`: products.id defaults from products_id_seq (0020). This route
+    // used to assign max+1 itself, and those hand-assigned ids are exactly
+    // what pushed the sequence into existing rows: the next default-id insert
+    // anywhere then died on products_pkey (third time on 2026-11-25, in
+    // scripts/apply-qb-product-create.ts). Never hand-assign ids.
     const rows: Record<string, unknown>[] = []
     const skippedPriced: string[] = []
     const notInErply: string[] = []
@@ -120,7 +109,6 @@ export async function POST(request: NextRequest) {
       if (!categoryId) noCategory.push(sku)
 
       rows.push({
-        id: `prod-${String(nextId++).padStart(5, '0')}`,
         sku,
         barcode: e.barcode,
         name: e.name,
@@ -139,13 +127,23 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // One row at a time: a container adds tens of products, and a bad row
+    // must not take the rest down with it the way a chunked insert does.
     let inserted = 0
     const failures: string[] = []
-    for (let i = 0; i < rows.length; i += 100) {
-      const chunk = rows.slice(i, i + 100)
-      const { error } = await db.from('products').insert(chunk)
-      if (error) failures.push(error.message)
-      else inserted += chunk.length
+    for (const row of rows) {
+      const { error } = await db.from('products').insert(row)
+      if (!error) {
+        inserted++
+        continue
+      }
+      failures.push(
+        /products_pkey/.test(error.message)
+          ? `${row.sku}: the product id counter is behind an existing id. Re-run supabase/migrations/0052_products_id_seq_reseed.sql in the Supabase SQL editor, then click this again; it only adds what's missing.`
+          : `${row.sku}: ${error.message}`,
+      )
+      // Every later row would hit the same counter, so stop on that one.
+      if (/products_pkey/.test(error.message)) break
     }
 
     if (inserted > 0) {
