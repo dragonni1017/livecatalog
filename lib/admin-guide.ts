@@ -87,6 +87,25 @@ export const WORKFLOWS: Workflow[] = [
       'Before Run sync now on Erply Sync, click Preview changes and check the Deactivated number. If it’s large, don’t run it.',
     ],
   },
+  {
+    id: 'photos',
+    title: 'Product photos: naming, uploading, and checking it’s the right product',
+    what: 'A photo is matched to its product by the file name alone, so the name has to be the exact SKU. Photos live only on the website (Cloudinary), not in Erply or QuickBooks.',
+    steps: [
+      { text: 'See which products need a photo, most worth shooting first, on', link: 'Photo shot list', href: '/admin/photo-shot-list' },
+      { text: 'Name the main photo exactly like the SKU: F561936.jpg. Extra angles get -2, -3 and so on: F561936-2.jpg, F561936-3.jpg. A SKU with its own ending keeps it whole: T642208-tumbler.jpg, then T642208-tumbler-2.jpg.' },
+      { text: 'Save as .jpg, .png or .webp. iPhone .heic photos aren’t accepted: change the camera to “Most Compatible” or export them as JPG first.' },
+      { text: 'Drop the files on', link: 'Catalog Cleanup → Needs photo', href: '/admin/cleanup' },
+      { text: 'Check the result on the product’s page, or find hidden ones with “View store with all products” on the admin dashboard. To swap one photo, use', link: 'Products & Stock', href: '/admin/products' },
+    ],
+    careful: [
+      'Before uploading a supplier or showroom photo, compare the UPC printed on the photo with the product’s barcode in Products & Stock. Two different products can share a base SKU: T642208 is an old makeup-station toy, T642208-tumbler is the flower tumblers, and only the UPC on the photo told them apart.',
+      'A file named with the bare SKU never goes onto a variant with an ending, and the other way round. Rename the file to the exact SKU you mean.',
+      'A product that already has a photo is left alone; it isn’t replaced unless you choose to replace it.',
+      '“(2)” at the end of a file name (a second browser download of the same file) is ignored, so it doesn’t become an extra angle.',
+      'A photo doesn’t put a hidden product on the website. It still needs a price in Erply, then Show these? or the Visible/Hidden pill.',
+    ],
+  },
 ]
 
 export const DAILY: Step[] = [
