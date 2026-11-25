@@ -1,5 +1,5 @@
 // resolve-showroom-codes.ts
-// Run with: npx tsx scripts/resolve-showroom-codes.ts "<codes.xlsx>" [--lyusa="<ALL_products_LYUSA_*.csv>"] [--prior="<..._QBD_Check.xlsx>"] [--out=...]
+// Run with: npx tsx scripts/resolve-showroom-codes.ts "<codes.xlsx>" [--lyusa="<ALL_products_LYUSA_*.csv>"] [--arrivals="<dir>;<dir>"] [--prior="<..._QBD_Check.xlsx>"] [--out=...]
 //
 // READ-ONLY. Takes a column of codes scanned in the showroom (barcodes, or
 // SKUs) and works out, for each: which SKU it is, and where that product
@@ -24,7 +24,7 @@ const arg = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.sl
 const FILE = process.argv[2]
 const OUT = arg('out') ?? 'data/showroom-resolved.xlsx'
 if (!FILE || !fs.existsSync(FILE)) {
-  console.error('Usage: npx tsx scripts/resolve-showroom-codes.ts "<codes.xlsx>" [--lyusa=...] [--prior=...] [--out=...]')
+  console.error('Usage: npx tsx scripts/resolve-showroom-codes.ts "<codes.xlsx>" [--lyusa=...] [--arrivals=...] [--prior=...] [--out=...]')
   process.exit(1)
 }
 const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '').replace(/^0+/, '')
@@ -63,6 +63,27 @@ const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '').replace(/^0+/,
     for (const r of rows) if (r?.[0] && r?.[1] && /\d/.test(String(r[0]))) priorBy.set(digits(r[0]), String(r[1]).trim())
   }
 
+  // Arrival Lists: their UPC column (条码) names the SKU for most L&Y
+  // barcodes, including ones no system has yet. --arrivals="dir;dir".
+  const arrivalBy = new Map<string, string>()
+  for (const dir of (arg('arrivals') ?? '').split(';').map((s) => s.trim()).filter(Boolean)) {
+    if (!fs.existsSync(dir)) continue
+    const { bestLinesFromSheets } = await import('../lib/container-check')
+    for (const f of fs.readdirSync(dir).filter((f) => /\.xlsx?$/i.test(f) && !f.startsWith('~$'))) {
+      try {
+        const book = XLSX.read(fs.readFileSync(path.join(dir, f)), { type: 'buffer' })
+        const { lines } = bestLinesFromSheets(book.SheetNames.map((s) => XLSX.utils.sheet_to_json(book.Sheets[s], { header: 1, defval: null, raw: true }) as never))
+        for (const l of lines ?? []) {
+          const u = digits(l.barcodeFromFile)
+          if (u.length >= 8 && !arrivalBy.has(u)) arrivalBy.set(u, l.sku)
+        }
+      } catch {
+        // an unreadable list just contributes nothing
+      }
+    }
+  }
+  if (arrivalBy.size) console.log(`${arrivalBy.size} barcodes from Arrival Lists`)
+
   // Catalog, by SKU and by barcode.
   type Prod = { sku: string; name: string; barcode: string | null; is_active: boolean; manually_hidden: boolean | null; price_cents: number }
   const bySku = new Map<string, Prod>()
@@ -85,6 +106,7 @@ const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '').replace(/^0+/,
     const cat = byBarcode.get(d)
     if (cat) [sku, via] = [cat.sku, 'catalog barcode']
     else if (lyusaByUpc.has(d)) [sku, via] = [lyusaByUpc.get(d)!.sku, 'LYUSA UPC']
+    else if (arrivalBy.has(d)) [sku, via] = [arrivalBy.get(d)!, 'Arrival List UPC']
     else if (priorBy.has(d)) [sku, via] = [priorBy.get(d)!, 'prior QBD check']
     else if (bySku.has(code.toUpperCase())) [sku, via] = [bySku.get(code.toUpperCase())!.sku, 'is a SKU (catalog)']
     let erplyRec = sku ? await erply.getErplyProductByCode(sku).catch(() => null) : null
@@ -101,15 +123,21 @@ const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '').replace(/^0+/,
     const inCatalog = sku ? bySku.get(sku.toUpperCase()) ?? null : null
     const ly = lyusaByUpc.get(d)
 
+    // A catalog product found by SKU, not by its barcode, is missing the
+    // scanned barcode -- the reason the showroom scanner can't find it.
+    const scannedIsBarcode = /^\d{8,14}$/.test(code)
+    const barcodeNote = inCatalog && scannedIsBarcode && digits(inCatalog.barcode) !== d
+      ? (inCatalog.barcode ? `, barcode differs (${inCatalog.barcode})` : ', no barcode')
+      : ''
     const next = !sku
       ? 'unresolved: no system knows this code'
       : inCatalog
-        ? `already in catalog (${inCatalog.is_active && !inCatalog.manually_hidden ? 'visible' : 'hidden'})`
+        ? `already in catalog${barcodeNote} (${inCatalog.is_active && !inCatalog.manually_hidden ? 'visible' : 'hidden'})`
         : erplyRec
           ? 'in Erply, not catalog: mirror into catalog'
           : qb
             ? 'in QuickBooks only: create in Erply + catalog'
-            : 'SKU known (LYUSA) but not in QuickBooks/Erply/catalog'
+            : 'SKU known (LYUSA / Arrival List) but not in QuickBooks/Erply/catalog'
     out.push({
       Code: code,
       SKU: sku ?? '',
@@ -125,12 +153,26 @@ const digits = (s: unknown) => String(s ?? '').replace(/\D/g, '').replace(/^0+/,
     })
   }
 
+  // One tab per outcome as well as the full list, so each group can be
+  // worked on its own.
+  const groupOf = (r: Record<string, unknown>) => {
+    const s = String(r['Next step'])
+    if (s.startsWith('already in catalog')) return /no barcode|differs/.test(s) ? 'In catalog, fix barcode' : 'In catalog'
+    if (s.startsWith('in Erply')) return 'In Erply only'
+    if (s.startsWith('in QuickBooks')) return 'In QuickBooks only'
+    if (s.startsWith('SKU known')) return 'SKU known, nowhere else'
+    return 'Unknown'
+  }
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Showroom codes')
-  XLSX.writeFile(wb, OUT)
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'All codes')
+  for (const g of ['In catalog', 'In catalog, fix barcode', 'In Erply only', 'In QuickBooks only', 'SKU known, nowhere else', 'Unknown']) {
+    const rows = out.filter((r) => groupOf(r) === g)
+    if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), g)
+  }
+  fs.writeFileSync(OUT, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer)
   const tally = new Map<string, number>()
   for (const r of out) {
-    const k = String(r['Next step']).replace(/ \((visible|hidden)\)$/, '')
+    const k = groupOf(r)
     tally.set(k, (tally.get(k) ?? 0) + 1)
   }
   for (const [k, n] of [...tally].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(3)}  ${k}`)
