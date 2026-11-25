@@ -637,6 +637,21 @@ export async function saveErplyProductBarcode(productId: number, barcode: string
   await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), code2: barcode })
 }
 
+/**
+ * Archives a product (active 0, status ARCHIVED), e.g. a duplicate created by
+ * mistake. Erply keeps the record, so it can be restored in the back office;
+ * the sync only walks active products, so the catalog stops seeing it.
+ * productID + the two status fields only. Does NOT verify; re-read with
+ * getErplyProductByCode (isActive).
+ */
+export async function archiveErplyProduct(productId: number): Promise<void> {
+  if (!isConfigured()) {
+    throw new Error('Erply is not configured in this environment. Nothing was archived.')
+  }
+  const sessionKey = await getSessionKey()
+  await erplyPost({ request: 'saveProduct', sessionKey, productID: String(productId), active: '0', status: 'ARCHIVED' })
+}
+
 export async function saveErplyProductGroup(productId: number, groupId: number): Promise<void> {
   if (!isConfigured()) {
     throw new Error('Erply is not configured in this environment. No group was written.')
