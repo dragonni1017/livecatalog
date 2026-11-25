@@ -2,6 +2,7 @@
 // Run with: node scripts/create-products-from-qb.ts                 (dry run -- the only mode)
 //           node scripts/create-products-from-qb.ts --only=T642200  (one photo SKU)
 //           node scripts/create-products-from-qb.ts --root="C:/Users/Dragon/Downloads/New Photos"
+//           node scripts/create-products-from-qb.ts --input=data/showroom-skus-20261125.tsv
 //
 // PLANS creating catalog + Erply products for SKUs that have photos on disk but
 // exist in NEITHER Erply nor the catalog, using QuickBooks Desktop as the
@@ -89,7 +90,12 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='))
 const ONLY = onlyArg ? onlyArg.slice(7).trim().toUpperCase() : null
 const rootArg = process.argv.find((a) => a.startsWith('--root='))
 const SEARCH_ROOT = rootArg ? rootArg.slice(7).replace(/^"|"$/g, '') : 'C:/Users/Dragon/Downloads'
-const INPUT_TSV = path.join(ROOT, 'data', 'local-photo-skus-qb-match-20261001.tsv')
+// --input=<tsv> plans a different SKU list (same photo_sku/qb_sku columns),
+// e.g. the showroom's missing items (scripts/resolve-showroom-codes.ts).
+const inputArg = process.argv.find((a) => a.startsWith('--input='))
+const INPUT_TSV = inputArg
+  ? path.resolve(ROOT, inputArg.slice(8).replace(/^"|"$/g, ''))
+  : path.join(ROOT, 'data', 'local-photo-skus-qb-match-20261001.tsv')
 
 // find-photos-for-missing-images.ts's list, plus the June sample folders.
 const SKIP_DIRS = [

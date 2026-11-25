@@ -23,7 +23,8 @@
 //   a. Erply saveProduct through lib/erply.ts createErplyProduct (code, name,
 //      groupID, status ACTIVE). No price: Erply discards it on this account
 //      (proven 2026-09-16), so 0 is sent and the product is priced by hand in
-//      Erply afterwards. No code2: qb_item_directory holds no barcode.
+//      Erply afterwards. code2 (barcode) only from --barcodes: qb_item_directory
+//      holds none.
 //      The live absence check (default statuses AND ARCHIVED) is re-run
 //      IMMEDIATELY before each create, not just once up front -- a fast
 //      double-submit produced a duplicate Erply product before (F288132,
@@ -80,6 +81,20 @@ const arg = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.sl
 const ONLY = arg('only') ? new Set(arg('only')!.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)) : null
 const LIMIT = arg('limit') ? Number(arg('limit')) : null
 if (LIMIT != null && !(Number.isInteger(LIMIT) && LIMIT > 0)) { console.error('--limit must be a positive whole number'); process.exit(1) }
+
+// --barcodes=<tsv>: "sku<TAB>barcode" per line (header optional). Sets Erply
+// code2 and products.barcode on create, e.g. from a showroom scan resolved by
+// scripts/resolve-showroom-codes.ts. QuickBooks holds no barcode, so without
+// this the products are created without one, as before. A barcode another
+// Erply product already carries is dropped (Erply requires them unique).
+const BARCODES = new Map<string, string>()
+if (arg('barcodes')) {
+  for (const line of fs.readFileSync(arg('barcodes')!, 'utf8').split(/\r?\n/)) {
+    const [sku, bc] = line.split('\t').map((s) => (s ?? '').trim())
+    if (sku && /^\d{8,14}$/.test(bc ?? '')) BARCODES.set(sku.toUpperCase(), bc)
+  }
+  console.log(`${BARCODES.size} barcode(s) from ${arg('barcodes')}`)
+}
 
 const CC = process.env.ERPLY_CLIENT_CODE
 const { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env
@@ -168,7 +183,16 @@ async function erplyRead(params: Record<string, string>) {
 const auth = await erplyRead({ request: 'verifyUser', username: process.env.ERPLY_USERNAME!, password: process.env.ERPLY_PASSWORD! })
 const sessionKey: string = auth.records[0].sessionKey
 
-interface ErplyProduct { productID: number; code: string; name: string; groupID?: number; status?: string; price?: number }
+interface ErplyProduct { productID: number; code: string; code2?: string; name: string; groupID?: number; status?: string; price?: number }
+/** Erply products already carrying this barcode (code2), default statuses and archived. */
+async function erplyByBarcode(barcode: string): Promise<ErplyProduct[]> {
+  const hits: ErplyProduct[] = []
+  for (const extra of [{}, { status: 'ARCHIVED' }] as Record<string, string>[]) {
+    const d = await erplyRead({ request: 'getProducts', sessionKey, code2: barcode, ...extra })
+    for (const r of (d.records ?? []) as ErplyProduct[]) if (String(r.code2 ?? '').trim() === barcode) hits.push(r)
+  }
+  return hits
+}
 /** Exact code lookup across default statuses AND archived. Throws rather than guess on a failed read. */
 async function erplyByCode(code: string): Promise<ErplyProduct[]> {
   const hits: ErplyProduct[] = []
@@ -267,6 +291,16 @@ for (const p of todo) {
   const sku = r.planned_sku
   let erplyId = p.erplyId
   let warning = ''
+  // Only when no Erply product or catalog row already carries it.
+  let barcode: string | null = BARCODES.get(sku.toUpperCase()) ?? null
+  if (barcode) {
+    const taken = (await erplyByBarcode(barcode)).filter((h) => h.code.toUpperCase() !== sku.toUpperCase())
+    const { data: inCatalog } = await db.from('products').select('sku').eq('barcode', barcode).neq('sku', sku)
+    if (taken.length || inCatalog?.length) {
+      warning = `barcode ${barcode} already on ${[...taken.map((h) => h.code), ...(inCatalog ?? []).map((c) => c.sku)].join(', ')}; created without it`
+      barcode = null
+    }
+  }
 
   if (p.action === 'create') {
     // Re-check right before the one-way write.
@@ -276,7 +310,7 @@ for (const p of todo) {
       log({ sku, step: 'erply', result: 'skipped', name: r.final_name, detail: why }); failed.push({ sku, error: why }); continue
     }
     try {
-      erplyId = (await createErplyProduct({ sku, name: r.final_name, groupId: Number(r.erply_group_id), priceDollars: 0 })).productId
+      erplyId = (await createErplyProduct({ sku, name: r.final_name, barcode, groupId: Number(r.erply_group_id), priceDollars: 0 })).productId
     } catch (err) {
       const msg = (err as Error).message
       log({ sku, step: 'erply', result: 'error', name: r.final_name, detail: msg }); failed.push({ sku, error: `Erply create: ${msg}` }); continue
@@ -291,15 +325,16 @@ for (const p of todo) {
       if (mine.name !== r.final_name) issues.push(`Erply stored name "${mine.name}"`)
       if (String(mine.groupID) !== r.erply_group_id) issues.push(`Erply stored group ${mine.groupID}`)
       if ((mine.price ?? 0) !== 0) issues.push(`Erply stored price ${mine.price}`)
+      if (barcode && String(mine.code2 ?? '').trim() !== barcode) issues.push(`Erply stored barcode "${mine.code2 ?? ''}"`)
     }
-    warning = issues.join('; ')
+    warning = [warning, ...issues].filter(Boolean).join('; ')
     log({ sku, step: 'erply', result: warning ? 'created-with-warning' : 'created', erply_product_id: erplyId, name: r.final_name, detail: warning })
   }
 
   const hasCase = [r.case_length_in, r.case_width_in, r.case_height_in, r.case_weight_lb].some(Boolean)
   const { data, error } = await db.from('products').insert({
     // NO `id`: products.id defaults from products_id_seq (0020/0052).
-    sku, barcode: null, name: r.final_name, description: null,
+    sku, barcode, name: r.final_name, description: null,
     price_cents: 0, stock_qty: 0, is_active: true,
     manually_hidden: true, // a visible $0 product is orderable
     awaiting_price: true,  // hidden only for want of a price (migration 0067)
